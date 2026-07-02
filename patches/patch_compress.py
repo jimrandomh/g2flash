@@ -30,25 +30,33 @@ DELTA = 0x39E680  # file_off = ghidra_addr - DELTA  (OTA mainApp component)
 def g2f(addr):
     return addr - DELTA
 
-# zlib image glue (patches/zlib_glue.c -> build.py pass2, 790 B) placed at
+# zlib image glue (patches/zlib_glue.c -> build.py pass2, 1014 B) placed at
 # ghidra 0x491400 (= bufbase set_aging_test_info tail, after frag_write). Exports
 # zwrap_alloc@0x491400, zwrap_free@0x49140e, load_image_z@0x49141a. Mode dispatch:
 # 'B'=raw BMP, 1=zlib 4bpp BMP (recon-tail), 2=zlib 8bpp full frame ->display buffer,
-# 3=8bpp XOR delta; 4=8bpp stereo pair (per-lens half via FW_SIDE); 2/3/4 push via loader tail.
+# 3=8bpp XOR delta; 4=8bpp stereo pair (per-lens half via FW_SIDE); 2/3/4 push via
+# loader tail; 5=play a buzzer UI sound (0 preset / 1 note / 2 stop; no display change).
 ZLIB_GLUE = bytes.fromhex(
     "02fb01f042f66f31c0f247010847084642f6b331c0f2470108472de9f04fd3b0"
-    "814619b112b10d78422d08d141f24b63c0f25003484653b0bde8f04f1847032a"
-    "f4d3681f10f1050ff0d9b9f84060b9f84240002045ab0027d8550137382ffbd1"
-    "501e41f20142c0f249024d920e324b1c04fb06f84e920022012dcde945304f92"
-    "15d1731c032707eb530323f00303634303f1b60616eb000a42f1000bbaeb0800"
-    "7bf1000017d2a8eb06000d181de04ef2076bc0f25b0b48f2e452d9f808a00bf1"
-    "3c0745a8c0f278020f213823b84700b345a8d847e8e042f66f31c0f247013046"
-    "88470546002800f0df804ef20767c0f25b0748f2e452cde9485607f13c0645a8"
-    "c0f278020f213823b047b0b145a8b8472ae0032d39d0022d69d10bf5857245a8"
-    "0421cde948a890470128d1d14a98a0eb0800b0fa80f04509abe045ac07f58572"
-    "2046042190474a99064620460491b847012e09d141f24b63049ac0f250034846"
-    "29469847044601e04ff0ff34baeb08007bf10000c0f09a8042f66f30c0f24700"
-    "00f144012846884790e0cdf80ca0cde9016400260df1140a0bf5857ba8eb0600"
+    "814629b122b10d78052d0ad0422d1ad141f24b63c0f25003484653b0bde8f04f"
+    "1847022ac0f09e81487844d0002842d18878082800f2968149f25971c0f24e01"
+    "963188478ee1032ae2d3681f10f1050fded9b9f84060b9f84240002045ab0027"
+    "d8550137382ffbd1501e41f20142c0f249024d920e324b1c04fb06f84e920022"
+    "012dcde945304f9230d1731c032707eb530323f00303634303f1b60616eb000a"
+    "42f1000bbaeb08007bf100003ad2a8eb06000d1840e0052a2cd301282ad18878"
+    "0024421e062a00f25181cb78032b00f24d810a79002a00f0498149f25971c0f2"
+    "4e0101f59a771946b8473be14ef2076bc0f25b0b48f2e452d9f808a00bf13c07"
+    "45a8c0f278020f213823b84740b345a8d84729e1022860d149f25970c0f24e00"
+    "80471fe142f66f31c0f24701304688470546002800f018814ef20767c0f25b07"
+    "48f2e452cde9485607f13c0645a8c0f278020f213823b047b8b145a8b8472be0"
+    "032d72d0022d40f0a2800bf5857245a80421cde948a890470128c8d14a98a0eb"
+    "0800b0fa80f04509e3e045ac07f585722046042190474a99064620460491b847"
+    "012e09d141f24b63049ac0f25003484629469847044601e04ff0ff34baeb0800"
+    "7bf10000c0f0d28042f66f30c0f2470000f1440128468847c8e0072a4ff00004"
+    "c0f0c480032840f0c1808878cb780a7940ea03204d798e7901284ff0010498bf"
+    "204644f62061884228bf084649f25971c0f24e01642a28bf642201f5e2731146"
+    "984744f24040c2f207000068002800f0998045ea062148f2eb42012988bf0c46"
+    "c0f24402214690478ce0cdf80ca0cde9016400260df1140a0bf5857ba8eb0600"
     "b0f5807f28bf4ff48070cde948a045a80021d8474899b1eb0a040cd003995346"
     "8a19214613f8015b1778013987ea050702f8017bf6d1012826444dd000284ff0"
     "00054ed1b4fa84f04009d7d049e04af6ed00c0f24500cde901648047861e5846"
@@ -64,7 +72,7 @@ ZLIB_GLUE = bytes.fromhex(
 )
 
 # settings capability-advertisement wrapper (patches/settings_ext.c ->
-# build.py, 256 B) placed at ghidra 0x491718 (dead set_aging_test_info tail,
+# build.py, 256 B) placed at ghidra 0x4917f8 (dead set_aging_test_info tail,
 # after the zlib glue). Hooks the one `bl FUN_0047398c` (aa21 send) at the tail
 # of the settings responder FUN_004b42b4: appends protobuf field 100 (string
 # "EVENCFW/1 img576 imgz xordelta stereo") to the sid=0x09 READ response so a
@@ -119,8 +127,8 @@ PATCHES = [
     # appends protobuf field 100 ("EVENCFW/1 img576 imgz xordelta stereo") before
     # framing. Unknown high field tag -> stock app/bridge ignore it; CFW-aware
     # apps read it to detect the firmware and gate features.
-    (g2f(0x491718), "00 f0 c4 80", SETTINGS_EXT.hex(), "settings_send_wrapper (CFW caps field)"),
-    (g2f(0x4b43c4), "bf f7 e2 fa", "dd f7 a8 f9", "bl settings_send_wrapper (append caps field 100)"),
+    (g2f(0x4917f8), "34 6a 79 e0", SETTINGS_EXT.hex(), "settings_send_wrapper (CFW caps field)"),
+    (g2f(0x4b43c4), "bf f7 e2 fa", "dd f7 18 fa", "bl settings_send_wrapper (append caps field 100)"),
 ]
 
 def hx(s):

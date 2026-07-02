@@ -15,6 +15,36 @@
  *                              existing display buffer, then push.
  *   4           -> [4][zlib]   8bpp stereo pair (left frame then right frame, w*h
  *                              each); each lens keeps only its half (FW_SIDE).
+ *   5           -> [5][...]    play a UI sound on the arm buzzer (no display change).
+ *                              The G2 "speaker" is a PWM piezo buzzer — it can only
+ *                              emit square-wave tones, not PCM/WAV — so this drives
+ *                              the firmware's own buzzer driver instead of streaming
+ *                              samples. Sub-dispatch on src[1]:
+ *                                0 [0][type]            -> DRV_BuzzerPlayAfterQueue:
+ *                                     play preset voice `type` (0..8) from the flash
+ *                                     preset table (single beep / alarm / ringtone).
+ *                                1 [1][note][oct][beat] -> DRV_BuzzerPlayNote: one
+ *                                     tone. note 1..7, oct 0..3 (freq from the 28-
+ *                                     entry note table), beat = duration in ~62ms
+ *                                     units. Good for click/beep on tap/notification.
+ *                                2 [2]                  -> stop/silence the buzzer.
+ *                                3 [3][freqLo][freqHi][duty][msLo][msHi] -> raw tone:
+ *                                     program the PWM to an ARBITRARY frequency
+ *                                     (1..20000 Hz, 16-bit LE) at `duty` percent
+ *                                     (0..100) for `ms` milliseconds (16-bit LE).
+ *                                     Bypasses the 7-note x 4-octave lookup table
+ *                                     entirely (that table is just a convenience);
+ *                                     the hardware timer takes any Hz. Auto-stops
+ *                                     by arming the buzzer's own osTimer with a
+ *                                     null note list so the driver's timer callback
+ *                                     shuts the PWM off after `ms`. Enables fine /
+ *                                     microtonal pitch, chirps and pitch sweeps
+ *                                     (send a run of these), and sub-62ms durations.
+ *                              The preset/note/stop entries are self-contained fw
+ *                              entries that queue into the buzzer's osTimer; the
+ *                              raw-tone entry drives the low-level PWM start and
+ *                              arms that same osTimer for auto-stop. None spin or
+ *                              block here. Returns 0 (success).
  *   anything else / too short  -> hand to the stock loader (it rejects cleanly).
  *
  * The image dimensions come from the container state (state+0x40/0x42), so no
@@ -42,6 +72,11 @@ typedef void (*cacheflush_fn)(void *desc);          /* desc = uint32[2]{ptr,size
 typedef void (*lv_set_src_fn)(uint32_t obj, void *desc);
 typedef void (*lv_invalidate_fn)(uint32_t obj);
 typedef uint32_t (*lens_side_fn)(void);             /* 2 = LEFT lens, 1 = RIGHT lens */
+typedef void (*buzz_preset_fn)(uint32_t type);      /* DRV_BuzzerPlayAfterQueue */
+typedef void (*buzz_note_fn)(uint32_t note, uint32_t tone, uint32_t beat); /* DRV_BuzzerPlayNote */
+typedef void (*buzz_reset_fn)(void);                /* buzzer stop/reset */
+typedef void (*buzz_raw_fn)(uint32_t freq, uint32_t duty);   /* reset+power+PWM(freq,duty) */
+typedef int  (*timer_start_fn)(uint32_t handle, uint32_t ms); /* osTimer start (one-shot) */
 
 /* firmware entry points (Thumb bit set for blx via constant pointer) */
 #define FW_MALLOC  ((malloc_fn)0x00472b6fU)         /* FUN_00472b6e malloc(size) */
@@ -54,6 +89,12 @@ typedef uint32_t (*lens_side_fn)(void);             /* 2 = LEFT lens, 1 = RIGHT 
 #define FW_SETSRC  ((lv_set_src_fn)0x004b0f01U)     /* FUN_004b0f00 lv_image_set_src */
 #define FW_INVAL   ((lv_invalidate_fn)0x004405f7U)  /* FUN_004405f6 lv_obj_invalidate */
 #define FW_SIDE    ((lens_side_fn)0x0045a8edU)       /* FUN_0045a8ec -> 2=left, 1=right */
+#define FW_BUZZ_PRESET ((buzz_preset_fn)0x004e97efU) /* FUN_004e97ee DRV_BuzzerPlayAfterQueue(type 0..8) */
+#define FW_BUZZ_NOTE   ((buzz_note_fn)0x004e988dU)   /* FUN_004e988c DRV_BuzzerPlayNote(note,tone,beat) */
+#define FW_BUZZ_RESET  ((buzz_reset_fn)0x004e9759U)  /* FUN_004e9758 buzzer stop/reset */
+#define FW_BUZZ_RAW    ((buzz_raw_fn)0x004e991dU)     /* FUN_004e991c reset+power+PWM(freq,duty) */
+#define FW_TIMER_START ((timer_start_fn)0x004484ebU)  /* FUN_004484ea osTimerStart(handle,ms) */
+#define BUZZ_TIMER_ADDR 0x20074440U                   /* RAM: buzzer osTimer handle (DAT_004e996c) */
 #define ZLIB_VER   ((const char *)0x007885e4U)      /* "1.1.4" */
 
 #ifndef ZWRAP_ALLOC_ADDR
@@ -92,6 +133,39 @@ int load_image_z(void *state_, uint8_t *src, uint32_t srclen) {
 
     uint8_t mode = src[0];
     if (mode == 0x42) return FW_LOADBMP(state, src, srclen);          /* raw BMP */
+
+    if (mode == 5) {
+        /* play a UI sound on the buzzer; no display change. [5][kind][args...].
+         * These entry points copy their args into firmware-owned storage (the
+         * preset table lives in flash; PlayNote copies note/tone/beat into an
+         * 8-byte scratch), so the recon buffer is free to be reused immediately
+         * and the async buzzer timer never reads from it. */
+        uint8_t kind = (srclen >= 2) ? src[1] : 0xffu;
+        if (kind == 0 && srclen >= 3) {                 /* preset 0..8 */
+            if (src[2] <= 8) FW_BUZZ_PRESET(src[2]);
+        } else if (kind == 1 && srclen >= 5) {          /* single tone */
+            uint8_t note = src[2], oct = src[3], beat = src[4];
+            /* note 1..7 x oct 0..3 keeps the freq-table index in [0,27] so the
+             * driver's `1000000 / (0xffff - table[idx])` can never divide by 0 */
+            if (note >= 1 && note <= 7 && oct <= 3 && beat != 0)
+                FW_BUZZ_NOTE(note, oct, beat);
+        } else if (kind == 2) {                         /* stop / silence */
+            FW_BUZZ_RESET();
+        } else if (kind == 3 && srclen >= 7) {          /* raw tone: freq/duty/ms */
+            uint32_t freq = (uint32_t)src[2] | ((uint32_t)src[3] << 8);
+            uint32_t duty = src[4];
+            uint32_t ms   = (uint32_t)src[5] | ((uint32_t)src[6] << 8);
+            if (freq < 1) freq = 1;                     /* freq 0 -> bad PWM period */
+            if (freq > 20000) freq = 20000;             /* hw range per AT^BUZZER */
+            if (duty > 100) duty = 100;                 /* duty is a 0..100 percent */
+            if (ms < 1) ms = 1;
+            FW_BUZZ_RAW(freq, duty);                    /* reset+power+PWM; note list now null */
+            uint32_t h = *(volatile uint32_t *)BUZZ_TIMER_ADDR;
+            if (h) FW_TIMER_START(h, ms);               /* callback stops PWM after ms */
+        }
+        return 0;
+    }
+
     if (mode < 1 || mode > 4 || srclen < 3) return FW_LOADBMP(state, src, srclen);
 
     const uint8_t *zsrc = src + 1;
