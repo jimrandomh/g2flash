@@ -37,14 +37,16 @@ def g2f(addr):
 FRAG_ADDR      = 0x491340   # frag_write() 1bpp->4bpp fragment shim
 GLUE_ADDR      = 0x491400   # zlib glue: zwrap_alloc/free + load_image_z + helpers
 SETTINGS_ADDR  = 0x491ab0   # settings_send_wrapper (after the glue, 64 B headroom)
+GESTURE_ADDR   = 0x491c00   # gesture_fwd: long-press + ring release-long-press forwarding
 INJECT_CEILING = 0x491cd0   # FUN_00491cd0 = first live code after the dead region
 
 # Max length for each compiled blob = the space up to the next blob / the ceiling.
 # If a blob outgrows its slot, the assert in make_patches() fires with a clear
 # message instead of silently clobbering the following blob or live firmware.
 FRAG_MAX     = GLUE_ADDR - FRAG_ADDR          # 0x0c0 = 192 B
-GLUE_MAX     = SETTINGS_ADDR - GLUE_ADDR      # 0x572 = 1394 B (currently full)
-SETTINGS_MAX = INJECT_CEILING - SETTINGS_ADDR # 0x35e = 862 B
+GLUE_MAX     = SETTINGS_ADDR - GLUE_ADDR      # 0x6b0 = 1712 B (glue is ~1648 B)
+SETTINGS_MAX = GESTURE_ADDR - SETTINGS_ADDR   # 0x150 = 336 B (settings is 256 B)
+GESTURE_MAX  = INJECT_CEILING - GESTURE_ADDR  # 0x0d0 = 208 B (gesture_fwd is 138 B)
 
 # ---- call-site redirects (ghidra addr -> stock bytes we expect there) -------
 # The three per-fragment memcpy (FUN_00439be4) calls in the ImageRawDataUpdate
@@ -113,11 +115,18 @@ def make_patches():
     se = build_blob("settings_ext.c")
     settings = bytes.fromhex(se["text"])
 
+    # --- gesture forwarding: whole .text (two entry points) ---
+    gf = build_blob("gesture_fwd.c")
+    gesture = bytes.fromhex(gf["text"])
+    longpress_addr = GESTURE_ADDR + _fn(gf, "evenhub_longpress")["offset"]  # bl target (even)
+    release_addr   = GESTURE_ADDR + _fn(gf, "ring_release")["offset"]       # bl target (even)
+
     # --- max-length checks on all compiled outputs ---
     for name, blob, base, cap in (
         ("frag_write",            frag,     FRAG_ADDR,     FRAG_MAX),
         ("zlib glue",             glue,     GLUE_ADDR,     GLUE_MAX),
         ("settings_send_wrapper", settings, SETTINGS_ADDR, SETTINGS_MAX),
+        ("gesture_fwd",           gesture,  GESTURE_ADDR,  GESTURE_MAX),
     ):
         end = base + len(blob)
         assert len(blob) <= cap, (
@@ -167,6 +176,20 @@ def make_patches():
         (g2f(SETTINGS_ADDR), "7e 49 03 20", settings.hex(), "settings_send_wrapper (CFW caps field)"),
         (g2f(SETTINGS_BL_SITE[0]), SETTINGS_BL_SITE[1], enc_bl(SETTINGS_BL_SITE[0], SETTINGS_ADDR),
          "bl settings_send_wrapper (append caps field 100)"),
+        # --- EvenHub long-press + ring release-long-press forwarding ---
+        # Inject gesture_fwd (evenhub_longpress + ring_release), then retarget two
+        # bls in the input dispatcher FUN_004424a2: the subtype-3 EvenHub force-quit
+        # dialog (bl FUN_0046a644) -> evenhub_longpress, and the subtype-0xe post
+        # (bl FUN_0045fc80) -> ring_release. Both send a SysEvent (OsEventTypeList
+        # 8=long-press / 9=release) straight to the phone; the dialog is gone and a
+        # ring release-long-press is delivered instead of dropped. Touchpad /
+        # terminal / native behavior is unchanged (ring_release falls through for
+        # non-ring or non-EvenHub). See gesture_fwd.c.
+        (g2f(GESTURE_ADDR), "c7 d1 ab f7", gesture.hex(), "gesture_fwd (long-press + release fwd)"),
+        (g2f(0x004425ae), "28 f0 49 f8", enc_bl(0x004425ae, longpress_addr),
+         "bl evenhub_longpress (replaces force-quit dialog)"),
+        (g2f(0x004428de), "1d f0 cf f9", enc_bl(0x004428de, release_addr),
+         "bl ring_release (forward ring release-long-press)"),
     ]
 
 def hx(s):
