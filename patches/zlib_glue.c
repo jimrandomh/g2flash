@@ -11,8 +11,13 @@
  *                              then decode with load_bmp_fast.
  *   2           -> [2][zlib]   8bpp full frame: inflate straight into the display
  *                              buffer (state+0x8, w*h, 1 byte/pixel), then push.
- *   3           -> [3][zlib]   8bpp XOR delta: inflate in chunks and XOR onto the
- *                              existing display buffer, then push.
+ *   3           -> [3][l/4][t/2][w/4][h/2][zlib]  bounding-box partial update:
+ *                              inflate a tight-4bpp rectangle and expand it into
+ *                              just that region of the (persistent) display buffer,
+ *                              leaving the rest of the previous frame; then push.
+ *                              Box origin/size are quantized (left/width *4, so
+ *                              even; top/height *2) to fit one byte each. Rejected
+ *                              if the box is not wholly within the container.
  *   4           -> [4][zlib]   8bpp stereo pair (left frame then right frame, w*h
  *                              each); each lens keeps only its half (FW_SIDE).
  *   5           -> [5][...]    play a UI sound on the arm buzzer (no display change).
@@ -52,7 +57,7 @@
  *
  * The image dimensions come from the container state (state+0x40/0x42), so no
  * header is needed on 8bpp payloads — the sender just deflates w*h raw bytes
- * (mode 2) or a w*h XOR delta against the previous frame (mode 3).
+ * (mode 2); mode 3 carries its own 4-byte box header, and mode 6 tight 4bpp.
  *
  * Every invocation (any mode) first kicks the EvenHub keepalive: stock firmware
  * resets the ticks-since-heartbeat counter only on the sid-0x0c heartbeat msg, so
@@ -134,7 +139,7 @@ typedef void (*keepalive_reset_fn)(void);           /* zero the EvenHub keepaliv
 #define ZS_OPAQUE    0x28
 #define ZS_SIZE      0x38
 
-#define XOR_CHUNK 256   /* mode-3 inflate scratch (stack); any size works */
+#define XOR_CHUNK 256   /* mode-4 inflate scratch (stack); any size works */
 
 void *zwrap_alloc(void *opaque, uint32_t items, uint32_t size) {
     (void)opaque;
@@ -147,8 +152,8 @@ void zwrap_free(void *opaque, void *ptr) {
 }
 
 static void push_display(uint8_t *state, uint8_t *disp, uint32_t w, uint32_t h);
-static void unpack4bpp(uint8_t *disp, const uint8_t *pix, uint32_t w, uint32_t h,
-                       uint32_t stride, int bottom_up);
+static void unpack4bpp(uint8_t *dst, uint32_t dst_stride, const uint8_t *pix,
+                       uint32_t w, uint32_t h, uint32_t src_stride, int bottom_up);
 static int load_bmp_fast(uint8_t *state, const uint8_t *bmp, uint32_t len);
 
 int load_image_z(void *state_, uint8_t *src, uint32_t srclen) {
@@ -252,7 +257,7 @@ int load_image_z(void *state_, uint8_t *src, uint32_t srclen) {
                     ret = load_bmp_fast(state, dst, out);
                 } else if (out == out_max) {
                     uint8_t *disp = *(uint8_t **)(state + 0x8);
-                    unpack4bpp(disp, dst, w, h, (w + 1) >> 1, 0);
+                    unpack4bpp(disp, w, dst, w, h, (w + 1) >> 1, 0);
                     push_display(state, disp, w, h);
                     ret = 0;
                 }
@@ -264,7 +269,58 @@ int load_image_z(void *state_, uint8_t *src, uint32_t srclen) {
         return ret;
     }
 
-    /* modes 2 & 3: 8bpp straight into the display buffer (separate from recon) */
+    if (mode == 3) {
+        /* bounding-box partial update — rewrites just one rectangle of the
+         * (persistent) display buffer; the rest of the previous frame stays.
+         *   [3][left/4][top/2][width/4][height/2][zlib tight-4bpp box pixels]
+         * left/width are stored /4 and top/height /2 so each fits one byte; the
+         * *4 on left/width also guarantees they're even, so the box's source rows
+         * are whole bytes (bw/2) and it starts on a byte boundary. The 4bpp box is
+         * inflated into the recon-buffer tail, then expanded into the display
+         * buffer at (left,top) with the full width as the destination stride.
+         * Rejected (old frame left on screen) if the box isn't wholly in bounds. */
+        if (srclen < 6) return -1;                    /* 4 hdr bytes + some zlib */
+        uint32_t left = (uint32_t)src[1] * 4;
+        uint32_t top  = (uint32_t)src[2] * 2;
+        uint32_t bw   = (uint32_t)src[3] * 4;
+        uint32_t bh   = (uint32_t)src[4] * 2;
+        if (bw == 0 || bh == 0 || left + bw > w || top + bh > h) return -1;
+
+        uint32_t packed = (bw >> 1) * bh;             /* bw even -> bw/2 B per row */
+        const uint8_t *bzsrc = src + 5;
+        uint32_t bzlen = srclen - 5;
+        uint8_t *dst;
+        int allocated = 0;
+        if ((uint64_t)packed + bzlen + 5 <= wh) {     /* +5: input starts at src[5] */
+            dst = src + (wh - packed);
+        } else {
+            dst = (uint8_t *)FW_MALLOC(packed);
+            if (dst == 0) return -1;
+            allocated = 1;
+        }
+        *(const uint8_t **)(strm + ZS_NEXT_IN) = bzsrc;  /* zlib is past the 4 hdr B */
+        *(uint32_t *)(strm + ZS_AVAIL_IN) = bzlen;
+        *(uint8_t **)(strm + ZS_NEXT_OUT) = dst;
+        *(uint32_t *)(strm + ZS_AVAIL_OUT) = packed;
+        int ret = -1;
+        if (FW_INIT2(strm, 15, ZLIB_VER, ZS_SIZE) == 0) {
+            int r = FW_INFLATE(strm, 4);              /* Z_FINISH (whole box fits) */
+            uint32_t out = *(uint32_t *)(strm + ZS_TOTAL_OUT);
+            FW_END(strm);
+            if (r == 1 && out == packed) {
+                uint8_t *disp = *(uint8_t **)(state + 0x8);
+                unpack4bpp(disp + top * w + left, w, dst, bw, bh, bw >> 1, 0);
+                push_display(state, disp, w, h);
+                ret = 0;
+            }
+        } else {
+            FW_END(strm);
+        }
+        if (allocated) FW_FREE(dst);
+        return ret;
+    }
+
+    /* modes 2 & 4: 8bpp straight into the display buffer (separate from recon) */
     uint8_t *disp = *(uint8_t **)(state + 0x8);
     if (FW_INIT2(strm, 15, ZLIB_VER, ZS_SIZE) != 0) {
         FW_END(strm);
@@ -278,21 +334,6 @@ int load_image_z(void *state_, uint8_t *src, uint32_t srclen) {
         *(uint32_t *)(strm + ZS_AVAIL_OUT) = wh;
         int r = FW_INFLATE(strm, 4);                  /* Z_FINISH */
         ok = (r == 1 && *(uint32_t *)(strm + ZS_TOTAL_OUT) == wh);
-    } else if (mode == 3) {
-        /* mode 3: XOR delta — inflate in chunks, XOR each onto the display buffer */
-        uint8_t chunk[XOR_CHUNK];
-        uint32_t off = 0;
-        for (;;) {
-            uint32_t want = (wh - off < XOR_CHUNK) ? (wh - off) : XOR_CHUNK;
-            *(uint8_t **)(strm + ZS_NEXT_OUT) = chunk;
-            *(uint32_t *)(strm + ZS_AVAIL_OUT) = want;
-            int r = FW_INFLATE(strm, 0);              /* Z_NO_FLUSH */
-            uint32_t got = (uint32_t)(*(uint8_t **)(strm + ZS_NEXT_OUT) - chunk);
-            for (uint32_t j = 0; j < got; j++) disp[off + j] ^= chunk[j];
-            off += got;
-            if (r == 1) { ok = (off == wh); break; }  /* Z_STREAM_END */
-            if (r != 0 || got == 0) break;            /* error / no progress */
-        }
     } else {
         /* mode 4: stereo pair [left frame (w*h)][right frame (w*h)]; this lens
          * keeps only its half. FW_SIDE(): 2=left -> first half, else -> second. */
@@ -348,15 +389,17 @@ static uint32_t rd32(const uint8_t *p) {
     return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
 }
 
-/* Expand a 4bpp (2 px/byte, high nibble = left pixel) source into the 8bpp
- * display buffer: nibble n (0..15) -> n*17 (== (n<<4)|n) so 0->0, 15->255. `pix`
- * is `stride` bytes per source row; `bottom_up` flips the row order (BMP). */
-static void unpack4bpp(uint8_t *disp, const uint8_t *pix, uint32_t w, uint32_t h,
-                       uint32_t stride, int bottom_up) {
+/* Expand a w*h block of 4bpp pixels (2 px/byte, high nibble = left pixel) into an
+ * 8bpp destination: nibble n (0..15) -> n*17 (== (n<<4)|n) so 0->0, 15->255.
+ * `src_stride` is bytes per source row; `dst_stride` is bytes per destination row
+ * (= the full display width when writing a sub-rectangle); `bottom_up` flips the
+ * source row order (BMP). */
+static void unpack4bpp(uint8_t *dst, uint32_t dst_stride, const uint8_t *pix,
+                       uint32_t w, uint32_t h, uint32_t src_stride, int bottom_up) {
     for (uint32_t y = 0; y < h; y++) {
         uint32_t srcY = bottom_up ? (h - 1 - y) : y;
-        const uint8_t *row = pix + srcY * stride;
-        uint8_t *out = disp + y * w;
+        const uint8_t *row = pix + srcY * src_stride;
+        uint8_t *out = dst + y * dst_stride;
         for (uint32_t x = 0; x < w; x++) {
             uint8_t b = row[x >> 1];
             uint8_t nib = (x & 1) ? (b & 0x0f) : (uint8_t)(b >> 4);
@@ -390,7 +433,7 @@ static int load_bmp_fast(uint8_t *state, const uint8_t *bmp, uint32_t len) {
 
     uint32_t stride = (((w + 1) >> 1) + 3) & ~3u;   /* BMP rows padded to 4 bytes */
     uint8_t *disp = *(uint8_t **)(state + 0x8);
-    unpack4bpp(disp, bmp + dataoff, w, h, stride, bottom_up);
+    unpack4bpp(disp, w, bmp + dataoff, w, h, stride, bottom_up);
     push_display(state, disp, w, h);
     return 0;
 }

@@ -36,7 +36,7 @@ def g2f(addr):
 # LIVE function after the region is FUN_00491cd0, which nothing may reach.
 FRAG_ADDR      = 0x491340   # frag_write() 1bpp->4bpp fragment shim
 GLUE_ADDR      = 0x491400   # zlib glue: zwrap_alloc/free + load_image_z + helpers
-SETTINGS_ADDR  = 0x491972   # settings_send_wrapper (immediately after the glue)
+SETTINGS_ADDR  = 0x491ab0   # settings_send_wrapper (after the glue, 64 B headroom)
 INJECT_CEILING = 0x491cd0   # FUN_00491cd0 = first live code after the dead region
 
 # Max length for each compiled blob = the space up to the next blob / the ceiling.
@@ -151,8 +151,9 @@ def make_patches():
         # --- zlib (DEFLATE) whole-image decompression at BMP-load time ---
         # Inject the glue blob, then redirect the one BMP-loader call
         # FUN_0050164a(state, reconBuf, len) in FUN_004ae69c to load_image_z, which
-        # dispatches on the buffer's first byte ('B'/1/6 -> fast 4bpp BMP; 2/3/4 ->
-        # 8bpp full/XOR-delta/stereo; 5 -> buzzer sound) and kicks the EvenHub
+        # dispatches on the buffer's first byte ('B'/1/6 -> fast 4bpp BMP/frame;
+        # 2 -> 8bpp full, 3 -> 4bpp bounding-box update, 4 -> stereo; 5 -> buzzer
+        # sound) and kicks the EvenHub
         # keepalive on every image message. Raw BMPs still pass straight through.
         (g2f(GLUE_ADDR), "ab f7 21 fd", glue.hex(), "zlib glue (zwrap_alloc/free + load_image_z)"),
         (g2f(LOADBMP_BL_SITE[0]), LOADBMP_BL_SITE[1], enc_bl(LOADBMP_BL_SITE[0], loadz_addr),
@@ -163,7 +164,7 @@ def make_patches():
         # appends protobuf field 100 ("EVENCFW/1 img576 imgz xordelta stereo") before
         # framing. Unknown high field tag -> stock app/bridge ignore it; CFW-aware
         # apps read it to detect the firmware and gate features.
-        (g2f(SETTINGS_ADDR), "36 e0 4f f4", settings.hex(), "settings_send_wrapper (CFW caps field)"),
+        (g2f(SETTINGS_ADDR), "7e 49 03 20", settings.hex(), "settings_send_wrapper (CFW caps field)"),
         (g2f(SETTINGS_BL_SITE[0]), SETTINGS_BL_SITE[1], enc_bl(SETTINGS_BL_SITE[0], SETTINGS_ADDR),
          "bl settings_send_wrapper (append caps field 100)"),
     ]
