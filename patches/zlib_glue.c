@@ -59,7 +59,22 @@
  *                              packed 4bpp pixels (h * ceil(w/2) bytes, top-down)
  *                              into the persistent CFW shadow (seeding it for mode-3
  *                              deltas), then expand into the 8bpp display buffer, push.
+ *   7           -> [7][sub]    diagnostic control (no display change): 0 clears the
+ *                              overlay flags, 1 hides the overlay, 2 shows it.
+ *   8           -> [8][count][len16][submsg]...  multi-segment: apply each sub-message
+ *                              to the shadow with the panel push DEFERRED, then present
+ *                              once — an atomic multi-op update (e.g. scroll = rect-copy
+ *                              + delta). Bounded to an uncompressed 4bpp BMP's size; no
+ *                              nesting. Intended for shadow ops (modes 3/6/9).
+ *   9           -> [9][srcrect][dstrect]  rect-copy inside the 4bpp shadow (full uint16
+ *                              L/T/W/H each; same size; may overlap), then present.
+ *                              Pairs with a delta (usually via mode 8) to scroll.
  *   anything else / too short  -> load_bmp_fast (rejects cleanly if not a BMP).
+ *
+ * The HIGH BIT of the mode byte is a "lenses differ" flag; most modes ignore it. For
+ * mode 3 it carries two boxes (left then right, same size) sharing one zlib payload —
+ * a stereo shift without duplicating pixels; each lens draws at its own box. For mode 9
+ * it carries two rect-sets (left then right); each lens uses its own.
  *
  * The image dimensions come from the container state (state+0x40/0x42), so no
  * header is needed on 8bpp payloads — the sender just deflates w*h raw bytes
@@ -276,12 +291,18 @@ static uint8_t *cfw_back_buffer(uint8_t *state, uint32_t w, uint32_t h);
 static void bzero(uint8_t *buf, uint32_t len);
 static int cfw_diag(int has_fid, uint16_t fid);
 static void cfw_draw_flags(uint8_t *disp, uint32_t w, uint32_t h);
+static uint32_t rd16(const uint8_t *p);
+static void present_shadow(uint8_t *state, uint32_t w, uint32_t h);
+static void rect_copy_4bpp(uint8_t *buf, uint32_t stride, uint32_t sL, uint32_t sT,
+                           uint32_t dL, uint32_t dT, uint32_t bw, uint32_t bh);
+static int image_dispatch(uint8_t *state, const uint8_t *src, uint32_t srclen, int present);
 
-/* The image worker (mode dispatch + decompress + composite + push). Static, called
- * from image_deferred (the deferred consumer, which runs on BOTH lenses via the
- * cross-lens-synchronized completion message). NOTE: image handling lives here / in
- * the deferred path on purpose — the sync-completion path (image_complete) runs on
- * only the RECEIVING lens, so doing the work there leaves the other lens blank. */
+/* The image worker: static, called from image_deferred (the deferred consumer, which
+ * runs on BOTH lenses via the cross-lens-synchronized completion message). NOTE: image
+ * handling lives here / in the deferred path on purpose — the sync-completion path
+ * (image_complete) runs on only the RECEIVING lens, so doing the work there leaves the
+ * other lens blank. image_worker kicks the keepalive once per top-level message, then
+ * defers to image_dispatch (which recurses for multi-segment messages). */
 static int image_worker(void *state_, uint8_t *src, uint32_t srclen) {
     /* An inbound image message proves the phone is still connected, so kick the
      * EvenHub keepalive back to life exactly as the stock heartbeat handler does.
@@ -296,11 +317,19 @@ static int image_worker(void *state_, uint8_t *src, uint32_t srclen) {
      * stereo, sound, BMP) counts as liveness. Runs on the same evenhub task that
      * owns the counter, so no locking is needed. */
     FW_KEEPALIVE_RESET();
+    return image_dispatch((uint8_t *)state_, src, srclen, 1);
+}
 
-    uint8_t *state = (uint8_t *)state_;
+/* Dispatch one message. `present`=1 means push the result to the panel now; a
+ * multi-segment message (mode 8) dispatches each sub-message with present=0 (so they
+ * only mutate the shadow) and then presents once, giving an atomic multi-op update
+ * (e.g. scroll = rect-copy + delta). The high bit of the mode byte is the "lenses
+ * differ" flag; most modes ignore it. */
+static int image_dispatch(uint8_t *state, const uint8_t *src, uint32_t srclen, int present) {
     if (src == 0 || srclen < 1) return load_bmp_fast(state, src, srclen);
 
-    uint8_t mode = src[0];
+    int lenses_differ = src[0] & 0x80;             /* high bit: per-lens variant */
+    uint8_t mode = src[0] & 0x7f;
     if (mode == 0x42) return load_bmp_fast(state, src, srclen);       /* raw BMP */
 
     if (mode == 5) {
@@ -389,13 +418,63 @@ static int image_worker(void *state_, uint8_t *src, uint32_t srclen) {
         return 0;
     }
 
+    /* geometry: needed by the drawing modes (8/9 and the strm modes below) */
+    uint32_t w = *(uint16_t *)(state + 0x40);
+    uint32_t h = *(uint16_t *)(state + 0x42);
+    uint32_t wh = w * h;
+
+    if (mode == 8) {
+        /* Multi-segment: [8][count][len16][submsg]... — dispatch each sub with
+         * present=0 (mutate the shadow only), then present once, giving an atomic
+         * multi-op update (e.g. scroll = rect-copy + delta, no intermediate flash).
+         * Sized no larger than an uncompressed 4bpp BMP for this container; no nesting
+         * (a sub-message may not itself be a multi-segment message). Intended for
+         * shadow ops (modes 3/6/9); a direct-to-A sub would be clobbered by the final
+         * present. */
+        if (!present) return -1;                       /* only valid at top level */
+        if (srclen < 2) return -1;
+        uint32_t bmp_max = 118 + ((((w + 1) >> 1) + 3) & ~3u) * h;
+        if (srclen > bmp_max) return -1;
+        uint32_t count = src[1];
+        uint32_t pos = 2;
+        for (uint32_t i = 0; i < count; i++) {
+            if (pos + 2 > srclen) return -1;
+            uint32_t seglen = rd16(src + pos);
+            pos += 2;
+            if (seglen < 1 || pos + seglen > srclen) return -1;
+            image_dispatch(state, src + pos, seglen, 0);   /* shadow-only, no present */
+            pos += seglen;
+        }
+        present_shadow(state, w, h);                   /* one atomic present */
+        return 0;
+    }
+
+    if (mode == 9) {
+        /* Rect-copy within the 4bpp shadow: move a block from a source rect to a
+         * destination rect (full uint16 coords; the rects may overlap). Both rects must
+         * be the same size and wholly in bounds. With the lenses-differ flag there are
+         * two rect-sets (left then right) and each lens uses its own. rect_copy_4bpp
+         * takes a whole-byte fast path when left/width are even, else a nibble path.
+         * Pairs with a follow-up delta (usually in one mode-8 message) to scroll. */
+        const uint8_t *r = src + 1;
+        uint32_t need = lenses_differ ? 32u : 16u;     /* 8 bytes per rect, 2 or 4 rects */
+        if (srclen < 1 + need) return -1;
+        if (lenses_differ && FW_SIDE() != 2) r += 16;  /* right lens uses the 2nd set */
+        uint32_t sL = rd16(r),     sT = rd16(r + 2),  sW = rd16(r + 4),  sH = rd16(r + 6);
+        uint32_t dL = rd16(r + 8), dT = rd16(r + 10), dW = rd16(r + 12), dH = rd16(r + 14);
+        if (sW == 0 || sH == 0 || sW != dW || sH != dH) return -1;    /* copy = same size */
+        if (sL + sW > w || sT + sH > h || dL + dW > w || dT + dH > h) return -1;  /* bounds */
+        uint8_t *shadow = cfw_back_buffer(state, w, h);
+        if (shadow == 0) return -1;
+        rect_copy_4bpp(shadow, (w + 1) >> 1, sL, sT, dL, dT, sW, sH);
+        if (present) present_shadow(state, w, h);
+        return 0;
+    }
+
     if (mode < 1 || mode > 6 || srclen < 3) return load_bmp_fast(state, src, srclen);
 
     const uint8_t *zsrc = src + 1;
     uint32_t zlen = srclen - 1;
-    uint32_t w = *(uint16_t *)(state + 0x40);
-    uint32_t h = *(uint16_t *)(state + 0x42);
-    uint32_t wh = w * h;
 
     uint8_t strm[ZS_SIZE];
     for (uint32_t i = 0; i < ZS_SIZE; i++) strm[i] = 0;
@@ -431,8 +510,8 @@ static int image_worker(void *state_, uint8_t *src, uint32_t srclen) {
     if (mode == 6) {
         /* Full headerless 4bpp frame. Inflate it into the persistent shadow (this
          * container's recon-buffer tail) that mode-3 deltas composite onto, so a
-         * mode-6 keyframe seeds a stable base. Then expand the 4bpp frame into the
-         * 8bpp display buffer and push. */
+         * mode-6 keyframe seeds a stable base, then present (unless deferred by a
+         * multi-segment wrapper). */
         cfw_diag(0, 0);                               /* keyframe: rebaseline delta fid */
         uint32_t out_max = ((w + 1) >> 1) * h;                   /* tight 4bpp */
         uint8_t *dst = cfw_back_buffer(state, w, h);
@@ -447,13 +526,9 @@ static int image_worker(void *state_, uint8_t *src, uint32_t srclen) {
         } else {
             FW_END(strm);
         }
-        if (ok) {
-            uint8_t *disp = *(uint8_t **)(state + 0x8);
-            unpack4bpp(disp, w, dst, w, h, (w + 1) >> 1, 0);
-            cfw_draw_flags(disp, w, h);               /* overlay diagnostic flag row */
-            push_display(state, disp, w, h);
-        }
-        return ok ? 0 : -1;
+        if (!ok) return -1;
+        if (present) present_shadow(state, w, h);
+        return 0;
     }
 
     if (mode == 3) {
@@ -476,13 +551,29 @@ static int image_worker(void *state_, uint8_t *src, uint32_t srclen) {
          * byte offsets: each box row inflates straight into its place in the 4bpp
          * shadow as a plain byte run, no nibble shifting. fid is a uint16 per-frame
          * counter (diagnostics). Rejected (old frame kept) if the box isn't wholly in
-         * bounds. The sender must have sent a mode-6 keyframe before/among deltas. */
-        if (srclen < 8) return -1;                    /* 4 box hdr + 2 fid + some zlib */
-        uint32_t left = (uint32_t)src[1] * 4;
-        uint32_t top  = (uint32_t)src[2] * 2;
-        uint32_t bw   = (uint32_t)src[3] * 4;
-        uint32_t bh   = (uint32_t)src[4] * 2;
-        uint16_t fid  = (uint16_t)((uint32_t)src[5] | ((uint32_t)src[6] << 8));
+         * bounds. The sender must have sent a mode-6 keyframe before/among deltas.
+         *
+         * lenses-differ variant: [3|80][Lbox 4][Rbox 4][fid 2][shared zlib]. Both boxes
+         * must be the same size; each lens draws the SAME decompressed pixels at its own
+         * box — a stereo shift (e.g. a raised dialog) with the pixel data sent once. */
+        uint32_t box_off, fid_off, z_off;
+        if (lenses_differ) {
+            if (srclen < 12) return -1;               /* mode + 2 boxes + fid + some zlib */
+            if (src[3] != src[7] || src[4] != src[8]) return -1;   /* boxes must match size */
+            box_off = (FW_SIDE() == 2) ? 1 : 5;       /* left set / right set */
+            fid_off = 9;
+            z_off   = 11;
+        } else {
+            if (srclen < 8) return -1;                /* 4 box hdr + 2 fid + some zlib */
+            box_off = 1;
+            fid_off = 5;
+            z_off   = 7;
+        }
+        uint32_t left = (uint32_t)src[box_off]     * 4;
+        uint32_t top  = (uint32_t)src[box_off + 1] * 2;
+        uint32_t bw   = (uint32_t)src[box_off + 2] * 4;
+        uint32_t bh   = (uint32_t)src[box_off + 3] * 2;
+        uint16_t fid  = (uint16_t)rd16(src + fid_off);
         if (bw == 0 || bh == 0 || left + bw > w || top + bh > h) return -1;
 
         /* Duplicate frame id (re-processed message) -> skip: re-applying a delta
@@ -494,8 +585,8 @@ static int image_worker(void *state_, uint8_t *src, uint32_t srclen) {
         if (shadow == 0) return -1;                   /* no stable base -> keyframe resyncs */
         uint32_t rowbytes = bw >> 1;                  /* whole bytes (bw even) */
 
-        *(const uint8_t **)(strm + ZS_NEXT_IN) = src + 7;   /* zlib past 4 box + 2 fid bytes */
-        *(uint32_t *)(strm + ZS_AVAIL_IN) = srclen - 7;
+        *(const uint8_t **)(strm + ZS_NEXT_IN) = src + z_off;   /* zlib past box(es) + fid */
+        *(uint32_t *)(strm + ZS_AVAIL_IN) = srclen - z_off;
         int ok = 0;
         if (FW_INIT2(strm, 15, ZLIB_VER, ZS_SIZE) == 0) {
             ok = 1;
@@ -514,10 +605,7 @@ static int image_worker(void *state_, uint8_t *src, uint32_t srclen) {
         }
         if (!ok) return -1;                           /* leave the old frame on screen */
 
-        uint8_t *disp = *(uint8_t **)(state + 0x8);
-        unpack4bpp(disp, w, shadow, w, h, sstride, 0);   /* rebuild full 8bpp frame */
-        cfw_draw_flags(disp, w, h);                      /* overlay diagnostic flag row */
-        push_display(state, disp, w, h);
+        if (present) present_shadow(state, w, h);     /* rebuild full 8bpp frame + push */
         return 0;
     }
 
@@ -559,8 +647,55 @@ static int image_worker(void *state_, uint8_t *src, uint32_t srclen) {
     FW_END(strm);
     if (!ok) return -1;                               /* leave the old frame on screen */
 
-    push_display(state, disp, w, h);
+    if (present) push_display(state, disp, w, h);
     return 0;
+}
+
+/* Expand this container's 4bpp shadow into the 8bpp display buffer, overlay the
+ * diagnostic flags, and push. The single "present" step shared by the shadow-mutating
+ * modes (3/6/9) and by the multi-segment batch (which presents once after all subs). */
+static void present_shadow(uint8_t *state, uint32_t w, uint32_t h) {
+    uint8_t *shadow = cfw_back_buffer(state, w, h);
+    if (shadow == 0) return;
+    uint8_t *disp = *(uint8_t **)(state + 0x8);
+    unpack4bpp(disp, w, shadow, w, h, (w + 1) >> 1, 0);
+    cfw_draw_flags(disp, w, h);
+    push_display(state, disp, w, h);
+}
+
+/* Copy a bw x bh block of 4bpp pixels within one buffer (stride bytes/row) from
+ * (sL,sT) to (dL,dT). The rects may overlap: iteration direction is chosen per axis
+ * like a 2D memmove (bottom-up when the destination is lower, right-to-left when it is
+ * further right). Fast whole-byte path when sL, dL and bw are all even; otherwise a
+ * per-pixel nibble path (high nibble = the left / even pixel). */
+static void rect_copy_4bpp(uint8_t *buf, uint32_t stride, uint32_t sL, uint32_t sT,
+                           uint32_t dL, uint32_t dT, uint32_t bw, uint32_t bh) {
+    int rev_y = (dT > sT);
+    int rev_x = (dL > sL);
+    if ((sL & 1) == 0 && (dL & 1) == 0 && (bw & 1) == 0) {
+        uint32_t bytes = bw >> 1;
+        for (uint32_t i = 0; i < bh; i++) {
+            uint32_t y = rev_y ? (bh - 1 - i) : i;
+            uint8_t *srow = buf + (sT + y) * stride + (sL >> 1);
+            uint8_t *drow = buf + (dT + y) * stride + (dL >> 1);
+            if (rev_x) { for (uint32_t x = bytes; x-- > 0; ) drow[x] = srow[x]; }
+            else       { for (uint32_t x = 0; x < bytes; x++) drow[x] = srow[x]; }
+        }
+    } else {
+        for (uint32_t i = 0; i < bh; i++) {
+            uint32_t y = rev_y ? (bh - 1 - i) : i;
+            uint8_t *srow = buf + (sT + y) * stride;
+            uint8_t *drow = buf + (dT + y) * stride;
+            for (uint32_t j = 0; j < bw; j++) {
+                uint32_t x = rev_x ? (bw - 1 - j) : j;
+                uint32_t sx = sL + x, dx = dL + x;
+                uint8_t sv = (sx & 1) ? (srow[sx >> 1] & 0x0f) : (uint8_t)(srow[sx >> 1] >> 4);
+                uint8_t *db = &drow[dx >> 1];
+                if (dx & 1) *db = (uint8_t)((*db & 0xf0) | sv);
+                else        *db = (uint8_t)((*db & 0x0f) | (uint8_t)(sv << 4));
+            }
+        }
+    }
 }
 
 /* Replicate FUN_0050164a's tail: clean the display buffer out of dcache, set the
@@ -654,6 +789,7 @@ static customCfwContext *getCustomCfwContext(void) {
     if (ctx) {
         bzero((uint8_t *)ctx, sizeof(customCfwContext));
         ctx->magic = CFW_CTX_MAGIC;
+        ctx->diag_hide = 1;    /* overlay off by default; mode 7 sub 2 turns it on */
         for (uint32_t i = 0; i < CFW_FID_RING; i++) ctx->recent_fids[i] = 0xffff;  /* sentinel */
     }
     *(customCfwContext **)CFW_CTX_SLOT = ctx;      /* 0 on OOM: retried next message */

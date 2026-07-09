@@ -31,7 +31,7 @@ BASE="g2_2.2.4.34.bin"            # stock image (downloaded)
 OUT="g2_2.2.4.34_cfw.bin"         # patched image (produced)
 PATCH="patches/patch_compress.py"
 BASE_SHA256="f9a93621a7141e0ae54ca6371cd2f1b4afbffa61f302ace096e0656ba25b1754"
-OUT_SHA256="15c6a90cc0d97509e52cd2711d345416f4d20ecf04ec61fdf7ed84463c9465d6"
+OUT_SHA256="3b92551cffe297a75e486e036bc0ecc3723fac377ec16fc1f2c1fa81ff4aae22"
 
 SKIP_VENV=0
 FORCE_DOWNLOAD=0
