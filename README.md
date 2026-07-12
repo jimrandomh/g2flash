@@ -42,12 +42,22 @@ The patches in `patches/` add image/display features on top of stock 2.2.4.34:
 - `g2flash.py` — the flasher.
 - `build_cfw.sh` — one-shot venv setup + download + patch + verify (see above).
 - `patches/` — the patch sources and tools:
+  - `cfw_patches.json` — the **committed patch set**: a list of
+    offset/expected-old/new byte patches (plus base + output SHA-256s) that turns
+    the stock image into the CFW image. This is the source of truth for the build.
+  - `apply_patches.py` — replays `cfw_patches.json` onto the stock image. **No
+    compiler** — pure Python stdlib, so it runs anywhere (a phone, a fresh box).
+    This is what `build_cfw.sh` uses to produce the image.
+  - `gen_patches.py` — compiles the injected code with **clang** and (re)generates
+    `cfw_patches.json`. Run it after editing the patch sources:
+    `python3 patches/gen_patches.py g2_2.2.4.34.bin patches/cfw_patches.json`
+    (or `./build_cfw.sh --update-patches`), then commit the JSON.
   - `patch_compress.py` — the all-in-one patcher (576 lift + image compression
-    + stereo + capability field) that `build_cfw.sh` runs.
+    + stereo + capability field); `gen_patches.py` calls it to build the ops.
   - `patch_img_container_576.py` — standalone tool for just the 576×288 lift.
   - `build.py`, `*.c` — the C→position-independent-Thumb pipeline and sources
-    for the injected firmware code (the machine code is embedded in
-    `patch_compress.py`; these are kept for review/rebuild).
+    for the injected firmware code (compiled by `gen_patches.py`; the resulting
+    machine code lands in `cfw_patches.json`).
 - `requirements.txt` — the flasher's Python dependencies.
 
 Firmware images (`g2_2.2.4.34*.bin`) are **not** checked in — they are Even's

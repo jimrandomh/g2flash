@@ -247,42 +247,42 @@ def crc32c_msb(buf, _t=[]):
         crc = ((crc << 8) & 0xffffffff) ^ _t[((crc >> 24) ^ byte) & 0xff]
     return crc
 
-def fixup_checksums(data):
-    n = struct.unpack_from('<I', data, 8)[0]
-    for i in range(n):
-        eid, off, size, _ = struct.unpack_from('<IIII', data, 0x40 + i * 16)
-        ps = struct.unpack_from('<I', data, off + 8)[0]
-        name = bytes(data[off + 48:off + 128]).split(b'\0')[0].decode('latin1')
-        pre = None
-        if name.endswith('s200_firmware_ota.bin'):
-            pre = zlib.crc32(bytes(data[off + 128 + 8:off + 128 + ps])) & 0xffffffff
-            struct.pack_into('<I', data, off + 128 + 4, pre)
-        crc = crc32c_msb(bytes(data[off + 128:off + 128 + ps]))
-        struct.pack_into('<I', data, 0x40 + i * 16 + 12, crc)
-        struct.pack_into('<I', data, off + 12, crc)
-        extra = f", preamble crc32={pre:08x}" if pre is not None else ""
-        print(f"  [{i}] {name}: component crc32c={crc:08x}{extra}")
+def build_patch_ops(img):
+    """Compile the injected blobs (needs clang) and return (patched_data, ops).
 
-def main():
-    src = sys.argv[1] if len(sys.argv) > 1 else "g2_2.2.4.34.bin"
-    dst = sys.argv[2] if len(sys.argv) > 2 else "g2_2.2.4.34_cfw.bin"
-    print("compiling injected blobs (build.py):")
-    img = open(src, "rb").read()
+    `ops` is the clang-free description of the whole transform: a list of
+    {offset, old (hex), new (hex), desc} entries that, applied to the stock
+    image, reproduce `patched_data` byte-for-byte. `old` records the stock bytes
+    at each site (empty for the tail append) so the applier can sanity-check it
+    is operating on the right base. This list is what gen_patches.py serializes
+    to patches/cfw_patches.json for apply_patches.py to consume without clang.
+
+    Only offsets whose bytes actually change are recorded, so the per-component
+    checksum fixups collapse to just the (changed) main-app component."""
     append, in_place, (idx, comp_off, old_ps) = layout(img)
 
     data = bytearray(img)
-    # 1) live-code edits + bl retargets. `orig` is a stock-bytes sanity prefix; a
-    #    re-run against an already-patched image trips these asserts before we ever
-    #    append (so we never double-append).
+    ops = []
+
+    def record(off, newb, desc):
+        """Stage a write of `newb` at `off`, recording the ORIGINAL bytes as the
+        expected-old. Skips no-op writes (new == already-there) so unchanged
+        checksums don't clutter the patch set. All recorded sites live in the
+        image header/code, untouched by the append, so img[off] == data[off]."""
+        newb = bytes(newb)
+        old = bytes(img[off:off + len(newb)])
+        if newb == old:
+            return
+        ops.append({"offset": off, "old": old.hex(), "new": newb.hex(), "desc": desc})
+        data[off:off + len(newb)] = newb
+
+    # 1) live-code edits + bl retargets. `orig` is a stock-bytes sanity prefix.
     print("applying in-place edits:")
     for off, orig, new, desc in in_place:
         o, n = hx(orig), hx(new)
-        if bytes(data[off:off + len(n)]) == n:
-            print(f"  {off:#x}: already patched ({desc})")
-            continue
         cur = bytes(data[off:off + len(o)])
         assert cur == o, f"{off:#x} ({desc}): expected {o.hex()} got {cur.hex()} (run against the STOCK image)"
-        data[off:off + len(n)] = n
+        record(off, n, desc)
         print(f"  {off:#x}: {desc} ({len(n)} B)")
 
     # 2) append the injected blobs to the main-app payload. The main app is the
@@ -291,23 +291,56 @@ def main():
     assert payload_end == len(data), (
         f"main-app payload ends at 0x{payload_end:x} but file is 0x{len(data):x}; the append "
         "model assumes ota/s200_firmware_ota.bin is the last component")
+    ops.append({"offset": payload_end, "old": "", "new": bytes(append).hex(),
+                "desc": "append injected blobs to main-app payload"})
     data.extend(append)
     new_ps = old_ps + len(append)
 
     # 3) fix up the size/offset metadata the container + bootloader read
-    struct.pack_into('<I', data, comp_off + 8, new_ps)                 # subheader payload size (ps)
-    struct.pack_into('<I', data, 0x40 + idx * 16 + 8, new_ps + 128)    # TOC entry size (= ps + subheader)
+    record(comp_off + 8, struct.pack('<I', new_ps), "main-app subheader payload size (ps)")
+    record(0x40 + idx * 16 + 8, struct.pack('<I', new_ps + 128), "main-app TOC entry size (ps + 128)")
     pre0 = struct.unpack_from('<I', data, comp_off + 128)[0]
-    struct.pack_into('<I', data, comp_off + 128,                       # preamble length (low 24 bits)
-                     (pre0 & 0xff000000) | (new_ps & 0xffffff))
+    record(comp_off + 128,                                             # preamble length (low 24 bits)
+           struct.pack('<I', (pre0 & 0xff000000) | (new_ps & 0xffffff)),
+           "main-app preamble length (low 24 bits)")
     print(f"  appended {len(append)} B: ps {old_ps} -> {new_ps}, "
           f"preamble len -> 0x{new_ps & 0xffffff:x}, load addr 0x{APP_LOAD_ADDR:08x}")
 
     # 4) recompute checksums over the new payload (preamble crc32 first, then crc32c)
     print("recomputing checksums:")
-    fixup_checksums(data)
+    n = struct.unpack_from('<I', data, 8)[0]
+    for i in range(n):
+        eid, off, size, _ = struct.unpack_from('<IIII', data, 0x40 + i * 16)
+        ps = struct.unpack_from('<I', data, off + 8)[0]
+        name = bytes(data[off + 48:off + 128]).split(b'\0')[0].decode('latin1')
+        pre = None
+        if name.endswith('s200_firmware_ota.bin'):
+            pre = zlib.crc32(bytes(data[off + 128 + 8:off + 128 + ps])) & 0xffffffff
+            record(off + 128 + 4, struct.pack('<I', pre), f"[{i}] {name} preamble crc32")
+        crc = crc32c_msb(bytes(data[off + 128:off + 128 + ps]))
+        record(0x40 + i * 16 + 12, struct.pack('<I', crc), f"[{i}] {name} component crc32c (TOC)")
+        record(off + 12, struct.pack('<I', crc), f"[{i}] {name} component crc32c (subheader)")
+        if pre is not None or crc32c_msb(bytes(img[off + 128:off + 128 + ps])) != crc:
+            extra = f", preamble crc32={pre:08x}" if pre is not None else ""
+            print(f"  [{i}] {name}: component crc32c={crc:08x}{extra}")
+
+    return bytes(data), ops
+
+def main():
+    src = sys.argv[1] if len(sys.argv) > 1 else "g2_2.2.4.34.bin"
+    dst = sys.argv[2] if len(sys.argv) > 2 else "g2_2.2.4.34_cfw.bin"
+    print("compiling injected blobs (build.py):")
+    img = open(src, "rb").read()
+    data, ops = build_patch_ops(img)
+
+    # Prove the clang-free op list reproduces the compiled image exactly, so the
+    # patches/cfw_patches.json that gen_patches.py emits from `ops` is faithful.
+    from apply_patches import apply_ops
+    assert apply_ops(img, ops) == data, "op list does not reproduce the compiled image"
+
     open(dst, "wb").write(data)
     print(f"wrote {dst} ({len(data)} bytes)")
 
 if __name__ == "__main__":
+    sys.path.insert(0, SCRIPT_DIR)
     main()
