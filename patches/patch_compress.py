@@ -137,8 +137,15 @@ def layout(img):
         cursor = off + len(blob)
         return off
 
-    # 1) frag_write (extracted from decompress.c; entry at offset 0 of its bytes)
+    # 1) frag_write (extracted from decompress.c; entry at offset 0 of its bytes).
+    # This is the one place we append a SINGLE function's bytes rather than the whole
+    # blob, so it must carry no rodata -- a string literal here would be laid out
+    # after .text by build.py and dropped by this per-function slice, leaving its
+    # PC-relative refs dangling. Assert that; if decompress.c ever needs strings,
+    # switch this to append the whole `dec["text"]` blob like the others.
     dec = build_blob("decompress.c")
+    assert dec.get("rodata_len", 0) == 0, \
+        "decompress.c now emits rodata; frag_write can't be extracted alone (see note)"
     frag = bytes.fromhex(_fn(dec, "frag_write")["bytes"])
     frag_off = place(frag)
     frag_addr = mram_addr(frag_off)
