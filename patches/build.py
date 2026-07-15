@@ -5,11 +5,14 @@ mainapp core (ARMv7E-M, Cortex-M-class), verify it has NO relocations and no
 external calls, and emit the raw .text bytes.
 
 Usage:
-  python3 build.py <src.c> [-Dname=val ...]           # human report + <stem>.text.bin
+  python3 build.py <src.c> [-Dname=val ...]           # human report + obj/<stem>.text.bin
   python3 build.py <src.c> [-Dname=val ...] --json     # machine-readable JSON to stdout
 
+Build intermediates (<stem>.o, <stem>.text.bin) are written to g2flash/obj/ (created
+on demand), not next to the sources.
+
 Human mode prints, per exported function, its offset/size and the raw bytes (hex)
-and writes <stem>.text.bin. JSON mode prints a single object:
+and writes obj/<stem>.text.bin. JSON mode prints a single object:
 
   {
     "src": "zlib_glue.c",
@@ -19,8 +22,8 @@ and writes <stem>.text.bin. JSON mode prints a single object:
   }
 
 so patch_compress.py can pull the exact bytes it injects straight from the build
-instead of carrying pasted hex. --json has no side effects beyond the <stem>.o the
-compiler emits (it does NOT write <stem>.text.bin).
+instead of carrying pasted hex. --json has no side effects beyond the obj/<stem>.o the
+compiler emits (it does NOT write obj/<stem>.text.bin).
 
 Self-containedness is enforced in both modes. build.py acts as a mini-linker over
 the emitted blob and resolves two relocation families in place:
@@ -53,7 +56,17 @@ literals, which needs data-to-data fixups) -- is still a hard error, because PIC
 injection has no linker to fix absolute addresses up (firmware entry points must be
 called via absolute-constant function pointers instead).
 """
-import sys, struct, subprocess, json
+import sys, os, struct, subprocess, json
+
+# Build intermediates (.o, .text.bin) go in g2flash/obj (a sibling of this patches/
+# dir), created on demand, rather than cluttering the source tree next to the .c files.
+OBJ_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "obj")
+
+def obj_path(src, suffix):
+    """Path for a build intermediate of `src` (by basename) inside OBJ_DIR."""
+    os.makedirs(OBJ_DIR, exist_ok=True)
+    stem = os.path.basename(src).rsplit(".", 1)[0]
+    return os.path.join(OBJ_DIR, stem + suffix)
 
 R_ARM_THM_CALL         = 10   # BL / BLX  (Thumb-2, 32-bit)
 R_ARM_THM_JUMP24       = 30   # B.W       (Thumb-2, 32-bit)
@@ -179,8 +192,7 @@ def compile_text(src, extra=()):
     BuildError on any relocation that can't be resolved position-independently or
     any reference to an external/undefined symbol. Sizes are resolved from st_size,
     falling back to the gap to the next function (or end of .text) when 0."""
-    stem = src.rsplit(".", 1)[0]
-    obj = stem + ".o"
+    obj = obj_path(src, ".o")
     subprocess.run([CLANG, *CFLAGS, *extra, "-c", src, "-o", obj], check=True)
 
     d, secs = parse_elf(obj)
@@ -298,10 +310,9 @@ def main():
         print("FAIL:", e)
         sys.exit(1)
 
-    stem = src.rsplit(".", 1)[0]
     text_len = len(blob) - rodata_len
     rod = f", +{rodata_len} B rodata" if rodata_len else ""
-    print(f"OK: {stem}.o blob = {len(blob)} bytes (.text {text_len}{rod}), "
+    print(f"OK: {os.path.basename(src)} blob = {len(blob)} bytes (.text {text_len}{rod}), "
           f"relocs resolved, no external refs\n")
     for nm, val, sz in sorted(funcs, key=lambda x: x[1]):
         b = blob[val:val + sz]
@@ -309,8 +320,9 @@ def main():
         print("bytes:", b.hex())
         print()
 
-    open(stem + ".text.bin", "wb").write(blob)
-    print(f"wrote {stem}.text.bin ({len(blob)} bytes)")
+    text_bin = obj_path(src, ".text.bin")
+    open(text_bin, "wb").write(blob)
+    print(f"wrote {text_bin} ({len(blob)} bytes)")
 
 if __name__ == "__main__":
     main()

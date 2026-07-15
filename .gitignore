@@ -7,4 +7,6 @@
 __pycache__/
 *.pyc
 
+# Build intermediates (build.py writes .o / .text.bin here).
+/obj/
 *.o
