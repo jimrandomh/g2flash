@@ -26,9 +26,10 @@ TOC entry size (ps + 128), the main-app preamble length field (preamble[0] low
 main app is the LAST component so appending shifts no downstream offsets.
 
 Every `bl` that targets injected code is computed from (call-site, appended
-address) so redirects can never drift; the zwrap_alloc/free fn-ptrs baked into
-z_stream use absolute addresses filled in on a 2nd build pass. A hard MRAM-ceiling
-check (duplicating g2flash.py's check_mainapp_fits_mram) refuses an oversized image.
+address) so redirects can never drift; the injected code itself is fully position-
+independent (see build.py) and needs no load address at build time, so it compiles
+in a single pass. A hard MRAM-ceiling check (duplicating g2flash.py's
+check_mainapp_fits_mram) refuses an oversized image.
 """
 import sys, os, struct, zlib, json, subprocess
 
@@ -94,11 +95,11 @@ def enc_bl(pc, target):
     hw2 = 0xD000 | (j1 << 13) | (j2 << 11) | imm11
     return bytes([hw1 & 0xFF, hw1 >> 8, hw2 & 0xFF, hw2 >> 8]).hex()
 
-def build_blob(src, defines=()):
+def build_blob(src):
     """Compile patches/<src> via build.py --json and return the parsed dict
     ({text, text_len, functions:[{name,offset,size,bytes}]})."""
     cmd = ["python3", os.path.join(SCRIPT_DIR, "build.py"),
-           os.path.join(SCRIPT_DIR, src), "--json", *defines]
+           os.path.join(SCRIPT_DIR, src), "--json"]
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
         raise SystemExit(f"build.py failed for {src}:\n{r.stderr or r.stdout}")
@@ -130,33 +131,25 @@ def layout(img):
 
     # Single combined blob: patches_main.c #includes all four patch sources, so build.py
     # emits ONE relocatable blob (its mini-linker resolves cross-file calls) that we
-    # append once at the tail of the main-app payload. 2-pass so the stable zwrap_alloc/
-    # free + seq_tick addresses can be baked as absolute Thumb fn-ptrs (z_stream zalloc/
-    # zfree, buzzer osTimer callback); every other injected entry is a bl target. Each
-    # entry address is just base + the function's offset in the one blob.
+    # append once at the tail of the main-app payload. The blob needs no knowledge of its
+    # own load address: injected code that takes the address of its own functions (the
+    # z_stream zalloc/zfree pair, the seq_tick osTimer callback) does so with plain `&fn`,
+    # which -fropi compiles to a PC-relative, relocation-free sequence. So we compile once
+    # and each entry address here is just base + the function's offset in the one blob.
     blob_off = align_up(old_ps, BLOB_ALIGN)
     base = mram_addr(blob_off)
-    p1 = build_blob("patches_main.c")
-    alloc_addr    = base + _fn(p1, "zwrap_alloc")["offset"] + 1   # +1 = Thumb bit (blx via fn-ptr)
-    free_addr     = base + _fn(p1, "zwrap_free")["offset"] + 1
-    seq_tick_addr = base + _fn(p1, "seq_tick")["offset"] + 1      # buzzer-sequence osTimer callback
-    p2 = build_blob("patches_main.c", [
-        f"-DZWRAP_ALLOC_ADDR=0x{alloc_addr:x}",
-        f"-DZWRAP_FREE_ADDR=0x{free_addr:x}",
-        f"-DSEQ_TICK_ADDR=0x{seq_tick_addr:x}",
-    ])
-    blob = bytes.fromhex(p2["text"])
-    assert base + _fn(p2, "seq_tick")["offset"] + 1 == seq_tick_addr, \
-        "seq_tick offset moved between build passes (reordered?); baked SEQ_TICK_ADDR would be wrong"
+    built = build_blob("patches_main.c")
+    blob = bytes.fromhex(built["text"])
 
-    # injected entry points, resolved from the single blob's function table (bl targets;
-    # even addresses -- the Thumb bit is only needed for the baked fn-ptrs above)
-    frag_addr      = base + _fn(p2, "frag_write")["offset"]
-    snapshot_addr  = base + _fn(p2, "snapshot_side")["offset"]
-    deferred_addr  = base + _fn(p2, "image_deferred")["offset"]
-    settings_addr  = base + _fn(p2, "settings_send_wrapper")["offset"]
-    longpress_addr = base + _fn(p2, "evenhub_longpress")["offset"]
-    release_addr   = base + _fn(p2, "ring_release")["offset"]
+    # injected entry points, resolved from the single blob's function table. These are all
+    # `bl` targets, so they stay even -- a bl keeps the core in Thumb state and needs no
+    # Thumb bit (unlike a fn-ptr consumed by blx, which the C code forms via `&fn`).
+    frag_addr      = base + _fn(built, "frag_write")["offset"]
+    snapshot_addr  = base + _fn(built, "snapshot_side")["offset"]
+    deferred_addr  = base + _fn(built, "image_deferred")["offset"]
+    settings_addr  = base + _fn(built, "settings_send_wrapper")["offset"]
+    longpress_addr = base + _fn(built, "evenhub_longpress")["offset"]
+    release_addr   = base + _fn(built, "ring_release")["offset"]
 
     # --- assemble the appended payload bytes (old_ps .. end) ---
     pad = blob_off - old_ps                     # alignment gap before the blob
@@ -166,9 +159,9 @@ def layout(img):
 
     # --- MRAM ceiling check (duplicate of g2flash.check_mainapp_fits_mram) ---
     prog_end = mram_addr(end_off)   # exclusive MRAM end once flashed
-    rodata = p2.get("rodata_len", 0)
+    rodata = built.get("rodata_len", 0)
     print(f"  combined blob @ MRAM 0x{base:08x}  +{len(blob)} B "
-          f"(.text {p2['text_len'] - rodata} + rodata {rodata})")
+          f"(.text {built['text_len'] - rodata} + rodata {rodata})")
     if prog_end > APP_MAX_END:
         over = prog_end - APP_MAX_END
         raise SystemExit(

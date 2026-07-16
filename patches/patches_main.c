@@ -14,9 +14,11 @@
  * via the standard header guard). Order is not significant — build.py looks functions
  * up by name — but decompress.c is first so the memcpy-ABI frag_write leads the blob.
  *
- * zlib_glue.c still expects ZWRAP_ALLOC_ADDR / ZWRAP_FREE_ADDR / SEQ_TICK_ADDR to be
- * -D-defined on the 2nd build pass (absolute Thumb fn-ptrs baked into the z_stream and
- * the buzzer osTimer); patch_compress.py passes them when it compiles THIS file.
+ * Being one translation unit is also what lets the injected code take the address of
+ * its own functions (z_stream zalloc/zfree, the seq_tick osTimer callback) with plain
+ * `&fn`: -fropi makes an intra-CU function address PC-relative and relocation-free, so
+ * no load address is needed at build time. Splitting these back into separate CUs would
+ * turn those into absolute relocations that build.py rejects.
  */
 #include "decompress.c"
 #include "zlib_glue.c"

@@ -97,10 +97,12 @@
  * descriptor (state+0x24..0x34), lv_image_set_src, lv_obj_invalidate.
  *
  * Self-contained: no external symbols, no writable globals. Firmware entry points
- * are called by absolute constant address (movw/movt + blx, no relocation). The
- * only placement-dependent constants are ZWRAP_ALLOC_ADDR / ZWRAP_FREE_ADDR,
- * filled in on the 2nd build pass (zwrap_alloc/zwrap_free are emitted first so
- * their offsets, hence addresses, are stable).
+ * are called by absolute constant address (movw/movt + blx, no relocation).
+ * Addresses of OUR OWN functions (the z_stream zalloc/zfree pair, the seq_tick
+ * osTimer callback) are taken with plain `&fn`: under -fropi clang materializes an
+ * intra-CU function address PC-relatively (movw/movt of a resolved constant +
+ * `add rX, pc`, Thumb bit included) with no relocation at all, so it needs no load
+ * address at build time and stays correct wherever the blob is placed.
  */
 
 typedef void *(*malloc_fn)(uint32_t);
@@ -173,19 +175,6 @@ typedef int  (*complete_emit_fn)(uint32_t id, void *hdr, int kind, uint32_t p4);
 #define FW_MS_TICK  (*(volatile uint32_t *)0x20074940U)  /* firmware 1 ms OS tick (SysTick chain) */
 #define FW_CORE_HZ  (*(volatile uint32_t *)0x2007419CU)  /* guessed core-clock global (reads 0 on hw) */
 #define DWT_UNLOCK_KEY 0xC5ACCE55U
-
-#ifndef ZWRAP_ALLOC_ADDR
-#define ZWRAP_ALLOC_ADDR 0u   /* pass-2 placeholders */
-#define ZWRAP_FREE_ADDR  0u
-#endif
-
-/* seq_tick's own absolute address, baked in on the 2nd build pass (same reason as
- * ZWRAP_*: we hand it to osTimerNew as a fn-ptr value, which can't be a relocation
- * in position-independent .text). seq_tick is defined early (right after zwrap_*)
- * so its offset is identical across both passes. */
-#ifndef SEQ_TICK_ADDR
-#define SEQ_TICK_ADDR 0u
-#endif
 
 /* z_stream (zlib 1.1.4, sizeof = 0x38) field offsets */
 #define ZS_NEXT_IN   0x00
@@ -283,9 +272,8 @@ void zwrap_free(void *opaque, void *ptr) {
  * step's ms elapses it powers the PWM off and goes idle. `arg` is the singleton
  * context (passed as the osTimer argument at creation). Runs in the RTOS timer
  * thread — the only shared state is the singleton, guarded by magic + bounds.
- * Non-static (external linkage) and defined early so -O2 keeps it and its .text
- * offset is identical across both build passes; its absolute address is baked in
- * via SEQ_TICK_ADDR on pass 2 (osTimerNew needs it as a fn-ptr value). */
+ * Non-static (external linkage) so -O2 keeps it despite having no direct caller —
+ * osTimerNew only ever receives it as a fn-ptr value. */
 void seq_tick(void *arg) {
     customCfwContext *ctx = (customCfwContext *)arg;
     if (ctx == 0 || ctx->magic != CFW_CTX_MAGIC) return;
@@ -473,7 +461,7 @@ static int image_dispatch(uint8_t *state, const uint8_t *src, uint32_t srclen,
             ctx->seq_cursor = 0;
             if (n) {
                 if (ctx->seq_timer == 0)
-                    ctx->seq_timer = FW_TIMER_NEW((void *)SEQ_TICK_ADDR, 0, ctx, 0);
+                    ctx->seq_timer = FW_TIMER_NEW((void *)&seq_tick, 0, ctx, 0);
                 if (ctx->seq_timer) FW_TIMER_START(ctx->seq_timer, 1); /* kick: seq_tick runs step 0 */
                 else { ctx->seq_count = 0; FW_BUZZ_RESET(); }          /* timer create failed */
             }
@@ -568,8 +556,8 @@ static int image_dispatch(uint8_t *state, const uint8_t *src, uint32_t srclen,
     for (uint32_t i = 0; i < ZS_SIZE; i++) strm[i] = 0;
     *(const uint8_t **)(strm + ZS_NEXT_IN) = zsrc;
     *(uint32_t *)(strm + ZS_AVAIL_IN) = zlen;
-    *(uint32_t *)(strm + ZS_ZALLOC) = ZWRAP_ALLOC_ADDR;
-    *(uint32_t *)(strm + ZS_ZFREE) = ZWRAP_FREE_ADDR;
+    *(uint32_t *)(strm + ZS_ZALLOC) = (uint32_t)(uintptr_t)&zwrap_alloc;
+    *(uint32_t *)(strm + ZS_ZFREE) = (uint32_t)(uintptr_t)&zwrap_free;
     *(uint32_t *)(strm + ZS_OPAQUE) = 0;
 
     if (mode == 1) {
