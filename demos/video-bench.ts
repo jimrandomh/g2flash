@@ -10,6 +10,7 @@
 //   delta           4bpp: first frame mode 2, rest mode 3 (bounding-box update)
 //   bmp             4bpp: every frame -> mode 1 (full 4bpp indexed BMP)
 //   raw4            4bpp: every frame -> mode 6 (headerless 4bpp, fast expander)
+//   lz4             4bpp: STOCK 2.2.6.10 path — 4bpp BMP, LZ4'd, CompressMode=2
 // 8bpp carries a full byte per pixel (the panel requantizes to ~16 levels);
 // 4bpp is half the raw size before compression. `bmp` (mode 1) runs through the
 // stock BMP loader, which decodes with two function calls per pixel; `raw4`
@@ -19,6 +20,17 @@
 // frame (as 4bpp), so for mostly-static content like Bad Apple it moves very few
 // pixels per frame — the cheapest mode both on wire and on-device CPU, at the
 // cost of one full keyframe up front (and every G2_KEYFRAME_INTERVAL frames).
+//
+// `lz4` is the odd one out: it is the only mode that needs NO custom firmware. Stock
+// 2.2.6.10 added Even's own image compression (CompressMode 1=RLE, 2=LZ4), so this mode
+// sends a plain 4bpp BMP compressed as an LZ4 *block* with CompressMode=2 and no leading
+// mode byte, which the stock firmware inflates in evenhub_ui_reflash_event_handler and
+// feeds to its normal BMP path. It exists to benchmark Even's official compression
+// against ours on the same content. Notes: the firmware decompresses into a malloc(W*H)
+// buffer sized from the container, so the payload must inflate to <= W*H bytes; and a
+// CompressMode the firmware doesn't know is silently "treated as raw" (i.e. garbage on
+// the lens) rather than rejected, so this mode is only meaningful against a 2.2.6.10+
+// base. See notes/fw-2.2.6.10-lz4-images.md.
 //
 //   bun video-bench.ts path/to/bad_apple.gif
 //
@@ -31,7 +43,7 @@
 //   G2_MAX_FRAMES         cap frame count (default 0 = all)
 //   G2_FRAME_STRIDE       use every Nth decoded frame (default 1)
 //   G2_KEYFRAME_INTERVAL  (delta mode) force a full frame every N (default 0 = only the first)
-//   G2_MODE               "full" (default), "delta", "bmp", or "raw4" (see above)
+//   G2_MODE               "full" (default), "delta", "bmp", "raw4", or "lz4" (see above)
 //   G2_DRY_RUN=1          decode+compress+report only, don't connect/stream
 //   G2_MEASURE_PERSIST=1  also report frame sizes if zlib state persisted across
 //                         frames (measurement only; firmware doesn't do this yet)
@@ -58,6 +70,7 @@ import {
 import { startHeartbeat } from "g2-kit/ui";
 import { deflateSync, createDeflate, constants as zconst } from "node:zlib";
 import { GifReader } from "omggif";
+import { lz4CompressBlock } from "./lz4";
 
 const ACK_MS = 12_000;
 const W = Math.max(16, Math.min(576, Number(process.env.G2_IMG_W ?? "288")));
@@ -66,14 +79,21 @@ const THRESHOLD = Math.max(-1, Math.min(255, Number(process.env.G2_IMG_THRESHOLD
 const MAX_FRAMES = Math.max(0, Number(process.env.G2_MAX_FRAMES ?? "0"));
 const STRIDE = Math.max(1, Number(process.env.G2_FRAME_STRIDE ?? "1"));
 const KEYFRAME_INTERVAL = Math.max(0, Number(process.env.G2_KEYFRAME_INTERVAL ?? "0"));
-const MODE = (process.env.G2_MODE ?? "full").toLowerCase(); // "full" | "delta" | "bmp" | "raw4"
-if (!["full", "delta", "bmp", "raw4"].includes(MODE)) {
-  console.error(`G2_MODE must be one of full|delta|bmp|raw4 (got "${MODE}")`);
+const MODE = (process.env.G2_MODE ?? "full").toLowerCase(); // "full"|"delta"|"bmp"|"raw4"|"lz4"
+if (!["full", "delta", "bmp", "raw4", "lz4"].includes(MODE)) {
+  console.error(`G2_MODE must be one of full|delta|bmp|raw4|lz4 (got "${MODE}")`);
   process.exit(1);
 }
 const BMP4 = MODE === "bmp";    // mode 1: full 4bpp BMP per frame (stock BMP path)
 const RAW4 = MODE === "raw4";   // mode 6: headerless 4bpp, our fast expander
 const DELTA = MODE === "delta"; // mode 2 keyframes + mode 3 XOR deltas
+const LZ4 = MODE === "lz4";     // stock 2.2.6.10: 4bpp BMP as an LZ4 block, CompressMode=2
+// Stock firmware sizes its decode buffer as W*H from the container geometry and hands
+// LZ4_decompress_safe that as dstCapacity, so a payload inflating past W*H is refused
+// on-device ("decompress failed"). Catch it here instead of on the lens.
+const LZ4_DECODE_CAP = W * H;
+/** CompressMode (ImgRawDataUpdate field 5) we put on the wire. 0 = uncompressed. */
+const COMPRESS_MODE = LZ4 ? 2 : 0;
 const DRY_RUN = process.env.G2_DRY_RUN === "1";
 const MEASURE_PERSIST = process.env.G2_MEASURE_PERSIST === "1";
 const WINDOW = Math.max(1, Number(process.env.G2_WINDOW ?? "2"));
@@ -172,7 +192,19 @@ for (let i = 0; i < total; i++) {
   // persist measurement we also track the pre-compression bytes and the length of
   // the uncompressed prefix (mode byte + any header).
   let payload: Uint8Array, persistRaw: Uint8Array, prefixLen: number;
-  if (BMP4) {
+  if (LZ4) {
+    // Stock 2.2.6.10: no mode byte and no zlib — the whole payload IS the LZ4 block,
+    // and CompressMode=2 on the message is what tells the firmware to inflate it.
+    persistRaw = buildEvenHubBmp(W, H, (x, y) => gray[y * W + x]! >> 4);
+    if (persistRaw.length > LZ4_DECODE_CAP) {
+      console.error(
+        `G2_MODE=lz4: a ${W}x${H} BMP is ${persistRaw.length} B but stock firmware only ` +
+        `allocates W*H = ${LZ4_DECODE_CAP} B to decompress into, so the lens would reject ` +
+        `it. Use a smaller frame.`);
+      process.exit(1);
+    }
+    payload = lz4CompressBlock(persistRaw); prefixLen = 0;
+  } else if (BMP4) {
     // mode 1: full 4bpp indexed BMP (gray 0..255 -> 0..15), zlib-compressed.
     persistRaw = buildEvenHubBmp(W, H, (x, y) => gray[y * W + x]! >> 4);
     payload = pack(1, persistRaw); prefixLen = 1;
@@ -388,6 +420,7 @@ try {
         containerId: container.containerId, containerName: container.name, mapSessionId: sid,
         mapTotalSize: payloads[i]!.length, mapFragmentIndex: frag.index,
         mapRawData: frag.data, magic: nextMagic(), // packet size is derived from mapRawData.length
+        compressMode: COMPRESS_MODE,
       });
       if (!(await sendMsg(raw.pb, raw.magic))) { aborted = true; break; }
     }
