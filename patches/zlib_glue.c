@@ -11,7 +11,7 @@
  *                              then decode with load_bmp_fast.
  *   2           -> [2][zlib]   8bpp full frame: inflate straight into the display
  *                              buffer (state+0x8, w*h, 1 byte/pixel), then push.
- *   3           -> [3][l/4][t/2][w/4][h/2][fid16][zlib]  bounding-box delta: composite a
+ *   3           -> [3][l/4][t/2][w/4][h/2][fid16][zlib(rle)]  bounding-box delta: composite a
  *                              tight-4bpp rectangle onto a persistent 4bpp shadow of
  *                              the last frame that WE own (customCfwContext.back, NOT
  *                              a firmware buffer — those get recycled), then rebuild
@@ -55,8 +55,8 @@
  *                              raw-tone entry drives the low-level PWM start and
  *                              arms that same osTimer for auto-stop. None spin or
  *                              block here. Returns 0 (success).
- *   6           -> [6][zlib]   headerless 4bpp full frame: inflate the tightly
- *                              packed 4bpp pixels (h * ceil(w/2) bytes, top-down)
+ *   6           -> [6][zlib(rle)]  headerless 4bpp full frame: inflate + RLE-decode the
+ *                              tightly packed 4bpp pixels (h * ceil(w/2) bytes, top-down)
  *                              into the persistent CFW shadow (seeding it for mode-3
  *                              deltas), then expand into the 8bpp display buffer, push.
  *   7           -> [7][sub]    diagnostic control (no display change): 0 clears the
@@ -79,6 +79,27 @@
  * The image dimensions come from the container state (state+0x40/0x42), so no
  * header is needed on 8bpp payloads — the sender just deflates w*h raw bytes
  * (mode 2); mode 3 carries its own 4-byte box header, and mode 6 tight 4bpp.
+ *
+ * RLE (modes 3 and 6 only): those two modes do not deflate the packed 4bpp bytes
+ * directly — the pixels are first run-length encoded and the RLE STREAM is what gets
+ * deflated, so the on-wire payload is zlib(rle(pixels)) and the firmware inflates then
+ * RLE-decodes. RLE runs over the pixel NIBBLES of the tightly packed rows in wire
+ * order (high nibble = left pixel), including the pad nibble that ends each row when
+ * the width is odd — i.e. exactly the byte buffer that used to be deflated, read as
+ * 2*len nibbles. One token is:
+ *
+ *   [cnt4|color4]                       cnt 1..15   (1 byte)
+ *   [0|color4][cnt8]                    cnt 1..255  (2 bytes)
+ *   [0|color4][0][cntLo][cntHi]         cnt 1..65535, little-endian (4 bytes)
+ *
+ * The low nibble is always the 4bpp color; the high nibble is the repeat count, and 0
+ * escapes to the wider forms. 65535 is the longest single run — an encoder splits
+ * anything longer into consecutive tokens. A run may cross row boundaries. Decoding is
+ * streamed straight out of inflate through a small stack chunk (no scratch allocation,
+ * tokens may straddle chunk boundaries), and same-color pixel pairs are written as
+ * whole bytes (color*0x11) rather than nibble at a time. A stream that decodes to
+ * anything other than exactly rows*rowbytes*2 nibbles is rejected and the previous
+ * frame is left on screen.
  *
  * Every invocation (any mode) first kicks the EvenHub keepalive: stock firmware
  * resets the ticks-since-heartbeat counter only on the sid-0x0c heartbeat msg, so
@@ -188,6 +209,7 @@ typedef int  (*complete_emit_fn)(uint32_t id, void *hdr, int kind, uint32_t p4);
 #define ZS_SIZE      0x38
 
 #define XOR_CHUNK 256   /* mode-4 inflate scratch (stack); any size works */
+#define RLE_CHUNK 256   /* mode-3/6 inflate scratch feeding the RLE decoder (stack) */
 
 /* Persistent CFW-owned state that must survive image-container teardown/rebuild.
  * The image container (its display buffer A @ state+0x8 and recon buffer B @
@@ -317,6 +339,8 @@ typedef struct { uint32_t n; cfw_rect r[CFW_RECT_MAX]; } cfw_rectlist;
 static void rl_add(cfw_rectlist *rl, uint32_t l, uint32_t t, uint32_t w, uint32_t h);
 static void draw_rect_outline(uint8_t *disp, uint32_t w, uint32_t h, const cfw_rect *r);
 
+static int inflate_rle(uint8_t *strm, uint8_t *base, uint32_t stride,
+                       uint32_t rowbytes, uint32_t rows);
 static void present_shadow(uint8_t *state, uint32_t w, uint32_t h, cfw_rectlist *rl);
 static void rect_copy_4bpp(uint8_t *buf, uint32_t stride, uint32_t sL, uint32_t sT,
                            uint32_t dL, uint32_t dT, uint32_t bw, uint32_t bh);
@@ -584,25 +608,15 @@ static int image_dispatch(uint8_t *state, const uint8_t *src, uint32_t srclen,
     }
 
     if (mode == 6) {
-        /* Full headerless 4bpp frame. Inflate it into the persistent shadow (this
-         * container's recon-buffer tail) that mode-3 deltas composite onto, so a
-         * mode-6 keyframe seeds a stable base, then present (unless deferred by a
-         * multi-segment wrapper). */
+        /* Full headerless 4bpp frame. Inflate + RLE-decode it into the persistent
+         * shadow (this container's recon-buffer tail) that mode-3 deltas composite
+         * onto, so a mode-6 keyframe seeds a stable base, then present (unless
+         * deferred by a multi-segment wrapper). */
         cfw_diag(0, 0);                               /* keyframe: rebaseline delta fid */
-        uint32_t out_max = ((w + 1) >> 1) * h;                   /* tight 4bpp */
+        uint32_t stride = (w + 1) >> 1;                          /* tight 4bpp */
         uint8_t *dst = cfw_back_buffer(state, w, h);
         if (dst == 0) return -1;                      /* no recon buffer -> can't proceed */
-        *(uint8_t **)(strm + ZS_NEXT_OUT) = dst;
-        *(uint32_t *)(strm + ZS_AVAIL_OUT) = out_max;
-        int ok = 0;
-        if (FW_INIT2(strm, 15, ZLIB_VER, ZS_SIZE) == 0) {
-            int r = FW_INFLATE(strm, 4);              /* Z_FINISH (whole frame fits) */
-            ok = (r == 1 && *(uint32_t *)(strm + ZS_TOTAL_OUT) == out_max);
-            FW_END(strm);
-        } else {
-            FW_END(strm);
-        }
-        if (!ok) return -1;
+        if (!inflate_rle(strm, dst, stride, stride, h)) return -1;
         rl_add(rl, 0, 0, w, h);                       /* keyframe updates the whole screen */
         if (present) present_shadow(state, w, h, rl);
         return 0;
@@ -623,12 +637,12 @@ static int image_dispatch(uint8_t *state, const uint8_t *src, uint32_t srclen,
          * required: A is an async LVGL source, so a full write is what lands correctly
          * regardless of the render/scan-out pipeline.
          *
-         *   [3][left/4][top/2][width/4][height/2][fid_lo][fid_hi][zlib box pixels]
+         *   [3][left/4][top/2][width/4][height/2][fid_lo][fid_hi][zlib(rle(box pixels))]
          * left/width are *4 (=> multiples of 4 => even) so left>>1 and bw>>1 are whole
-         * byte offsets: each box row inflates straight into its place in the 4bpp
-         * shadow as a plain byte run, no nibble shifting. fid is a uint16 per-frame
-         * counter (diagnostics). Rejected (old frame kept) if the box isn't wholly in
-         * bounds. The sender must have sent a mode-6 keyframe before/among deltas.
+         * byte offsets: each box row lands in the 4bpp shadow as a plain byte run, no
+         * nibble shifting. fid is a uint16 per-frame counter (diagnostics). Rejected
+         * (old frame kept) if the box isn't wholly in bounds. The sender must have sent
+         * a mode-6 keyframe before/among deltas.
          *
          * lenses-differ variant: [3|80][Lbox 4][Rbox 4][fid 2][shared zlib]. Both boxes
          * must be the same size; each lens draws the SAME decompressed pixels at its own
@@ -664,23 +678,11 @@ static int image_dispatch(uint8_t *state, const uint8_t *src, uint32_t srclen,
 
         *(const uint8_t **)(strm + ZS_NEXT_IN) = src + z_off;   /* zlib past box(es) + fid */
         *(uint32_t *)(strm + ZS_AVAIL_IN) = srclen - z_off;
-        int ok = 0;
-        if (FW_INIT2(strm, 15, ZLIB_VER, ZS_SIZE) == 0) {
-            ok = 1;
-            for (uint32_t y = 0; y < bh; y++) {
-                /* inflate this box row straight into its slot in the shadow */
-                *(uint8_t **)(strm + ZS_NEXT_OUT) = shadow + (top + y) * sstride + (left >> 1);
-                *(uint32_t *)(strm + ZS_AVAIL_OUT) = rowbytes;
-                int r = FW_INFLATE(strm, 0);          /* Z_NO_FLUSH */
-                if (*(uint32_t *)(strm + ZS_AVAIL_OUT) != 0) { ok = 0; break; }  /* short row */
-                if (r == 1) { ok = (y + 1 == bh); break; }  /* stream end: only ok on last row */
-                if (r != 0) { ok = 0; break; }              /* inflate error */
-            }
-            FW_END(strm);
-        } else {
-            FW_END(strm);
-        }
-        if (!ok) return -1;                           /* leave the old frame on screen */
+        /* Decode the box straight into its slot in the shadow: rows of rowbytes bytes
+         * at the shadow's stride. left/bw are multiples of 4 so every row starts (and
+         * ends) on a byte boundary. */
+        if (!inflate_rle(strm, shadow + top * sstride + (left >> 1), sstride, rowbytes, bh))
+            return -1;                                /* leave the old frame on screen */
 
         rl_add(rl, left, top, bw, bh);                /* updated region = this lens's box */
         if (present) present_shadow(state, w, h, rl); /* rebuild full 8bpp frame + push */
@@ -808,6 +810,118 @@ static void rect_copy_4bpp(uint8_t *buf, uint32_t stride, uint32_t sL, uint32_t 
             }
         }
     }
+}
+
+/* ---- RLE over 4bpp pixels (the inner layer of modes 3 and 6) ----------------
+ *
+ * See the RLE paragraph at the top of the file for the token format. The decoder is a
+ * byte-at-a-time state machine so it can be driven straight from inflate's output in
+ * small chunks (a token may straddle a chunk boundary), writing pixels into a
+ * rectangular 4bpp destination: `rows` rows of `rowbytes` bytes, row r at
+ * base + r*stride. For mode 6 that's the whole shadow; for mode 3 it's the box within
+ * it (rowbytes < stride). Runs cross rows freely — the nibble stream is the wire
+ * order, not per-row.
+ *
+ * `left` counts the nibbles still expected; the decode is complete only when it hits
+ * exactly 0 with no token half-parsed. Overrunning it (or running past the last row)
+ * sets `err` and the caller drops the frame. */
+typedef struct {
+    uint8_t *base;
+    uint32_t stride;      /* bytes between rows in the destination */
+    uint32_t rowbytes;    /* bytes per row actually written */
+    uint32_t rows;
+    uint32_t r;           /* current row */
+    uint32_t bpos;        /* byte offset within the current row */
+    uint32_t hi;          /* 1 = next nibble is the high (left) one */
+    uint32_t left;        /* nibbles still expected */
+    uint32_t st;          /* token parser: 0 = opcode, 1 = cnt8, 2 = cntLo, 3 = cntHi */
+    uint32_t cnt;
+    uint8_t  color;
+    uint8_t  err;
+} rle_state;
+
+static void rle_init(rle_state *s, uint8_t *base, uint32_t stride,
+                     uint32_t rowbytes, uint32_t rows) {
+    s->base = base; s->stride = stride; s->rowbytes = rowbytes; s->rows = rows;
+    s->r = 0; s->bpos = 0; s->hi = 1;
+    s->left = rowbytes * rows * 2;
+    s->st = 0; s->cnt = 0; s->color = 0; s->err = 0;
+}
+
+/* Write `n` pixels of color `v`. Aligned whole-byte spans are filled a byte at a time
+ * (both nibbles at once, v*0x11); only a leading/trailing odd nibble is read-modify-
+ * written. */
+static void rle_emit(rle_state *s, uint8_t v, uint32_t n) {
+    if (n > s->left) { s->err = 1; return; }        /* overruns the frame -> malformed */
+    s->left -= n;
+    uint8_t pair = (uint8_t)(v * 0x11u);
+    while (n) {
+        if (s->r >= s->rows) { s->err = 1; return; }
+        uint8_t *row = s->base + s->r * s->stride;
+        if (!s->hi) {                                /* finish the byte we're inside */
+            row[s->bpos] = (uint8_t)((row[s->bpos] & 0xf0u) | v);
+            s->bpos++; s->hi = 1; n--;
+        } else {
+            uint32_t avail = s->rowbytes - s->bpos;  /* whole bytes left in this row */
+            uint32_t bytes = n >> 1;
+            if (bytes > avail) bytes = avail;
+            for (uint32_t i = 0; i < bytes; i++) row[s->bpos + i] = pair;
+            s->bpos += bytes; n -= bytes * 2;
+            if (n && s->bpos < s->rowbytes) {        /* odd tail: open the next byte */
+                row[s->bpos] = (uint8_t)((row[s->bpos] & 0x0fu) | (uint8_t)(v << 4));
+                s->hi = 0; n--;
+            }
+        }
+        if (s->hi && s->bpos >= s->rowbytes) { s->bpos = 0; s->r++; }   /* next row */
+    }
+}
+
+/* Feed `n` bytes of RLE stream. Stops early (leaving err set) on a malformed stream. */
+static void rle_feed(rle_state *s, const uint8_t *p, uint32_t n) {
+    for (uint32_t i = 0; i < n && !s->err; i++) {
+        uint8_t b = p[i];
+        if (s->st == 0) {
+            s->color = (uint8_t)(b & 0x0fu);
+            uint32_t c = b >> 4;
+            if (c) rle_emit(s, s->color, c);         /* short form: count in the high nibble */
+            else s->st = 1;                          /* escape: count follows */
+        } else if (s->st == 1) {
+            if (b) { rle_emit(s, s->color, b); s->st = 0; }
+            else s->st = 2;                          /* second escape: 16-bit count follows */
+        } else if (s->st == 2) {
+            s->cnt = b; s->st = 3;
+        } else {
+            s->cnt |= (uint32_t)b << 8;
+            if (s->cnt == 0) s->err = 1;             /* a 0-length run can't be encoded */
+            else rle_emit(s, s->color, s->cnt);
+            s->st = 0;
+        }
+    }
+}
+
+/* Inflate an already-primed z_stream (NEXT_IN/AVAIL_IN set by the caller) and RLE-decode
+ * its output into the rectangular 4bpp destination, streaming through a stack chunk so
+ * no scratch buffer is allocated for either layer. Returns 1 only when the zlib stream
+ * ends AND the RLE stream filled the destination exactly. */
+static int inflate_rle(uint8_t *strm, uint8_t *base, uint32_t stride,
+                       uint32_t rowbytes, uint32_t rows) {
+    if (FW_INIT2(strm, 15, ZLIB_VER, ZS_SIZE) != 0) { FW_END(strm); return 0; }
+    rle_state rs;
+    rle_init(&rs, base, stride, rowbytes, rows);
+    uint8_t chunk[RLE_CHUNK];
+    int ok = 0;
+    for (;;) {
+        *(uint8_t **)(strm + ZS_NEXT_OUT) = chunk;
+        *(uint32_t *)(strm + ZS_AVAIL_OUT) = RLE_CHUNK;
+        int r = FW_INFLATE(strm, 0);                 /* Z_NO_FLUSH */
+        uint32_t got = (uint32_t)(*(uint8_t **)(strm + ZS_NEXT_OUT) - chunk);
+        rle_feed(&rs, chunk, got);
+        if (rs.err) break;                           /* malformed RLE */
+        if (r == 1) { ok = (rs.left == 0 && rs.st == 0); break; }   /* Z_STREAM_END */
+        if (r != 0 || got == 0) break;               /* inflate error, or no progress */
+    }
+    FW_END(strm);
+    return ok;
 }
 
 /* Replicate FUN_0050164a's tail: clean the display buffer out of dcache, set the

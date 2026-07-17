@@ -4,8 +4,11 @@
 // sends them in order, pacing only on the per-fragment acks.
 //
 // Each frame is zlib-compressed and sent with a leading mode byte that selects
-// a CFW display path. G2_MODE picks the encoding (handy for comparing 4bpp-BMP
-// vs 8bpp compressibility and throughput):
+// a CFW display path. The 4bpp modes that go through the firmware's shadow (3 and
+// 6) run their pixels through RLE before deflate — their payload is zlib(rle(px)),
+// not zlib(px) — since runs of one gray level are what this content is made of.
+// G2_MODE picks the encoding (handy for comparing 4bpp-BMP vs 8bpp
+// compressibility and throughput):
 //   full  (default) 8bpp: every frame -> mode 2 (full 8bpp frame, raw pixels)
 //   delta           4bpp: first frame mode 2, rest mode 3 (bounding-box update)
 //   bmp             4bpp: every frame -> mode 1 (full 4bpp indexed BMP)
@@ -141,7 +144,7 @@ function rescaleGray(rgba: Uint8Array): Uint8Array {
   }
 }
 
-// ---- build per-frame payloads up front ([mode][zlib]) ----
+// ---- build per-frame payloads up front ([mode][zlib], modes 3/6 [mode][zlib(rle)]) ----
 type FrameStat = { bytes: number; key: boolean; persist: number };
 const payloads: Uint8Array[] = [];
 const stats: FrameStat[] = [];
@@ -209,24 +212,26 @@ for (let i = 0; i < total; i++) {
     persistRaw = buildEvenHubBmp(W, H, (x, y) => gray[y * W + x]! >> 4);
     payload = pack(1, persistRaw); prefixLen = 1;
   } else if (RAW4) {
-    // mode 6: headerless tight 4bpp (gray>>4), our fast on-device expander.
-    persistRaw = pack4bpp(gray);
+    // mode 6: headerless tight 4bpp (gray>>4), RLE'd then deflated, expanded by our
+    // fast on-device expander.
+    persistRaw = rleEncode(pack4bpp(gray));
     payload = pack(6, persistRaw); prefixLen = 1;
   } else if (isKey && DELTA) {
     // delta keyframe: mode 6 full 4bpp — seeds the firmware's persistent 4bpp
     // shadow (which the box deltas composite onto), unlike an 8bpp mode-2 frame.
-    persistRaw = pack4bpp(gray);
+    persistRaw = rleEncode(pack4bpp(gray));
     payload = pack(6, persistRaw); prefixLen = 1;
   } else if (isKey) {
     // G2_MODE=full: full 8bpp frame every frame.
     persistRaw = gray;
     payload = pack(2, gray); prefixLen = 1;
   } else {
-    // mode 3: bounding-box delta — send only the changed rectangle as 4bpp.
+    // mode 3: bounding-box delta — send only the changed rectangle as 4bpp, RLE'd
+    // then deflated.
     const box = computeBox(gray, prev!);
     boxAreaSum += box.w * box.h;
-    persistRaw = box.pixels;
-    payload = packBox(box, used & 0xffff); prefixLen = 7; // used = this frame's index
+    persistRaw = rleEncode(box.pixels);
+    payload = packBox(box, persistRaw, used & 0xffff); prefixLen = 7; // used = this frame's index
 
   }
   payloads.push(payload);
@@ -291,6 +296,47 @@ function pack(mode: number, raw: Uint8Array): Uint8Array {
   return out;
 }
 
+// Run-length encode packed 4bpp pixels for CFW modes 3 and 6, whose payload is
+// zlib(rle(pixels)) rather than zlib(pixels). Runs are over the pixel NIBBLES of
+// `pix` in wire order (high nibble = left pixel), including the pad nibble that ends
+// each row at odd widths — i.e. `pix` read as pix.length*2 nibbles. One token is:
+//   [cnt4|color4]                 cnt 1..15
+//   [0|color4][cnt8]              cnt 1..255
+//   [0|color4][0][cntLo][cntHi]   cnt 1..65535, little-endian
+// with the low nibble always the color; runs longer than 65535 split across tokens.
+// Worst case (every nibble its own run) is exactly one byte per nibble, which is what
+// we size the buffer for.
+function rleEncode(pix: Uint8Array): Uint8Array {
+  const n = pix.length * 2;
+  const out = new Uint8Array(n);
+  let o = 0;
+  const nib = (i: number) => (i & 1 ? pix[i >> 1]! & 0x0f : pix[i >> 1]! >> 4);
+  let i = 0;
+  while (i < n) {
+    const v = nib(i);
+    let j = i + 1;
+    while (j < n && nib(j) === v) j++;
+    let run = j - i;
+    while (run > 0) {
+      const c = Math.min(run, 0xffff);
+      if (c <= 15) {
+        out[o++] = (c << 4) | v;
+      } else if (c <= 255) {
+        out[o++] = v;           // high nibble 0 = escape to an 8-bit count
+        out[o++] = c;
+      } else {
+        out[o++] = v;
+        out[o++] = 0;           // 8-bit count 0 = escape to a 16-bit count
+        out[o++] = c & 0xff;
+        out[o++] = c >> 8;
+      }
+      run -= c;
+    }
+    i = j;
+  }
+  return out.subarray(0, o);
+}
+
 // Tightly-packed 4bpp (mode 6): gray 0..255 -> nibble (gray>>4), 2 px/byte with
 // the left pixel in the high nibble, rows top-down, stride = ceil(W/2), no
 // padding. Matches the firmware's headerless-4bpp expander.
@@ -344,10 +390,11 @@ function computeBox(cur: Uint8Array, prev: Uint8Array): Box {
   return { left, top, w, h, pixels };
 }
 
-// [3][left/4][top/2][width/4][height/2][fid_lo][fid_hi][zlib(tight 4bpp box pixels)]
+// [3][left/4][top/2][width/4][height/2][fid_lo][fid_hi][zlib(rle(tight 4bpp box pixels))]
 // fid = uint16 per-frame counter, so the firmware can flag out-of-order/skipped frames.
-function packBox(box: Box, fid: number): Uint8Array {
-  const z = deflateSync(box.pixels);
+// `rle` is the already-RLE'd box pixels (the caller keeps it for the persist measurement).
+function packBox(box: Box, rle: Uint8Array, fid: number): Uint8Array {
+  const z = deflateSync(rle);
   const out = new Uint8Array(7 + z.length);
   out[0] = 3;
   out[1] = box.left >> 2;

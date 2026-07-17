@@ -64,7 +64,7 @@ Useful environment variables:
 |-----|---------|---------|
 | `G2_IMG_W` / `G2_IMG_H` | `288` / `144` | target size (max `576`×`288`) |
 | `G2_IMG_THRESHOLD` | `-1` | `>=0` = 1-bit threshold; `-1` = grayscale |
-| `G2_MODE` | `full` | `full` = 8bpp full frame (mode 2); `delta` = 4bpp bounding-box update of the changed region (mode 3); `bmp` = 4bpp BMP via stock loader (mode 1); `raw4` = headerless 4bpp via fast expander (mode 6) |
+| `G2_MODE` | `full` | `full` = 8bpp full frame (mode 2); `delta` = 4bpp bounding-box update of the changed region (mode 3); `bmp` = 4bpp BMP via stock loader (mode 1); `raw4` = headerless 4bpp via fast expander (mode 6). Modes 3 and 6 run their pixels through RLE before deflate (payload = `zlib(rle(px))`), the others deflate directly. |
 | `G2_KEYFRAME_INTERVAL` | `0` | in `delta` mode, force a full frame every N |
 | `G2_FRAME_STRIDE` | `1` | use every Nth source frame |
 | `G2_MAX_FRAMES` | `0` | cap frame count (`0` = all) |
