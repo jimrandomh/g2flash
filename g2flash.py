@@ -161,9 +161,9 @@ def validate_firmware(img):
     the parsed segments on success, raises ValueError describing the problem."""
     segs = parse_firmware_segments(img)
     names = [s['fn'] for s in segs]
-    if len(segs) != EXPECTED_SEGMENTS:
+    if len(segs) != 5 and len(segs) != 6:
         raise ValueError(
-            f"expected {EXPECTED_SEGMENTS} segments, found {len(segs)}: {names}")
+            f"expected 5-6 segments, found {len(segs)}: {names}")
     if REQUIRED_SEGMENT not in names:
         raise ValueError(
             f"required segment {REQUIRED_SEGMENT!r} not found; segments are: {names}")
