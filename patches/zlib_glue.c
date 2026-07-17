@@ -254,10 +254,8 @@ typedef struct {
     uint8_t  diag_seen;  /* recorded at least one frame yet */
     uint8_t  fid_resync; /* keyframe rebaselines the next delta's fid (no false skip) */
     uint8_t  diag_hide;  /* 1 = don't draw the flag overlay (default 0 = visible) */
-    uint32_t last_worker_clock_start;
-    uint32_t last_worker_clock_end;
     uint32_t last_worker_us;  /* image_worker() duration of the PREVIOUS message (overlay) */
-    uint32_t last_worker_cyc; /* ...same, in raw DWT cycles (pre-conversion, for debugging) */
+    uint32_t last_present_us; /* present_shadow() duration of the PREVIOUS present (overlay) */
     uint32_t cyc_per_ms;      /* calibrated DWT cycles per 1 ms OS tick (0 = not yet done) */
     uint8_t  f_reorder;  /* FLAG: ever saw a frame id go backward */
     uint8_t  f_skip;     /* FLAG: ever saw a frame id gap (skipped) */
@@ -369,6 +367,34 @@ static uint32_t cfw_cyc_per_ms(customCfwContext *ctx) {
     return ctx->cyc_per_ms;
 }
 
+/* Time a region of code with the DWT cycle counter (see the timing note above):
+ *
+ *   uint32_t t; cfw_time_start(&t); ...work...; uint32_t us = cfw_time_end(&t);
+ *
+ * start re-asserts the DWT unlock/enable (cheap, and the state is not ours to assume)
+ * and calibrates cycles-per-ms if that hasn't happened yet — deliberately BEFORE the
+ * start stamp is taken, so the one-time ~1-2 ms calibration spin is never billed to the
+ * region being measured. Regions may nest: by the time an inner start runs, the outer
+ * one has already primed the calibration. end converts to microseconds; the subtraction
+ * is unsigned, so it tolerates one CYCCNT wrap (~17 s at 250 MHz). */
+static void cfw_time_start(uint32_t *t) {
+    DWT_LAR   = DWT_UNLOCK_KEY;                     /* unlock the DWT (CoreSight lock) */
+    DWT_DEMCR |= (1u << 24);                        /* TRCENA */
+    DWT_CTRL  |= 1u;                                /* CYCCNTENA */
+    customCfwContext *ctx = getCustomCfwContext();
+    if (ctx) cfw_cyc_per_ms(ctx);                   /* calibrate once, outside the window */
+    *t = DWT_CYCCNT;
+}
+
+static uint32_t cfw_time_end(const uint32_t *t) {
+    uint32_t dc = DWT_CYCCNT - *t;
+    customCfwContext *ctx = getCustomCfwContext();
+    uint32_t cpm = ctx ? cfw_cyc_per_ms(ctx) : 0;      /* calibrated cycles/ms (cached) */
+    uint32_t cyc_per_us = cpm ? (cpm / 1000u) : 250u;  /* fallback: assume 250 MHz */
+    if (cyc_per_us == 0) cyc_per_us = 1;
+    return dc / cyc_per_us;
+}
+
 /* The image worker: static, called from image_deferred (the deferred consumer, which
  * runs on BOTH lenses via the cross-lens-synchronized completion message). NOTE: image
  * handling lives here / in the deferred path on purpose — the sync-completion path
@@ -390,31 +416,19 @@ static int image_worker(void *state_, uint8_t *src, uint32_t srclen) {
      * owns the counter, so no locking is needed. */
     FW_KEEPALIVE_RESET();
 
-    /* Time this whole message with the DWT cycle counter (see the timing note). The
-     * overlay drawn INSIDE image_dispatch shows last_worker_us — i.e. the PREVIOUS
-     * message's time — since we store THIS message's time only after it returns. */
-    DWT_LAR   = DWT_UNLOCK_KEY;                     /* unlock the DWT (CoreSight lock) */
-    DWT_DEMCR |= (1u << 24);                        /* TRCENA */
-    DWT_CTRL  |= 1u;                                /* CYCCNTENA */
-
-    customCfwContext *ctx = getCustomCfwContext();
-    uint32_t cpm = ctx ? cfw_cyc_per_ms(ctx) : 0;      /* calibrated cycles/ms (cached) */
-    uint32_t cyc_per_us = cpm ? (cpm / 1000u) : 250u;  /* fallback: assume 250 MHz */
-    if (cyc_per_us == 0) cyc_per_us = 1;
-
+    /* Time this whole message (see the timing note). The overlay drawn INSIDE
+     * image_dispatch shows last_worker_us — i.e. the PREVIOUS message's time — since we
+     * store THIS message's time only after it returns. */
     cfw_rectlist rl;                               /* per-frame updated-rect list (stack) */
     rl.n = 0;
 
-    uint32_t c0 = DWT_CYCCNT;
+    uint32_t t;
+    cfw_time_start(&t);
     int r = image_dispatch((uint8_t *)state_, src, srclen, 1, &rl);
-    uint32_t dc = DWT_CYCCNT - c0;                  /* unsigned: tolerates one wrap */
+    uint32_t us = cfw_time_end(&t);
 
-    if (ctx) {
-        ctx->last_worker_cyc = dc;
-        ctx->last_worker_us  = dc / cyc_per_us;
-        ctx->last_worker_clock_start = cpm;                   /* raw calibration (cyc/ms) */
-        ctx->last_worker_clock_end   = cyc_per_us * 1000000u; /* effective core clock, Hz */
-    }
+    customCfwContext *ctx = getCustomCfwContext();
+    if (ctx) ctx->last_worker_us = us;
     return r;
 }
 
@@ -766,6 +780,12 @@ static void draw_rect_outline(uint8_t *disp, uint32_t w, uint32_t h, const cfw_r
 static void present_shadow(uint8_t *state, uint32_t w, uint32_t h, cfw_rectlist *rl) {
     uint8_t *shadow = cfw_back_buffer(state, w, h);
     if (shadow == 0) return;
+    /* Timed separately from the worker: this is where the shadow expand and the LVGL
+     * rebind/invalidate live, so it isolates the part of a message's cost that isn't
+     * inflate/RLE. Like last_worker_us, the overlay (drawn below, from cfw_draw_flags)
+     * necessarily shows the PREVIOUS present's figure. */
+    uint32_t t;
+    cfw_time_start(&t);
     uint8_t *disp = *(uint8_t **)(state + 0x8);
     unpack4bpp(disp, w, shadow, w, h, (w + 1) >> 1, 0);
     customCfwContext *ctx = getCustomCfwContext();
@@ -775,6 +795,8 @@ static void present_shadow(uint8_t *state, uint32_t w, uint32_t h, cfw_rectlist 
     }
     cfw_draw_flags(disp, w, h);
     push_display(state, disp, w, h);
+    uint32_t us = cfw_time_end(&t);
+    if (ctx) ctx->last_present_us = us;
 }
 
 /* Copy a bw x bh block of 4bpp pixels within one buffer (stride bytes/row) from
@@ -1244,10 +1266,11 @@ static void u_to_dec(char *out, uint32_t v, uint32_t maxlen) {
 
 /* Overlay, as a Terminus 6x12 text line across the top-left of the frame (white on a
  * black bar), the diagnostic flags that are set followed by the PREVIOUS message's
- * image_worker time. Flags: REORDER, SKIP, DUP, SNAPOF (mirrors cfw_diag/cfw_snapshot);
- * with the snapshot-FIFO fix all four should stay clear, so this normally reads "OK".
- * The time reads e.g. "834us" (<1 ms) or "12.3ms". Suppressed when diag_hide is set
- * (mode 7). Drawn into the 8bpp buffer. */
+ * timings. Flags: REORDER, SKIP, DUP, SNAPOF (mirrors cfw_diag/cfw_snapshot); with the
+ * snapshot-FIFO fix all four should stay clear, so this normally reads "OK". The timings
+ * are microseconds: `w` = the whole image_worker, `p` = the present_shadow step within
+ * it (shadow expand + LVGL rebind/invalidate), e.g. "OK w834us p210us". Suppressed when
+ * diag_hide is set (mode 7). Drawn into the 8bpp buffer. */
 static void cfw_draw_flags(uint8_t *disp, uint32_t w, uint32_t h) {
     customCfwContext *ctx = getCustomCfwContext();
     if (ctx == 0 || ctx->diag_hide) return;
@@ -1267,13 +1290,12 @@ static void cfw_draw_flags(uint8_t *disp, uint32_t w, uint32_t h) {
     #undef ADD_FLAG
     if (num_flags == 0) strlcat(line, "OK ", sizeof(line));
 
-    /* previous message's image_worker duration: " 834us" or " 12.3ms" */
+    /* previous message's durations: whole worker, then just the present step */
+    strlcat(line, "w", sizeof(line));
     u_to_dec(line, ctx->last_worker_us, sizeof(line));
-    strlcat(line, "us ", sizeof(line));
-    u_to_dec(line, ctx->last_worker_cyc, sizeof(line));
-    strlcat(line, "cyc ", sizeof(line));
-    u_to_dec(line, ctx->last_worker_clock_end, sizeof(line));
-    strlcat(line, "hz ", sizeof(line));
+    strlcat(line, "us p", sizeof(line));
+    u_to_dec(line, ctx->last_present_us, sizeof(line));
+    strlcat(line, "us", sizeof(line));
 
     draw_string(disp, w, h, 2, 2, line, 15, 0);   /* white text on a black bar */
 }
