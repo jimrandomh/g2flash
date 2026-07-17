@@ -127,32 +127,32 @@ typedef uint8_t *(*lookup_fn)(uint32_t container_id); /* container id -> spec-li
 typedef int  (*complete_emit_fn)(uint32_t id, void *hdr, int kind, uint32_t p4); /* completion emit */
 
 /* firmware entry points (Thumb bit set for blx via constant pointer) */
-#define FW_MALLOC  ((malloc_fn)0x00472b6fU)         /* FUN_00472b6e malloc(size) */
-#define FW_FREE    ((free_fn)0x00472bb3U)           /* FUN_00472bb2 free(ptr) */
-#define FW_INIT2   ((inflateInit2_fn)0x005be643U)   /* FUN_005be642 inflateInit2_ */
-#define FW_INFLATE ((inflate_fn)0x005be711U)        /* FUN_005be710 inflate */
-#define FW_END     ((inflateEnd_fn)0x005be607U)     /* FUN_005be606 inflateEnd */
-#define FW_LOADBMP ((loadbmp_fn)0x0050164bU)        /* FUN_0050164a BMP decoder */
-#define FW_FLUSH   ((cacheflush_fn)0x00472f87U)     /* FUN_00472f86 dcache clean range */
-#define FW_SETSRC  ((lv_set_src_fn)0x004b0f01U)     /* FUN_004b0f00 lv_image_set_src */
-#define FW_INVAL   ((lv_invalidate_fn)0x004405f7U)  /* FUN_004405f6 lv_obj_invalidate */
-#define FW_SIDE    ((lens_side_fn)0x0045a8edU)       /* FUN_0045a8ec -> 2=left, 1=right */
-#define FW_BUZZ_PRESET ((buzz_preset_fn)0x004e97efU) /* FUN_004e97ee DRV_BuzzerPlayAfterQueue(type 0..8) */
-#define FW_BUZZ_NOTE   ((buzz_note_fn)0x004e988dU)   /* FUN_004e988c DRV_BuzzerPlayNote(note,tone,beat) */
-#define FW_BUZZ_RESET  ((buzz_reset_fn)0x004e9759U)  /* FUN_004e9758 buzzer stop/reset */
-#define FW_BUZZ_RAW    ((buzz_raw_fn)0x004e991dU)     /* FUN_004e991c reset+power+PWM(freq,duty) */
-#define FW_TIMER_START ((timer_start_fn)0x004484ebU)  /* FUN_004484ea osTimerStart(handle,ms) */
-#define FW_TIMER_NEW   ((timer_new_fn)0x00448403U)    /* FUN_00448402 osTimerNew(cb,type,arg,attr) */
-#define FW_TIMER_STOP  ((timer_stop_fn)0x0044852bU)   /* FUN_0044852a osTimerStop(handle) */
-#define FW_KEEPALIVE_RESET ((keepalive_reset_fn)0x00505cc3U) /* FUN_00505cc2: EvenHub keepalive
-                                                     * counter (@0x200744e8) = 0. This is the exact
+#define FW_MALLOC  ((malloc_fn)0x00474cd3U)         /* FUN_00474cd2 malloc(size) */
+#define FW_FREE    ((free_fn)0x00474d17U)           /* FUN_00474d16 free(ptr) */
+#define FW_INIT2   ((inflateInit2_fn)0x005beac3U)   /* FUN_005beac2 inflateInit2_ */
+#define FW_INFLATE ((inflate_fn)0x005beb91U)        /* FUN_005beb90 inflate */
+#define FW_END     ((inflateEnd_fn)0x005bea87U)     /* FUN_005bea86 inflateEnd */
+#define FW_LOADBMP ((loadbmp_fn)0x004dc5afU)        /* FUN_004dc5ae set_image_data / BMP decoder */
+#define FW_FLUSH   ((cacheflush_fn)0x0047510fU)     /* FUN_0047510e dcache clean range */
+#define FW_SETSRC  ((lv_set_src_fn)0x00498681U)     /* FUN_00498680 lv_image_set_src */
+#define FW_INVAL   ((lv_invalidate_fn)0x00440657U)  /* FUN_00440656 lv_obj_invalidate */
+#define FW_SIDE    ((lens_side_fn)0x0045a569U)       /* FUN_0045a568 -> 2=left, 1=right */
+#define FW_BUZZ_PRESET ((buzz_preset_fn)0x00502b5bU) /* FUN_00502b5a DRV_BuzzerPlayAfterQueue(type 0..8) */
+#define FW_BUZZ_NOTE   ((buzz_note_fn)0x00502bf9U)   /* FUN_00502bf8 DRV_BuzzerPlayNote(note,tone,beat) */
+#define FW_BUZZ_RESET  ((buzz_reset_fn)0x00502ac5U)  /* FUN_00502ac4 buzzer stop/reset */
+#define FW_BUZZ_RAW    ((buzz_raw_fn)0x00502c89U)     /* FUN_00502c88 reset+power+PWM(freq,duty) */
+#define FW_TIMER_START ((timer_start_fn)0x00449499U)  /* FUN_00449498 osTimerStart(handle,ms) */
+#define FW_TIMER_NEW   ((timer_new_fn)0x004493b1U)    /* FUN_004493b0 osTimerNew(cb,type,arg,attr) */
+#define FW_TIMER_STOP  ((timer_stop_fn)0x004494d9U)   /* FUN_004494d8 osTimerStop(handle) */
+#define FW_KEEPALIVE_RESET ((keepalive_reset_fn)0x004e0cbbU) /* FUN_004e0cba: EvenHub keepalive
+                                                     * counter (@0x200745ac) = 0. This is the exact
                                                      * leaf the stock sid-0x0c heartbeat handler in
-                                                     * FUN_004ae69c calls; it takes no args and reads
+                                                     * the EvenHub UI event handler calls; it takes no args and reads
                                                      * the counter pointer from its own literal pool. */
-#define FW_LOOKUP        ((lookup_fn)0x00505cd7U)    /* FUN_00505cd6(id) -> spec node; state=*(node+0x10) */
-#define FW_COMPLETE_EMIT ((complete_emit_fn)0x004ff44bU) /* FUN_004ff44a: stock image-complete emitter */
-#define BUZZ_TIMER_ADDR 0x20074440U                   /* RAM: buzzer osTimer handle (DAT_004e996c) */
-#define ZLIB_VER   ((const char *)0x007885e4U)      /* "1.1.4" */
+#define FW_LOOKUP        ((lookup_fn)0x004e0ccfU)    /* FUN_004e0cce(id) -> spec node; state=*(node+0x10) */
+#define FW_COMPLETE_EMIT ((complete_emit_fn)0x004da383U) /* FUN_004da382: stock image-complete emitter */
+#define BUZZ_TIMER_ADDR 0x20074504U                   /* RAM: buzzer osTimer handle (buzzer osTimer handle global) */
+#define ZLIB_VER   ((const char *)0x0078d654U)      /* "1.1.4" */
 
 /* --- glasses-side timing: Arm DWT cycle counter, clock derived by calibration -----
  * CYCCNT is a free-running core-cycle counter (~4 ns). To use it we (1) UNLOCK the DWT
@@ -161,10 +161,10 @@ typedef int  (*complete_emit_fn)(uint32_t id, void *hdr, int kind, uint32_t p4);
  * then (2) set DEMCR.TRCENA and DWT->CTRL.CYCCNTENA. We re-assert all three cheaply per
  * measurement (only the idle SWO-trace block touches DEMCR).
  *
- * To convert cycles->us we need the core clock. The guessed global 0x2007419c reads 0
+ * To convert cycles->us we need the core clock. The guessed global 0x20074254 reads 0
  * on hardware (it's only written on a DVFS event, if ever), so instead we CALIBRATE:
  * measure how many CYCCNT cycles elapse across one edge of the firmware's 1 ms OS tick
- * (RAM 0x20074940, SysTick chain) — that IS cycles-per-ms. Cached in the ctx; a bounded
+ * (RAM 0x20074a34, SysTick chain) — that IS cycles-per-ms. Cached in the ctx; a bounded
  * spin falls back to 250 MHz if the tick never advances. All divides are 32-bit
  * (hardware UDIV) — a 64-bit divide would emit an external __aeabi_uldivmod build.py
  * rejects. (Limitation: cached across DVFS; a clock switch makes the figure ~stale.) */
@@ -172,8 +172,8 @@ typedef int  (*complete_emit_fn)(uint32_t id, void *hdr, int kind, uint32_t p4);
 #define DWT_LAR     (*(volatile uint32_t *)0xE0001FB0U)  /* DWT CoreSight Lock Access Reg */
 #define DWT_CTRL    (*(volatile uint32_t *)0xE0001000U)  /* DWT->CTRL (CYCCNTENA bit0) */
 #define DWT_CYCCNT  (*(volatile uint32_t *)0xE0001004U)  /* DWT->CYCCNT (core cycles) */
-#define FW_MS_TICK  (*(volatile uint32_t *)0x20074940U)  /* firmware 1 ms OS tick (SysTick chain) */
-#define FW_CORE_HZ  (*(volatile uint32_t *)0x2007419CU)  /* guessed core-clock global (reads 0 on hw) */
+#define FW_MS_TICK  (*(volatile uint32_t *)0x20074a34U)  /* firmware 1 ms OS tick (SysTick chain) */
+#define FW_CORE_HZ  (*(volatile uint32_t *)0x20074254U)  /* guessed core-clock global (reads 0 on hw) */
 #define DWT_UNLOCK_KEY 0xC5ACCE55U
 
 /* z_stream (zlib 1.1.4, sizeof = 0x38) field offsets */
@@ -196,7 +196,7 @@ typedef int  (*complete_emit_fn)(uint32_t id, void *hdr, int kind, uint32_t p4);
  * frame" for a mode-3 delta. We therefore keep our own back buffer (a 4bpp shadow
  * of the last frame), and to survive rebuilds we anchor a pointer to this struct
  * in a spare word of the BLE-RX task context (ble_msgrx, base = *0x004a069c ->
- * 0x20003fdc; only its +0x8/+0xc are used by the firmware, and it is never freed).
+ * 0x20003ffc; only its +0x8/+0xc are used by the firmware, and it is never freed).
  * We only ever touch that word from inside our image handler, i.e. only after a
  * custom-firmware image message has arrived — so if the word is not actually free
  * the damage is confined to CFW use and a reboot recovers. The struct's `magic`
@@ -254,7 +254,7 @@ typedef struct {
     uint8_t  seq_steps[CFW_SEQ_MAX * 5];  /* freqLo,freqHi,duty,msLo,msHi per step */
 } customCfwContext;
 
-#define CFW_CTX_SLOT  0x20003fdcU    /* ble_msgrx context +0x0 (spare, never freed) */
+#define CFW_CTX_SLOT  0x20003ffcU    /* ble_msgrx context +0x0 (spare, never freed) */
 #define CFW_CTX_MAGIC 0xC0FFEE5AU    /* distinctive; ~0 chance of matching garbage */
 
 void *zwrap_alloc(void *opaque, uint32_t items, uint32_t size) {
@@ -354,7 +354,7 @@ static uint32_t cfw_cyc_per_ms(customCfwContext *ctx) {
 static int image_worker(void *state_, uint8_t *src, uint32_t srclen) {
     /* An inbound image message proves the phone is still connected, so kick the
      * EvenHub keepalive back to life exactly as the stock heartbeat handler does.
-     * Stock firmware resets the ticks-since-last-heartbeat counter (@0x200744e8)
+     * Stock firmware resets the ticks-since-last-heartbeat counter (@0x200745ac)
      * ONLY on the sid-0x0c heartbeat message; the periodic evenhub_ui_event_handler
      * (FUN_00506460, param_1==4) increments it every tick and, once it passes 899,
      * fires FUN_004fee62(0,0) -> "DISPLAY_AUTO_REFLASH heartbeat timeout" -> the
@@ -1260,7 +1260,7 @@ __attribute__((naked)) int snapshot_side(void) {
     );
 }
 
-/* Replaces the deferred consumer's worker call (bl at 0x4ae9cc, both lenses). DRAINS all
+/* Replaces the deferred consumer's worker call (bl at 0x496a0e, both lenses). DRAINS all
  * of this lens's pending snapshots for `state` in FIFO (seq) order, running the worker on
  * each (ignoring the live B, which may be overwritten), then frees them. Draining all —
  * not just one — is required because the cross-lens timing sync can COALESCE several

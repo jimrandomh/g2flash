@@ -12,15 +12,15 @@
 // the phone bridge skip it as an unknown field -- fully backward compatible.
 //
 // HOOK: the settings responder FUN_004b42b4 ends with
-//     r0=type(1) r1=sid(9) r2=buf r3=len ; bl FUN_0047398c   ; aa21 send
+//     r0=type(1) r1=sid(9) r2=buf r3=len ; bl FUN_00475b14   ; aa21 send
 // We retarget that one `bl` to settings_send_wrapper. The 4 send args are already
 // in r0..r3, so the wrapper appends to `buf` (a 256-byte static response buffer
-// at 0x200706cc that only uses ~40 B) and tail-calls the real sender with the
+// at 0x200706ec that only uses ~40 B) and tail-calls the real sender with the
 // grown length. Only this call site is redirected, but we still guard on sid==9.
 
 typedef int (*send_fn)(int type, int sid, unsigned char *buf, unsigned len);
 
-#define FW_SEND 0x0047398d /* FUN_0047398c | thumb bit */
+#define FW_SEND 0x00475b15 /* FUN_00475b14 | thumb bit */
 
 // Capability string "EVENCFW/<ver> <space-separated feature tokens>":
 //   EVENCFW/1  -> magic prefix + contract version (detect: starts-with "EVENCFW/")

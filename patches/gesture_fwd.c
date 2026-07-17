@@ -29,16 +29,16 @@ typedef int  (*fc80_t)(void *ctx, int code, void *data);
 typedef int *(*modelookup_t)(void *g);
 typedef int  (*sysevt_t)(int, int, int, int, int, int);
 
-#define FW_FC80   ((fc80_t)0x0045fc81u)        /* FUN_0045fc80  post UI event (Thumb) */
-#define FW_MODE   ((modelookup_t)0x0045fc6bu)  /* FUN_0045fc6a  foreground mode ctx (Thumb) */
-#define FW_SYSEVT ((sysevt_t)0x004ff233u)      /* FUN_004ff232  send EvenHub SysEvent (Thumb) */
+#define FW_FC80   ((fc80_t)0x0045f8fdu)        /* FUN_0045f8fc  post UI event (Thumb) */
+#define FW_MODE   ((modelookup_t)0x0045f8e7u)  /* FUN_0045f8e6  foreground mode ctx (Thumb) */
+#define FW_SYSEVT ((sysevt_t)0x004da16bu)      /* FUN_004da16a  send EvenHub SysEvent (Thumb) */
 
-/* Foreground UI ctx pointer: FUN_004424a2 loads r5 = *(0x00442e70) = 0x2007440c,
- * then passes r5[0] as the ctx to FUN_0045fc80 / FUN_0045fc6a. */
-#define UI_CTX   (*(void *volatile *)0x2007440cu)
-/* Current input event record (= DAT_00443bbc); byte 0 is the source:
+/* Foreground UI ctx pointer: FUN_00442d86 loads r5 = *(0x00443750) = 0x200744d0,
+ * then passes r5[0] as the ctx to FUN_0045f8fc / FUN_0045f8e6. */
+#define UI_CTX   (*(void *volatile *)0x200744d0u)
+/* Current input event record (sourced from the literal at 0x004444a4); byte 0 is the source:
  * 0/1 = left/right temple touchpad, 4 = R1 ring. */
-#define EVT_SRC  (*(volatile unsigned char *)0x2034e130u)
+#define EVT_SRC  (*(volatile unsigned char *)0x2034dc30u)
 
 #define APP_EVENHUB 0xe0
 #define ET_LONG     9    /* OsEventTypeList: RING_LONG_PRESS_EVENT */

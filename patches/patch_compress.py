@@ -1,22 +1,40 @@
 #!/usr/bin/env python3
 """
-Build a CFW image for g2_2.2.4.34 with:
-  (1) the 576x288 image-container size lift (same 3 edits as
-      patches/patch_img_container_576.py),
-  (2) 1bpp->4bpp image decompression on ImageRawDataUpdate.CompressMode, the zlib
-      image glue (multi-mode load_image_z, incl. keepalive kick + buzzer),
+Build a CFW image for g2_2.2.6.10 with:
+  (1) the 576x288 image-container size lift (the same 3 edits that
+      patches/patch_img_container_576.py makes, though that standalone script still
+      targets the old 2.2.4.34 base and is not part of this build),
+  (2) the zlib image glue (multi-mode load_image_z, incl. keepalive kick + buzzer),
+      entered at image_deferred,
   (3) a CFW capability-advertisement field (protobuf field 100) appended to the
       sid=0x09 settings READ response, and
   (4) EvenHub long-press + ring release-long-press forwarding.
 
+REBASED 2.2.4.34 -> 2.2.6.10 (2026-07-16). Every address below was re-derived and
+cross-checked; see notes/fw-2.2.6.10-cfw-rebase.md for the full table and the evidence
+for each. Two things bit us and are worth remembering if this is ever rebased again:
+  * a patch site's offset within its host function is NOT stable -- Even inserts code, so
+    each site was located by instruction-window match (firmware/find_site.py) and then
+    confirmed by decoding its `bl` target, not by extrapolating from the function entry;
+  * hardcoded RAM addresses all moved, with several DIFFERENT deltas, and some old
+    addresses still exist in the new image as unrelated variables. They were re-derived
+    through the instruction that loads them (firmware/map_ram.py).
+
+The old CompressMode-based per-fragment expander (frag_write, patches/decompress.c) is
+GONE as of this rebase: stock 2.2.6.10 defines CompressMode 1=RLE / 2=LZ4 for its own
+image compression, which collided with our use of that field. Their implementation
+benchmarks ~10 fps vs our zlib path's ~23 fps, so we ignore it and keep image_deferred,
+which dispatches on the image's own leading bytes ('BM' vs a small u8 mode) and runs at a
+later stage. See notes/fw-2.2.6.10-lz4-images.md.
+
 PLACEMENT MODEL — APPEND, don't overwrite. The injected code blobs
-(frag_write, zlib glue, settings wrapper, gesture_fwd) are APPENDED to
+(zlib glue, settings wrapper, gesture_fwd) are APPENDED to
 the tail of the main-app component (ota/s200_firmware_ota.bin) rather than being
 squeezed into a reclaimed dead function. The bootloader XIP-programs the whole
 main-app payload to 0x00438000, so a byte at payload offset K lands at MRAM
 0x438000 + K - 0x20; appended blobs therefore load into MRAM immediately after the
-current app image (~0x0078f188), with hundreds of KB of headroom before the OTA
-flag at 0x007fe000. This removes the old ~2 KB dead-region ceiling.
+current app image (~0x00794324 on 2.2.6.10), with hundreds of KB of headroom before the
+OTA flag at 0x007fe000. This removes the old ~2 KB dead-region ceiling.
 
 Appending changes the image size, so this script fixes up every size/offset field
 the container + bootloader read: the component's subheader payload size (ps), its
@@ -33,7 +51,7 @@ check_mainapp_fits_mram) refuses an oversized image.
 """
 import sys, os, struct, zlib, json, subprocess
 
-DELTA = 0x39E680  # file_off = ghidra_addr - DELTA  (OTA mainApp component)
+DELTA = 0x37A179  # file_off = ghidra_addr - DELTA  (OTA mainApp component, 2.2.6.10)
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def g2f(addr):
@@ -56,27 +74,32 @@ def align_up(x, a):
     return (x + a - 1) & ~(a - 1)
 
 # ---- call-site redirects (ghidra addr -> stock bytes we expect there) --------
-# The three per-fragment memcpy (FUN_00439be4) calls in the ImageRawDataUpdate
-# handler FUN_004ff8fc, retargeted to frag_write.
-FRAG_BL_SITES = {
-    0x500984: "39 f7 2e f9",   # first fragment
-    0x500b60: "39 f7 40 f8",   # new-stream restart
-    0x500d7c: "38 f7 32 ff",   # append fragment
-}
-LOADBMP_BL_SITE        = (0x4ae9cc, "52 f0 3d fe")  # bl FUN_0050164a (deferred consumer) -> image_deferred
-# The two both-lens `bl FUN_0045a8ec` (lens-identity check) sites at image-
-# reconstruction-complete in FUN_004ff8fc (single- and multi-fragment). Redirected to
-# snapshot_side, which copies the fresh recon buffer into a per-state FIFO (both
-# lenses) then tail-calls the real FUN_0045a8ec so the RIGHT gate still works. This +
-# image_deferred consuming the FIFO fixes the producer/consumer race on the shared
+# All 2.2.6.10 addresses. Each was found with firmware/find_site.py (normalized
+# instruction-window match, unique across the image) and then confirmed by decoding the
+# `bl` at the new address and checking it lands on the expected callee -- the bytes below
+# are the stock encodings read straight out of the image, so apply_patches' old-byte
+# check is a third, independent guard.
+#
+# bl FUN_004dc5ae (set_image_data) in evenhub_ui_reflash_event_handler -> image_deferred.
+# NOTE: in 2.2.6.10 this same function is where Even's own RLE/LZ4 decompression was
+# inserted, immediately BEFORE this call. That is why the site moved by a different delta
+# than the rest of the function. It is harmless for us: with CompressMode=0 (what we
+# send) their block is a no-op passthrough, and the ABI here is unchanged
+# (r0=obj, r1=data, r2=len; obj+0xc = data, obj+0x20 = len).
+LOADBMP_BL_SITE        = (0x496a0e, "45 f0 ce fd")
+# The two both-lens `bl FUN_0045a568` (lens-identity check) sites at image-
+# reconstruction-complete in the EvenHub data parser (single- and multi-fragment).
+# Redirected to snapshot_side, which copies the fresh recon buffer into a per-state FIFO
+# (both lenses) then tail-calls the real lens-side fn so the RIGHT gate still works. This
+# + image_deferred consuming the FIFO fixes the producer/consumer race on the shared
 # recon buffer. See the snapshot/restore note in zlib_glue.c.
-SNAPSHOT_BL_SITES      = {   # both decode to `bl 0x45a8ec` (verified)
-    0x500a04: "59 f7 72 ff",   # single-fragment complete
-    0x500df8: "59 f7 78 fd",   # multi-fragment last-fragment complete
+SNAPSHOT_BL_SITES      = {   # both decode to `bl 0x45a568` (verified)
+    0x4db968: "7e f7 fe fd",   # single-fragment complete
+    0x4dbd5c: "7e f7 04 fc",   # multi-fragment last-fragment complete
 }
-SETTINGS_BL_SITE       = (0x4b43c4, "bf f7 e2 fa")  # bl FUN_0047398c (aa21 send) -> wrapper
-GESTURE_LONGPRESS_SITE = (0x4425ae, "28 f0 49 f8")  # bl FUN_0046a644 -> evenhub_longpress
-GESTURE_RELEASE_SITE   = (0x4428de, "1d f0 cf f9")  # bl FUN_0045fc80 -> ring_release
+SETTINGS_BL_SITE       = (0x49bb68, "d9 f7 d4 ff")  # bl FUN_00475b14 (aa21 send) -> wrapper
+GESTURE_LONGPRESS_SITE = (0x442e92, "28 f0 03 f8")  # bl FUN_0046ae9c -> evenhub_longpress
+GESTURE_RELEASE_SITE   = (0x4431c2, "1c f0 9b fb")  # bl FUN_0045f8fc -> ring_release
 
 def enc_bl(pc, target):
     """Encode a Thumb-2 BL (T1) from instruction address `pc` to `target`."""
@@ -144,7 +167,6 @@ def layout(img):
     # injected entry points, resolved from the single blob's function table. These are all
     # `bl` targets, so they stay even -- a bl keeps the core in Thumb state and needs no
     # Thumb bit (unlike a fn-ptr consumed by blx, which the C code forms via `&fn`).
-    frag_addr      = base + _fn(built, "frag_write")["offset"]
     snapshot_addr  = base + _fn(built, "snapshot_side")["offset"]
     deferred_addr  = base + _fn(built, "image_deferred")["offset"]
     settings_addr  = base + _fn(built, "settings_send_wrapper")["offset"]
@@ -176,15 +198,13 @@ def layout(img):
 
     # --- in-place live-code edits + bl retargets (targets are the appended addrs) ---
     in_place = [
-        # 576x288 image-container size lift
-        (g2f(0x501062), "bd f8 2c 10", "40 f2 41 20", "container width  <= 576"),
-        (g2f(0x50112a), "bd f8 2e 00", "40 f2 21 11", "container height movw #0x121"),
-        (g2f(0x50112e), "91 28",       "88 42",       "container height cmp r0,r1"),
-        # retarget the 3 per-fragment memcpy calls -> frag_write
-        *[(g2f(site), orig, enc_bl(site, frag_addr), f"bl frag_write @ {site:#x}")
-          for site, orig in FRAG_BL_SITES.items()],
-        # allow per-fragment CompressMode to vary within one image session
-        (g2f(0x500c10), "3b d0", "3b e0", "drop per-session CompressMode-consistency guard"),
+        # 576x288 image-container size lift, in common_image_create. Even did NOT raise
+        # this cap in 2.2.6.10 (its clamp strings are byte-identical and the limit is
+        # still parameterized), so the lift is still needed. These three sites are
+        # byte-for-byte the same instructions as on 2.2.4.34, just relocated.
+        (g2f(0x4dbfc6), "bd f8 2c 10", "40 f2 41 20", "container width  <= 576"),
+        (g2f(0x4dc08e), "bd f8 2e 00", "40 f2 21 11", "container height movw #0x121"),
+        (g2f(0x4dc092), "91 28",       "88 42",       "container height cmp r0,r1"),
         # Snapshot/restore (fixes the shared-recon-buffer producer/consumer race): at the
         # both-lens completion, redirect `bl FUN_0045a8ec` -> snapshot_side (copies the fresh
         # message into a per-state FIFO, then returns the lens id); the deferred consumer
