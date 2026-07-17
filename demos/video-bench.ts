@@ -51,6 +51,11 @@
 //   G2_MEASURE_PERSIST=1  also report frame sizes if zlib state persisted across
 //                         frames (measurement only; firmware doesn't do this yet)
 //   G2_WINDOW             pipelined image messages in flight at once (default 2; 1 = serial)
+//   G2_IMAGE_ARM          lens the image data is written to: "R" (default) or "L". Only the
+//                         image-raw writes move; session setup (prelude, create, rebuild) and
+//                         the heartbeat always go to R, and the ack for an image message comes
+//                         back on R either way (the arms sync internally), so an L-arm send is
+//                         a write on L with its ack awaited on R.
 //
 // About G2_MEASURE_PERSIST: today every frame is an independent zlib stream, so a
 // frame can only back-reference itself. If the firmware instead kept one inflate
@@ -68,6 +73,11 @@ import {
   buildImageRawData,
   buildEvenHubBmp,
   planImageFragments,
+  framePb,
+  sendFrames,
+  waitForAck,
+  FLAG_REQUEST,
+  SID,
   type ImageContainerSpec,
 } from "g2-kit/ble";
 import { startHeartbeat } from "g2-kit/ui";
@@ -101,7 +111,11 @@ const DRY_RUN = process.env.G2_DRY_RUN === "1";
 const MEASURE_PERSIST = process.env.G2_MEASURE_PERSIST === "1";
 const WINDOW = Math.max(1, Number(process.env.G2_WINDOW ?? "2"));
 const FRAME_SLEEP = Math.max(0, Number(process.env.G2_FRAME_SLEEP ?? "0"));
-const IMAGE_SEND_ARM = "R";
+const IMAGE_SEND_ARM = (process.env.G2_IMAGE_ARM ?? "R").toUpperCase();
+if (IMAGE_SEND_ARM !== "L" && IMAGE_SEND_ARM !== "R") {
+  console.error(`G2_IMAGE_ARM must be L or R (got "${process.env.G2_IMAGE_ARM}")`);
+  process.exit(1);
+}
 
 let magic = 100;
 const nextMagic = () => (magic = magic >= 255 ? 100 : magic + 1);
@@ -448,6 +462,28 @@ try {
     lats.push(lat);
     return ack !== null;
   };
+  // Fire one image message and return its pending ack, without awaiting it.
+  //
+  // For the R arm this is just session.sendPbPipelined. For L we hand-roll the
+  // same thing, because sendPbPipelined listens for the ack on whichever arm it
+  // wrote to and the ack for an image write always comes back on R. So: frames
+  // out on L, waiter registered on R. The L arm carries no other traffic here
+  // (heartbeat and setup both go to R), so it gets its own transport-seq counter
+  // rather than sharing the session's.
+  // The ack is returned wrapped in an object, as sendPbPipelined does, to defeat
+  // the async-return auto-unwrap that would otherwise await it right here.
+  let leftSeq = 0x40;
+  const sendPipelined = async (pb: Uint8Array, mg: number): Promise<{ ack: Promise<unknown> }> => {
+    if (IMAGE_SEND_ARM === "R") {
+      return session.sendPbPipelined(0xe0, pb, mg, { ackTimeoutMs: ACK_MS, arm: "R" });
+    }
+    const frames = framePb(pb, { seq: leftSeq, sid: SID.EVENHUB, flag: FLAG_REQUEST });
+    leftSeq = (leftSeq + 1) & 0xff;
+    const ack = waitForAck(session.right, SID.EVENHUB, mg, ACK_MS);
+    await sendFrames(session.left, frames);
+    return { ack };
+  };
+
   const sendMsg = async (pb: Uint8Array, mg: number): Promise<boolean> => {
     while (inflight.length >= WINDOW) {
       if (!(await awaitOldest())) return false;
@@ -455,7 +491,7 @@ try {
     if (FRAME_SLEEP > 0) {
       await new Promise((r) => setTimeout(r, FRAME_SLEEP));
     }
-    const r = await session.sendPbPipelined(0xe0, pb, mg, { ackTimeoutMs: ACK_MS, arm: IMAGE_SEND_ARM });
+    const r = await sendPipelined(pb, mg);
     inflight.push({ ack: r.ack, t: performance.now() });
     return true;
   };
@@ -498,7 +534,7 @@ try {
   const secondWorst = sortedLats.length >= 2 ? sortedLats[sortedLats.length - 2]! : 0;
   const showSecond = latWorst > 1000 && sortedLats.length >= 2;
   console.log(
-    `\n=== RESULT (mode=${MODE}, ${W}x${H}, window=${WINDOW}) ===\n` +
+    `\n=== RESULT (mode=${MODE}, ${W}x${H}, window=${WINDOW}, arm=${IMAGE_SEND_ARM}) ===\n` +
       `frames sent : ${sent}${aborted ? " (aborted early)" : ""}\n` +
       `elapsed     : ${elapsed.toFixed(1)} s\n` +
       `framerate   : ${fps.toFixed(2)} fps  (${(1000 / fps).toFixed(0)} ms/frame)\n` +
