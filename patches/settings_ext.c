@@ -34,7 +34,7 @@ typedef int (*send_fn)(int type, int sid, unsigned char *buf, unsigned len);
 // comes from zlib_glue.c, which shares this translation unit via patches_main.c.
 int settings_send_wrapper(int type, int sid, unsigned char *buf, unsigned len) {
     if (sid == 9) {
-        static const char caps[] = "EVENCFW/1 img576 imgz xordelta stereo";
+        static const char caps[] = "EVENCFW/2 img576 imgz rle";
         unsigned char *p = buf + len;
         p[0] = 0xA2; p[1] = 0x06;                          // field 100, wire type 2: tag 802
         unsigned clen = strlcpy((char *)(p + 3), caps, sizeof(caps));
