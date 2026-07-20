@@ -100,6 +100,30 @@ SNAPSHOT_BL_SITES      = {   # both decode to `bl 0x45a568` (verified)
 SETTINGS_BL_SITE       = (0x49bb68, "d9 f7 d4 ff")  # bl FUN_00475b14 (aa21 send) -> wrapper
 GESTURE_LONGPRESS_SITE = (0x442e92, "28 f0 03 f8")  # bl FUN_0046ae9c -> evenhub_longpress
 GESTURE_RELEASE_SITE   = (0x4431c2, "1c f0 9b fb")  # bl FUN_0045f8fc -> ring_release
+# Wakeword ("Hey Even") capture. The GX8002 voice codec raises cmd_id 0x0c, which the
+# audio thread (2.2.4.34 audio_recv_voice_event @ 0x54e47e) turns into the local Even AI
+# wake action. That action does TWO independent things:
+#   1. posts EvenAIDataPackage{command_id=CTRL, ctrl.status=EVEN_AI_WAKE_UP} to service 7,
+#      which the phone sees as an `aa 21` notify on sid 0x07, and
+#   2. calls even_ai_display_ctrl(START), which foregrounds the stock Even AI app over
+#      whatever EvenHub app is running and draws the "Even AI listening" modal (then, with
+#      no official phone app answering, errors out a few seconds later).
+# We want (1) without (2), so faceclaw can own the interaction. This flips the op==START
+# dispatch test at the head of even_ai_display_ctrl from `bne` to an unconditional `b`,
+# so START falls through to the op==UPDATE/op==STOP compares (which fail for op 0) and the
+# function just returns. UPDATE and STOP keep working, so the phone-driven exit path and
+# the stock timeout teardown are both untouched. The notify in (1) is emitted earlier in
+# the chain (2.2.4.34: FUN_004b0b54 -> FUN_005086e0) and is not affected.
+#
+# Both encodings are 2-byte Thumb to the same target (imm8 0x34 / imm11 0x034), so this is
+# a pure in-place edit with no size change.
+# Site found with firmware/find_site.py from the 2.2.4.34 address 0x506f44; the matcher
+# reported two candidates and this one was confirmed by its `bl 0x45a568` (the
+# independently-derived 2.2.6.10 lens_side), by the surrounding window matching
+# 2.2.4.34's even_ai_display_ctrl head instruction-for-instruction, and by the following
+# `movs r0,#0x67` being the same source line number (103) in both versions.
+EVENAI_START_SITE      = (0x4e1fec, "34 d1")        # bne 0x4e2058 (op != START)
+EVENAI_START_NEW       = "34 e0"                    # b   0x4e2058 (always skip START)
 
 def enc_bl(pc, target):
     """Encode a Thumb-2 BL (T1) from instruction address `pc` to `target`."""
@@ -222,6 +246,8 @@ def layout(img):
          enc_bl(GESTURE_LONGPRESS_SITE[0], longpress_addr), "bl evenhub_longpress (replaces force-quit dialog)"),
         (g2f(GESTURE_RELEASE_SITE[0]), GESTURE_RELEASE_SITE[1],
          enc_bl(GESTURE_RELEASE_SITE[0], release_addr), "bl ring_release (forward ring release-long-press)"),
+        (g2f(EVENAI_START_SITE[0]), EVENAI_START_SITE[1], EVENAI_START_NEW,
+         "even_ai_display_ctrl: skip Even AI app START (wakeword -> phone)"),
     ]
     return bytes(append), in_place, (idx, comp_off, old_ps)
 
