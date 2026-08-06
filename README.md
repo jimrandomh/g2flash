@@ -122,8 +122,6 @@ exactly the reviewed image). Run `./build_cfw.sh --help` for options
     `gen_patches.py` calls it to build the ops.
     Holds every stock-firmware address the patches depend on; see
     `notes/fw-2.2.6.10-cfw-rebase.md` for how they were derived.
-  - `patch_img_container_576.py` — standalone tool for just the 576×288 lift.
-    NOTE: still targets the old 2.2.4.34 base and is not part of the build.
   - `build.py`, `*.c` — the C→position-independent-Thumb pipeline and sources
     for the injected firmware code (compiled by `gen_patches.py`; the resulting
     machine code lands in `cfw_patches.json`).
