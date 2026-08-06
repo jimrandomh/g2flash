@@ -1,5 +1,81 @@
 # g2flash
 
+`g2flash` is a utility for installing firmware on Even Realities G2 smart
+glasses, as well as a collection of firmware modifications that add features and
+fix limitations of the glasses. The modifications themselves are made with
+[Faceclaw](https://github.com/jimrandomh/faceclaw) in mind, but can be used by
+any software that communicates with the G2 glasses using their BLE protocol. If
+you are using this with Faceclaw, you can either use this tool to apply the
+firmware mods, or use the flashing tool built in to Faceclaw's onboarding
+process (both versions install the same firmware image). Installing using
+Faceclaw is a bit more user friendly than installing using g2flash.
+
+This repository contains patches applied to firmware, but does not contain the
+Even Realities firmware itself. The `build_cfw.sh` script will download the base
+firmware from Even's CDN, apply patches, and verify that the resulting firmware
+has the expected hash for you.
+
+FLASHING A CUSTOM FIRMWARE WILL VOID YOUR WARRANTY. This tool will require you
+to acknowledge that you are voiding your warranty when you run it.
+
+
+## Modifications
+
+This firmware reworks how images and screen updates work in EvenHub. The
+intended usage is that you create a layout with a single 576x288 image
+container, which is used as a message target (but the EvenHub layout system is
+otherwise entirely ignored). Image updates sent to this container are
+interpreted as custom messages of new types. Image traffic is compressed with
+zlib+RLE. Screen contents can be up to 640x480 (larger than the screen area
+supported by the stock firmware), you can update dirty rects rather than
+updating the whole screen at once, and you can send messages which perform
+rect-to-rect copies for low-bandwidth scroll animations. Because this mode
+writes directly to the framebuffer without going through EvenHub's
+screen-update functions, you cannot mix this mode with EvenHub list or text or
+list containers.
+
+Some other features this has (used by Faceclaw, but the exact API may not be
+fully documented):
+
+ * Receive R1 ring long-press and long-press-release as regular gestures, rather
+   than opening a modal offering to quit
+ * Play sound effects with the piezo buzzer
+ * Receive on-head detection wear/unwear events, to trigger a lock-screen
+ * Use the magnetometer as a compass
+ * Take over the wakeword ("hey Even") and replace what it opens with a
+   different phone-side transcription and AI agent pipeline
+ * Take over the screen-wake even on the dashboard, so that you can end the
+   EvenHub session (putting the glasses in a low-power mode) and return to
+   Faceclaw with a double-tap
+
+Glasses with a custom firmware identify themselves with the version number of
+the stock firmware that the modded version is based on, with an extra field in
+the settings-response message describing the capabilities added. See
+`settings_send_wrapper` in `patches/settings_ext.c`. The format of this
+capability string is not yet standardized and is in flux; if writing your own
+firmware and your own phone software to go with it, assume that firmware is
+probably only compatible if you recognize the exast string.
+
+Custom firmwares in this repository are intended to be backwards-compatible
+with the official Even Realities app; ie, if the phone doesn't send any
+bluetooth messages that make use of the added features, it will behave the same
+way. In practice, this isn't tested, and using a custom firmware with the
+official Even app may introduce bugs. EvenHub apps are especially likely to be
+broken by custom firmware, since most of the modifications are to
+EvenHub-related functionality.
+
+What _is_ tested for compativility is the OTA updater. This firmware does not
+make any changes to how OTA updates are installed. If you connect the official
+Even app to your glasses, and it has a firmware that's newer than the one your
+CFW is based on, it will offer to install an update. Installing an OTA update
+using the official Even app will fully remove the custom firmware and restore
+it to stock behavior. You can also go back to stock firmware by installing an
+unmodified firmware image using g2flash, or the "Uninstall firmware" menu item
+in Faceclaw.
+
+
+## Using the Flash Tool
+
 `g2flash.py` flashes firmware onto Even Realities G2 smart glasses by
 reimplementing the official app's BLE flash protocol. It is the tool used to
 push custom firmware (a patched `*_cfw.bin` image) onto the device.
@@ -25,24 +101,6 @@ patched result match pinned SHA-256 hashes (so a clean run proves you got
 exactly the reviewed image). Run `./build_cfw.sh --help` for options
 (`--skip-venv`, `--force-download`). Then flash as shown above — see
 [Usage](#usage) for connection strings and safety flags.
-
-## What's the custom firmware?
-
-The patches in `patches/` add image/display features on top of stock 2.2.6.10:
-
-- **576×288 image containers** (stock caps at 288×144).
-- A **full 640×480 packed-4bpp screen** copied directly into the physical
-  framebuffer. The 576×288 carrier's otherwise-unused display allocation holds
-  the shadow, leaving its separate reconstruction allocation fully available
-  for incoming messages. A fail-open Faceclaw lease preserves that physical
-  frame when stock swipe-capture widgets request an unrelated repaint.
-- **zlib/RLE-compressed keyframes, bounding-box deltas, and atomic multi-rect
-  updates** for much faster image/video streaming.
-- **Wear-state notifications outside onboarding**, including while EvenHub is
-  active or the stock dashboard is running, plus a current-state query for
-  reconnect-safe lock screens.
-- A **capability-advertisement field** on the settings response, so a connected
-  app can detect this firmware and which features it supports.
 
 ## What's in this directory
 
@@ -76,7 +134,7 @@ firmware, so you build them locally with `build_cfw.sh`.
 
 ## Requirements
 
-- Python 3.x (developed against the Homebrew `python@3.14` build).
+- Python 3.x
 - One of two transports to reach the glasses:
   - **local** — this machine's own Bluetooth radio, via the `bleak` package.
   - **droidbridge** — a bonded Android phone running
