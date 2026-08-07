@@ -64,7 +64,13 @@ official Even app may introduce bugs. EvenHub apps are especially likely to be
 broken by custom firmware, since most of the modifications are to
 EvenHub-related functionality.
 
-What _is_ tested for compativility is the OTA updater. This firmware does not
+Custom firmwares are currently _not_ expected to be compatible with each other.
+When you update Faceclaw, you should update the firmware at the same time. If
+you are writing your own software that relies on custom firmware, you probably
+want to specify a particular CFW version. (This will probably change in the
+future, when there is less new stuff still to be added.)
+
+What _is_ tested for compatibility is the OTA updater. This firmware does not
 make any changes to how OTA updates are installed. If you connect the official
 Even app to your glasses, and it has a firmware that's newer than the one your
 CFW is based on, it will offer to install an update. Installing an OTA update
@@ -236,3 +242,16 @@ then an END check the glasses verify against a per-component CRC32C. A heartbeat
 on the EvenHub control service (`...e5450`) keeps the session alive during the
 transfer. Arms are flashed one at a time. See the module docstring and comments
 in `g2flash.py` for the wire-level details and the retry/recovery rationale.
+
+
+## Contributing
+
+PRs welcome, especially of firmware mods that unlock functionality that isn't
+usable in the stock firmware. Please only submit changes that you've tested on
+a real device.
+
+
+# Acknowledgements
+
+Thanks to kalanihelekunihi for [evenRealities-openCFW](https://github.com/kalanihelekunihi/evenRealities-openCFW/) and Commute773 for [g2-kit-unofficial](https://github.com/Commute773/g2-kit-unofficial/), which were immensely helpful while creating this.
+
