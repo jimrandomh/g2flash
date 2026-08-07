@@ -297,7 +297,7 @@ void faceclaw_evenai_display_entry(void) {
         "ldmia sp, {r0-r3}\n"
         "mov r6, r0\n"
         "1:\n"
-        "movw r12, #0x1fd6\n"
+        "movw r12, #0x1fd7\n"   /* 0x004e1fd6 | Thumb bit; BX needs bit 0 set */
         "movt r12, #0x004e\n"
         "bx r12\n"
         "2:\n"
