@@ -60,6 +60,12 @@
  *                              firmware's own compass start/stop routines on the
  *                              right arm. Stock navigation notifications carry the
  *                              resulting heading/calibration events back to the phone.
+ *   12          -> [12][offset32][length16] read a bounded chunk of XIP font
+ *                              slot 0, or [12][slot][offset32][length16] to
+ *                              select slot 0/1; return it on sid 0xe0.
+ *   13          -> [13] snapshot the two four-entry runtime font chains and
+ *                              the first 64 bytes addressed by each record;
+ *                              return the diagnostic data on sid 0xe0.
  *   anything else / too short  -> load_bmp_fast (rejects cleanly if not a BMP).
  *
  * The HIGH BIT of the mode byte is a "lenses differ" flag; most modes ignore it. For
@@ -146,6 +152,7 @@ typedef void (*display_copy_fn)(void);               /* stock 576x288 -> 640x480
 typedef int (*compass_control_fn)(void);              /* stock Start/StopIMUCompassFunc */
 typedef int (*display_event_forward_fn)(uint32_t, uint32_t, void *); /* display event -> active UI */
 typedef int (*compass_notify_fn)(uint32_t);           /* stock sid-0x08 compass notifier */
+typedef int (*font_send_fn)(int type, int sid, unsigned char *buf, unsigned len);
 
 /* firmware entry points (Thumb bit set for blx via constant pointer) */
 #define FW_MALLOC  ((malloc_fn)0x00474cd3U)         /* FUN_00474cd2 malloc(size) */
@@ -180,6 +187,7 @@ typedef int (*compass_notify_fn)(uint32_t);           /* stock sid-0x08 compass 
 #define FW_COMPASS_STOP   ((compass_control_fn)0x0054566dU) /* FUN_0054566c StopIMUCompassFunc */
 #define FW_DISPLAY_EVENT_FORWARD ((display_event_forward_fn)0x0045f8fdU) /* FUN_0045f8fc */
 #define FW_COMPASS_NOTIFY ((compass_notify_fn)0x0058705dU) /* FUN_0058705c navigation_notify_compass_changed_cmd */
+#define FW_FONT_SEND ((font_send_fn)0x00475b15U) /* FUN_00475b14 generic aa12 sender */
 #define FW_DISPLAY_FB     (*(uint8_t * volatile *)0x200007b8U) /* stock copier's 640x480 destination */
 #define BUZZ_TIMER_ADDR 0x20074504U                   /* RAM: buzzer osTimer handle (buzzer osTimer handle global) */
 #define ZLIB_VER   ((const char *)0x0078d654U)      /* "1.1.4" */
@@ -235,16 +243,32 @@ typedef int (*compass_notify_fn)(uint32_t);           /* stock sid-0x08 compass 
  * state+0xc) is freed and reallocated on rebuild. The packed shadow lives in A
  * only for the lifetime of the current streaming layout and must be seeded by a
  * mode-6 keyframe after every rebuild. The bookkeeping that does
- * need to survive rebuilds is anchored by a pointer to this struct in a spare
- * word of the BLE-RX task context (ble_msgrx, base = *0x004a069c ->
- * 0x20003ffc; only its +0x8/+0xc are used by the firmware, and it is never freed).
- * We only ever touch that word from inside our image handler, i.e. only after a
- * custom-firmware image message has arrived — so if the word is not actually free
- * the damage is confined to CFW use and a reboot recovers. The struct's `magic`
- * guards against warm-reset garbage; the slot ptr is range-checked before deref. */
+ * need to survive rebuilds is anchored by a pointer in 1 KiB of SRAM explicitly
+ * removed from the top of the stock primary TLSF arena by patch_compress.py. The
+ * stock arena is [0x20279670,0x202a6670); the patched size is 0x2cc00, reserving
+ * [0x202a6270,0x202a6670) for CFW. This is deliberately carved out rather than
+ * inferred padding: 0x20003ffc, used before EVENCFW/11, is actually the +0 callback
+ * of the BLE-RX lifecycle object and stock code can BLX through it. The struct's
+ * `magic` guards against warm-reset garbage; the slot ptr is range-checked before
+ * dereference. */
 #define CFW_FID_RING  16     /* recent mode-3 frame ids kept for duplicate detection */
 #define CFW_SNAP_RING 12     /* in-flight compressed-message snapshots (per producer race depth) */
 #define CFW_SEQ_MAX   48     /* max steps in a buzzer tone sequence (mode-5 kind 4) */
+#define CFW_FONT_REPLY_HEADER 12U
+#define CFW_FONT_SEND_MAX 4096U
+#define CFW_FONT_CHUNK_MAX (CFW_FONT_SEND_MAX - CFW_FONT_REPLY_HEADER)
+#define CFW_FONT_XIP_BASE_20 0x80100000U
+#define CFW_FONT_XIP_BASE_22 0x80700000U
+#define CFW_FONT_XIP_SLOT_SIZE (CFW_FONT_XIP_BASE_22 - CFW_FONT_XIP_BASE_20)
+#define CFW_FONT_HEADER_MAGIC 0x5A5A5A5AU
+#define CFW_FONT_PROBE_BASE 0x20002C00U
+#define CFW_FONT_PROBE_SNAPSHOT_SIZE 0xA8U
+#define CFW_FONT_PROBE_CONFIG_0 0x48U
+#define CFW_FONT_PROBE_CONFIG_1 0x78U
+#define CFW_FONT_PROBE_RECORD_SIZE 12U
+#define CFW_FONT_PROBE_RECORDS 8U
+#define CFW_FONT_PROBE_AUX_SIZE 64U
+#define CFW_FONT_PROBE_HEADER 8U
 
 /* One snapshotted compressed image message. Taken at reconstruction-complete (both
  * lenses), consumed FIFO in the deferred handler. Keyed by the owning image-state
@@ -302,6 +326,9 @@ typedef struct {
     volatile uint8_t compass_forward;      /* mode 10: forward global heading events to BLE */
     uint8_t  wake_notify_buf[16];          /* stable storage for sid-0x09 notify */
     uint8_t  wear_notify_buf[12];          /* stable storage for sid-0x10 wear notify */
+    /* Mode-12 response storage. The stock sender's copy/queue lifetime is opaque,
+     * so keep the largest permitted response alive until the next request. */
+    uint8_t  font_reply_buf[CFW_FONT_REPLY_HEADER + CFW_FONT_CHUNK_MAX];
     /* Direct-framebuffer job. The EvenHub worker holds the stock display gate
      * before it mutates the shadow and until the display task consumes this
      * pointer, so no second snapshot or full-size display buffer is required. */
@@ -312,8 +339,8 @@ typedef struct {
     uint32_t direct_lease_deadline;            /* fail-open repaint-guard deadline */
 } customCfwContext;
 
-#define CFW_CTX_SLOT  0x20003ffcU    /* ble_msgrx context +0x0 (spare, never freed) */
-#define CFW_CTX_MAGIC 0xC0FFEE63U    /* bumped for compass event forwarding */
+#define CFW_CTX_SLOT  0x202a6270U    /* first word of the CFW-reserved TLSF tail */
+#define CFW_CTX_MAGIC 0xC0FFEE65U    /* bumped for the relocated context anchor */
 
 void *zwrap_alloc(void *opaque, uint32_t items, uint32_t size) {
     (void)opaque;
@@ -367,6 +394,9 @@ static int is_shadow_message(const uint8_t *src, uint32_t srclen);
 static int cfw_diag(int has_fid, uint16_t fid);
 static void cfw_draw_flags(uint8_t *disp, uint32_t w, uint32_t h);
 static uint32_t rd16(const uint8_t *p);
+static uint32_t rd32(const uint8_t *p);
+static int font_read_reply(const uint8_t *src, uint32_t srclen);
+static int font_probe_reply(const uint8_t *src, uint32_t srclen);
 
 /* Per-frame list of updated rectangles (pixel coords), assembled on the stack of the
  * top-level image_worker and threaded through image_dispatch; present_shadow outlines
@@ -623,6 +653,14 @@ static int image_dispatch(uint8_t *state, const uint8_t *src, uint32_t srclen,
         return -1;
     }
 
+    if (mode == 12) {
+        return font_read_reply(src, srclen);
+    }
+
+    if (mode == 13) {
+        return font_probe_reply(src, srclen);
+    }
+
     /* Custom shadow geometry is deliberately independent from the EvenHub carrier. */
     uint32_t w = IMAGE_W;
     uint32_t h = IMAGE_H;
@@ -770,6 +808,145 @@ static int image_dispatch(uint8_t *state, const uint8_t *src, uint32_t srclen,
     }
 
     return -1;
+}
+
+/* Mode 12 exports only the two stock XIP font slots, never arbitrary memory:
+ *
+ *   legacy request = [12][offset u32 LE][length u16 LE] (slot 0)
+ *   request        = [12][slot][offset u32 LE][length u16 LE]
+ *   response = [12][status][offset u32 LE][total u32 LE][length u16 LE][data]
+ *
+ * Status 0 is success, 1 is a malformed request, 2 is an invalid font header,
+ * 3 is an invalid offset/length, and 4 is an unknown slot. Only the right/master
+ * lens sends; the synchronized left-lens handler remains silent. Stock firmware
+ * initializes headers at 0x80100000 (SourceHanSansSC Light 20) and 0x80700000
+ * (Light 22), a 6 MiB stride. The header has no byte-length field; offset 0x3c
+ * belongs to its font configuration. Therefore `total` is the bounded 6 MiB slot
+ * size. Each request is separately bounds-checked. The font data is capped at
+ * 4084 bytes so the 12-byte response header plus data fits the stock sender's
+ * 4096-byte limit. The seven-byte request remains compatible with EVENCFW/10-11.
+ */
+static int font_read_reply(const uint8_t *src, uint32_t srclen) {
+    if (FW_SIDE() != 1) return 0;
+    customCfwContext *ctx = getCustomCfwContext();
+    if (ctx == 0) return -1;
+
+    uint8_t *reply = ctx->font_reply_buf;
+    uint32_t status = 0;
+    uint32_t slot = srclen == 8 ? src[1] : 0;
+    uint32_t offset = srclen == 8 ? rd32(src + 2) :
+                      (srclen == 7 ? rd32(src + 1) : 0);
+    uint32_t length = srclen == 8 ? rd16(src + 6) :
+                      (srclen == 7 ? rd16(src + 5) : 0);
+    uint32_t total = CFW_FONT_XIP_SLOT_SIZE;
+    uint32_t font_base = slot == 1 ? CFW_FONT_XIP_BASE_22 : CFW_FONT_XIP_BASE_20;
+    const volatile uint8_t *font = (const volatile uint8_t *)font_base;
+
+    if (srclen != 7 && srclen != 8) {
+        status = 1;
+    } else if (slot > 1) {
+        status = 4;
+    } else if (*(const volatile uint32_t *)font_base != CFW_FONT_HEADER_MAGIC) {
+        status = 2;
+    } else if (length == 0 || length > CFW_FONT_CHUNK_MAX ||
+               offset > total || length > total - offset) {
+        status = 3;
+    }
+
+    reply[0] = 12;
+    reply[1] = (uint8_t)status;
+    reply[2] = (uint8_t)offset;
+    reply[3] = (uint8_t)(offset >> 8);
+    reply[4] = (uint8_t)(offset >> 16);
+    reply[5] = (uint8_t)(offset >> 24);
+    reply[6] = (uint8_t)total;
+    reply[7] = (uint8_t)(total >> 8);
+    reply[8] = (uint8_t)(total >> 16);
+    reply[9] = (uint8_t)(total >> 24);
+    reply[10] = status == 0 ? (uint8_t)length : 0;
+    reply[11] = status == 0 ? (uint8_t)(length >> 8) : 0;
+    if (status == 0) {
+        for (uint32_t i = 0; i < length; i++) {
+            reply[CFW_FONT_REPLY_HEADER + i] = font[offset + i];
+        }
+    }
+    FW_FONT_SEND(
+        1, 0xe0, reply, CFW_FONT_REPLY_HEADER + (status == 0 ? length : 0)
+    );
+    return 0;
+}
+
+/* Snapshot the live font-manager state that is absent from the static firmware
+ * image. The 2.2.6.10 manager owns one contiguous 0xa8-byte RAM region:
+ *
+ *   +0x00  background XIP-backed lv_font_t descriptor (0x24 bytes)
+ *   +0x24  foreground XIP-backed lv_font_t descriptor (0x24 bytes)
+ *   +0x48  background chain: four 12-byte configuration records
+ *   +0x78  foreground chain: four 12-byte configuration records
+ *
+ * For each configuration record, append the first 64 bytes at its +4 pointer.
+ * A type-0 record therefore yields its native lv_font_t; a type-1 record yields
+ * its FreeType face path. Reads are allowed only from the mapped main image,
+ * SRAM, or the two known XIP font slots, preventing malformed runtime state from
+ * turning this diagnostic into an arbitrary peripheral read. Wire format:
+ *
+ *   [13][status][version=1][count=8][snapshot_len16][aux_len16]
+ *   [0xa8-byte snapshot][8 * 64-byte pointed-to prefixes]
+ *
+ * Status 0 is success and 1 is a malformed request. Only the right/master lens
+ * sends, matching mode 12. The response fits well below FW_FONT_SEND's 4096-byte
+ * ceiling and reuses the persistent mode-12 response buffer.
+ */
+static int font_probe_reply(const uint8_t *src, uint32_t srclen) {
+    (void)src;
+    if (FW_SIDE() != 1) return 0;
+    customCfwContext *ctx = getCustomCfwContext();
+    if (ctx == 0) return -1;
+
+    uint8_t *reply = ctx->font_reply_buf;
+    uint32_t status = srclen == 1 ? 0 : 1;
+    uint32_t payload_len = status == 0 ?
+        CFW_FONT_PROBE_SNAPSHOT_SIZE +
+        CFW_FONT_PROBE_RECORDS * CFW_FONT_PROBE_AUX_SIZE : 0;
+
+    reply[0] = 13;
+    reply[1] = (uint8_t)status;
+    reply[2] = 1;
+    reply[3] = CFW_FONT_PROBE_RECORDS;
+    reply[4] = (uint8_t)CFW_FONT_PROBE_SNAPSHOT_SIZE;
+    reply[5] = (uint8_t)(CFW_FONT_PROBE_SNAPSHOT_SIZE >> 8);
+    reply[6] = (uint8_t)CFW_FONT_PROBE_AUX_SIZE;
+    reply[7] = (uint8_t)(CFW_FONT_PROBE_AUX_SIZE >> 8);
+
+    if (status == 0) {
+        const volatile uint8_t *snapshot =
+            (const volatile uint8_t *)CFW_FONT_PROBE_BASE;
+        for (uint32_t i = 0; i < CFW_FONT_PROBE_SNAPSHOT_SIZE; i++) {
+            reply[CFW_FONT_PROBE_HEADER + i] = snapshot[i];
+        }
+
+        uint32_t aux_base = CFW_FONT_PROBE_HEADER + CFW_FONT_PROBE_SNAPSHOT_SIZE;
+        for (uint32_t record = 0; record < CFW_FONT_PROBE_RECORDS; record++) {
+            uint32_t chain_record = record & 3u;
+            uint32_t config_offset =
+                (record < 4 ? CFW_FONT_PROBE_CONFIG_0 : CFW_FONT_PROBE_CONFIG_1) +
+                chain_record * CFW_FONT_PROBE_RECORD_SIZE;
+            uint32_t pointer =
+                *(const volatile uint32_t *)(CFW_FONT_PROBE_BASE + config_offset + 4u);
+            uint32_t aux_offset = aux_base + record * CFW_FONT_PROBE_AUX_SIZE;
+            int readable =
+                (pointer >= 0x00437FE0U && pointer <= 0x007942E4U) ||
+                (pointer >= 0x20000000U && pointer <= 0x202A6630U) ||
+                (pointer >= CFW_FONT_XIP_BASE_20 && pointer <= 0x80CFFFC0U);
+            const volatile uint8_t *pointed = (const volatile uint8_t *)pointer;
+            for (uint32_t i = 0; i < CFW_FONT_PROBE_AUX_SIZE; i++) {
+                reply[aux_offset + i] = readable ? pointed[i] : 0;
+            }
+        }
+    }
+
+    FW_FONT_SEND(1, 0xe0, reply, CFW_FONT_PROBE_HEADER + payload_len);
+    return 0;
 }
 
 /* Append (l,t,w,h) to the per-frame updated-rect list, if there's room. */
@@ -1040,8 +1217,8 @@ static customCfwContext *peekCustomCfwContext(void) {
     return 0;
 }
 
-/* Fetch (or lazily create) the CFW singleton context. Its pointer lives in a
- * spare word of the BLE-RX task context (CFW_CTX_SLOT); we only ever touch that
+/* Fetch (or lazily create) the CFW singleton context. Its pointer lives in the
+ * explicitly reserved primary-TLSF tail (CFW_CTX_SLOT); we only ever touch that
  * word through this helper (image traffic or the private settings lease). The
  * slot ptr is range-checked to SRAM and the struct's magic verified before
  * trusting it, so warm-reset garbage can't be mistaken for a live context.
@@ -1432,12 +1609,18 @@ static uint32_t strlcat(char *dst, const char *src, uint32_t len) {
  * runs the worker on IT, never touching the possibly-overwritten live B. Both lenses
  * do identical work on identical data, so the sync is preserved. */
 
-/* Snapshot the just-completed message (B = *(state+0xc), len = *(state+0x20)) into the
- * per-state FIFO, then return the lens id (real FUN_0045a8ec) so the caller's RIGHT
- * gate still works. Reached via the naked shim snapshot_side, which supplies r7/r8. */
+/* Snapshot a just-completed CompressMode=0 message (B = *(state+0xc), len =
+ * *(state+0x20)) into the per-state FIFO, then return the lens id (real
+ * FUN_0045a8ec) so the caller's RIGHT gate still works. Stock-compressed messages
+ * bypass this FIFO. Reached via snapshot_side, which supplies r7/r8. */
 int cfw_snapshot(uint8_t *state, uint32_t container_id) {
     (void)container_id;
-    customCfwContext *ctx = getCustomCfwContext();
+    /* CompressMode is stock-owned on 2.2.6.10: mode 1/2 payloads are RLE/LZ4
+     * and are decompressed by evenhub_ui immediately before image_deferred.
+     * Do not snapshot their still-compressed reconstruction buffer here; the
+     * deferred hook must consume the stock decoder's temporary `src` instead. */
+    uint32_t compress_mode = state ? *(uint32_t *)(state + 0x18) : 0;
+    customCfwContext *ctx = compress_mode == 0 ? getCustomCfwContext() : 0;
     if (ctx && state) {
         uint8_t *b = *(uint8_t **)(state + 0xc);
         uint32_t len = *(uint32_t *)(state + 0x20);
@@ -1479,9 +1662,10 @@ __attribute__((naked)) int snapshot_side(void) {
     );
 }
 
-/* Replaces the deferred consumer's worker call (bl at 0x496a0e, both lenses). DRAINS all
- * of this lens's pending snapshots for `state` in FIFO (seq) order, running the worker on
- * each (ignoring the live B, which may be overwritten), then frees them. Draining all —
+/* Replaces the deferred consumer's worker call (bl at 0x496a0e, both lenses). Stock-
+ * compressed updates use the stock-decoded call arguments directly. Otherwise DRAINS
+ * all of this lens's pending snapshots for `state` in FIFO (seq) order, running the
+ * worker on each (ignoring the live B, which may be overwritten), then frees them. Draining all —
  * not just one — is required because the cross-lens timing sync can COALESCE several
  * completion messages into a single deferred call; handling only one would let the FIFO
  * fall arbitrarily far behind (-> ring overflow). If nothing is pending (a coalesced
@@ -1489,6 +1673,14 @@ __attribute__((naked)) int snapshot_side(void) {
  * live buffer is what suppresses the spurious dup (that buffer was already shown via its
  * snapshot). Only if we have no context at all do we best-effort the live buffer. */
 int image_deferred(uint8_t *state, uint8_t *src, uint32_t len) {
+    /* Stock CompressMode 1/2 is decoded immediately before this hook, into a
+     * temporary buffer passed as src/len. The earlier reconstruction snapshot
+     * contains compressed bytes, so bypass the CFW FIFO and custom dispatcher
+     * and preserve the exact stock set-image-data path. Treat any other nonzero
+     * mode the same way: stock already decided whether to decode or use it raw. */
+    if (state && *(uint32_t *)(state + 0x18) != 0)
+        return FW_LOADBMP(state, src, len);
+
     customCfwContext *ctx = getCustomCfwContext();
     if (ctx == 0) return image_worker(state, src, len);   /* no ctx (OOM): best-effort */
     int r = 0;

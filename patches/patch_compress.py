@@ -10,7 +10,7 @@ Build a CFW image for g2_2.2.6.10 with:
       fail-open Faceclaw wake-ownership lease on sid=0x09,
   (4) conditional idle-double-tap dashboard deferral and conditional stock
       Even-AI suppression while that lease is valid, and
-  (5) EvenHub long-press + ring release-long-press forwarding, and
+  (5) Faceclaw-lease-gated EvenHub long-press + ring release-long-press forwarding, and
   (6) a full-panel 640x480 packed-4bpp shadow copied directly into the physical
       framebuffer, and
   (7) stock wear-state notifications outside onboarding plus a current-state query, and
@@ -73,6 +73,20 @@ MRAM_END      = 0x00800000
 APP_MAX_END   = 0x007F0000   # conservative ceiling: leave the top ~56 KB for NV + flag
 BLOB_ALIGN    = 4            # 4-byte-align each appended blob (Thumb literal pools)
 
+# Reserve the final 1 KiB of the stock primary TLSF arena for CFW-owned fixed
+# state. Stock initializes [0x20279670,0x202a6670) with size 0x2d000 at
+# 0x004842e8. 0x2cc00 is the closest smaller value encodable by the existing
+# four-byte Thumb modified-immediate instruction, leaving
+# [0x202a6270,0x202a6670) outside the allocator. The next stock object starts at
+# exactly 0x202a6670. CFW_CTX_SLOT in zlib_glue.c uses the first reserved word.
+PRIMARY_TLSF_SIZE_SITE = (0x4842e8, "5f f4 34 32")  # movs.w r2,#0x2d000
+PRIMARY_TLSF_CFW_SIZE  = "5f f4 33 32"              # movs.w r2,#0x2cc00
+PRIMARY_TLSF_ARENA     = 0x20279670
+PRIMARY_TLSF_STOCK_LEN = 0x2d000
+PRIMARY_TLSF_CFW_LEN   = 0x2cc00
+CFW_RESERVED_BASE      = PRIMARY_TLSF_ARENA + PRIMARY_TLSF_CFW_LEN
+CFW_RESERVED_END       = PRIMARY_TLSF_ARENA + PRIMARY_TLSF_STOCK_LEN
+
 def mram_addr(payload_off):
     """MRAM XIP address of the byte at this main-app payload offset, once flashed."""
     return APP_LOAD_ADDR + payload_off - APP_PREAMBLE
@@ -90,9 +104,10 @@ def align_up(x, a):
 # bl FUN_004dc5ae (set_image_data) in evenhub_ui_reflash_event_handler -> image_deferred.
 # NOTE: in 2.2.6.10 this same function is where Even's own RLE/LZ4 decompression was
 # inserted, immediately BEFORE this call. That is why the site moved by a different delta
-# than the rest of the function. It is harmless for us: with CompressMode=0 (what we
-# send) their block is a no-op passthrough, and the ABI here is unchanged
-# (r0=obj, r1=data, r2=len; obj+0xc = data, obj+0x20 = len).
+# than the rest of the function. image_deferred dispatches CompressMode=0 through the CFW
+# snapshot FIFO, but sends every nonzero CompressMode through the decompressed `r1,r2`
+# buffer and exact stock loader. The ABI here is unchanged
+# (r0=obj, r1=data, r2=len; obj+0xc = compressed data, obj+0x20 = compressed len).
 LOADBMP_BL_SITE        = (0x496a0e, "45 f0 ce fd")
 # The two both-lens `bl FUN_0045a568` (lens-identity check) sites at image-
 # reconstruction-complete in the EvenHub data parser (single- and multi-fragment).
@@ -114,6 +129,8 @@ DISPLAY_START_BL_SITES = {
     0x45c65a: "08 f0 68 fa",
     0x45c71a: "08 f0 08 fa",
 }
+# The call site has just loaded r0=1, r1=0xe0; the wrapper must preserve both for
+# FUN_0046ae9c when the Faceclaw lease is absent, because the dialog serializes them.
 GESTURE_LONGPRESS_SITE = (0x442e92, "28 f0 03 f8")  # bl FUN_0046ae9c -> evenhub_longpress
 GESTURE_RELEASE_SITE   = (0x4431c2, "1c f0 9b fb")  # bl FUN_0045f8fc -> ring_release
 # Wakeword ("Hey Even") capture. The old patch unconditionally changed the
@@ -210,6 +227,20 @@ def layout(img):
     ceiling (duplicate of g2flash.check_mainapp_fits_mram)."""
     idx, comp_off, old_ps = find_mainapp(img)
 
+    # This reservation is safe only if the stock image has no absolute pointer
+    # into the removed tail. Scan every byte alignment because the OTA container's
+    # file-to-MRAM bias is not word-aligned. The allocator's original exclusive
+    # end (0x202a6670) is intentionally outside the rejected interval and is the
+    # base of the next stock object.
+    tail_refs = [
+        off for off in range(len(img) - 3)
+        if CFW_RESERVED_BASE <= struct.unpack_from('<I', img, off)[0] < CFW_RESERVED_END
+    ]
+    assert not tail_refs, (
+        "stock image contains absolute references into the proposed CFW-reserved "
+        f"TLSF tail: {[hex(off) for off in tail_refs]}"
+    )
+
     # Single combined blob: patches_main.c #includes all four patch sources, so build.py
     # emits ONE relocatable blob (its mini-linker resolves cross-file calls) that we
     # append once at the tail of the main-app payload. The blob needs no knowledge of its
@@ -262,6 +293,9 @@ def layout(img):
 
     # --- in-place live-code edits + bl retargets (targets are the appended addrs) ---
     in_place = [
+        (g2f(PRIMARY_TLSF_SIZE_SITE[0]), PRIMARY_TLSF_SIZE_SITE[1],
+         PRIMARY_TLSF_CFW_SIZE,
+         "reserve final 1 KiB of primary TLSF arena for CFW context anchor"),
         # 576x288 image-container size lift, in common_image_create. Even did NOT raise
         # this cap in 2.2.6.10 (its clamp strings are byte-identical and the limit is
         # still parameterized), so the lift is still needed. These three sites are
@@ -289,7 +323,8 @@ def layout(img):
           for site, orig in DISPLAY_START_BL_SITES.items()],
         # EvenHub long-press + ring release-long-press forwarding
         (g2f(GESTURE_LONGPRESS_SITE[0]), GESTURE_LONGPRESS_SITE[1],
-         enc_bl(GESTURE_LONGPRESS_SITE[0], longpress_addr), "bl evenhub_longpress (replaces force-quit dialog)"),
+         enc_bl(GESTURE_LONGPRESS_SITE[0], longpress_addr),
+         "bl evenhub_longpress (Faceclaw lease gates custom event vs stock dialog)"),
         (g2f(GESTURE_RELEASE_SITE[0]), GESTURE_RELEASE_SITE[1],
          enc_bl(GESTURE_RELEASE_SITE[0], release_addr), "bl ring_release (forward ring release-long-press)"),
         (g2f(EVENAI_ENTRY_SITE[0]), EVENAI_ENTRY_SITE[1],

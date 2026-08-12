@@ -84,6 +84,21 @@ int cfw_wake_lease_active(void) {
     return 1;
 }
 
+/* Faceclaw acquires this lease for every display session, unlike the optional
+ * wake-takeover lease. It is therefore also the session-ownership signal used
+ * by compatibility-sensitive EvenHub hooks such as long-press forwarding. */
+__attribute__((used, noinline))
+int cfw_fb_lease_active(void) {
+    customCfwContext *ctx = faceclaw_context_if_valid();
+    if (!ctx || ctx->direct_lease_deadline == 0) return 0;
+    if ((int32_t)(ctx->direct_lease_deadline - FW_MS_TICK) <= 0) {
+        ctx->direct_lease_deadline = 0;
+        ctx->direct_active = 0;
+        return 0;
+    }
+    return 1;
+}
+
 static void faceclaw_launch_pending_dashboard(customCfwContext *ctx) {
     if (!ctx || !ctx->wake_dashboard_pending) return;
     ctx->wake_dashboard_pending = 0;
@@ -306,7 +321,7 @@ void faceclaw_evenai_display_entry(void) {
 }
 
 // Capability string "EVENCFW/<ver> <space-separated feature tokens>":
-//   EVENCFW/8  -> magic prefix + contract version (detect: starts-with "EVENCFW/")
+//   EVENCFW/12 -> magic prefix + contract version (detect: starts-with "EVENCFW/")
 //   img576     -> 576x288 image containers (vs stock 288x144 cap)
 //   imgz       -> zlib (DEFLATE) compressed image payloads
 //   rle        -> compact run-length encoded delta rows
@@ -316,13 +331,16 @@ void faceclaw_evenai_display_entry(void) {
 //   fbguard    -> preserve direct frames across stock widget repaints under a fail-open lease
 //   wearnotify -> lifecycle-independent wear events + private current-state query
 //   compass10  -> mode 10 controls the stock compass and its navigation notifications
+//   fontread12 -> mode 12 reads bounded chunks of stock XIP font slot 0
+//   fontread12x2 -> optional mode-12 selector exposes both 20px and 22px slots
+//   fontprobe13 -> mode 13 reports the live native/FreeType/XIP fallback chains
 //
 // The string is a normal rodata literal now that build.py emits/relocates .rodata
 // (earlier this had to be spelled out byte-by-byte to avoid a rodata section). strlcpy
 // comes from zlib_glue.c, which shares this translation unit via patches_main.c.
 int settings_send_wrapper(int type, int sid, unsigned char *buf, unsigned len) {
     if (sid == 9) {
-        static const char caps[] = "EVENCFW/8 img576 img640 imgz rle wakelease directfb fbguard wearnotify compass10";
+        static const char caps[] = "EVENCFW/12 img576 img640 imgz rle wakelease directfb fbguard wearnotify compass10 fontread12 fontread12x2 fontprobe13";
         unsigned char *p = buf + len;
         p[0] = 0xA2; p[1] = 0x06;                          // field 100, wire type 2: tag 802
         unsigned clen = strlcpy((char *)(p + 3), caps, sizeof(caps));
