@@ -246,7 +246,9 @@ typedef int (*font_send_fn)(int type, int sid, unsigned char *buf, unsigned len)
  * need to survive rebuilds is anchored by a pointer in 1 KiB of SRAM explicitly
  * removed from the top of the stock primary TLSF arena by patch_compress.py. The
  * stock arena is [0x20279670,0x202a6670); the patched size is 0x2cc00, reserving
- * [0x202a6270,0x202a6670) for CFW. This is deliberately carved out rather than
+ * [0x202a6270,0x202a6670) for CFW. Its first word holds the context pointer and
+ * its second holds a magic-guarded sticky allocation-failure diagnostic. This is
+ * deliberately carved out rather than
  * inferred padding: 0x20003ffc, used before EVENCFW/11, is actually the +0 callback
  * of the BLE-RX lifecycle object and stock code can BLX through it. The struct's
  * `magic` guards against warm-reset garbage; the slot ptr is range-checked before
@@ -340,11 +342,39 @@ typedef struct {
 } customCfwContext;
 
 #define CFW_CTX_SLOT  0x202a6270U    /* first word of the CFW-reserved TLSF tail */
+#define CFW_ALLOC_DIAG_SLOT 0x202a6274U /* second word: magic | sticky failure bit */
+#define CFW_ALLOC_DIAG_MAGIC 0xA110CA7EU
 #define CFW_CTX_MAGIC 0xC0FFEE65U    /* bumped for the relocated context anchor */
+
+/* Keep the allocation diagnostic outside customCfwContext so failure to allocate
+ * that context is itself observable. The magic rejects uninitialized/warm-reset
+ * SRAM; bit 0 is sticky until mode 7/subcommand 0 clears the diagnostics. */
+static uint32_t cfw_alloc_diag(void) {
+    volatile uint32_t *slot = (volatile uint32_t *)CFW_ALLOC_DIAG_SLOT;
+    uint32_t v = *slot;
+    if ((v & ~1u) != CFW_ALLOC_DIAG_MAGIC) {
+        v = CFW_ALLOC_DIAG_MAGIC;
+        *slot = v;
+    }
+    return v;
+}
+
+static void cfw_alloc_diag_clear(void) {
+    *(volatile uint32_t *)CFW_ALLOC_DIAG_SLOT = CFW_ALLOC_DIAG_MAGIC;
+}
+
+__attribute__((noinline))
+static void *cfw_malloc(uint32_t size) {
+    cfw_alloc_diag();
+    void *p = FW_MALLOC(size);
+    if (p == 0)
+        *(volatile uint32_t *)CFW_ALLOC_DIAG_SLOT = CFW_ALLOC_DIAG_MAGIC | 1u;
+    return p;
+}
 
 void *zwrap_alloc(void *opaque, uint32_t items, uint32_t size) {
     (void)opaque;
-    return FW_MALLOC(items * size);
+    return cfw_malloc(items * size);
 }
 
 void zwrap_free(void *opaque, void *ptr) {
@@ -612,6 +642,7 @@ static int image_dispatch(uint8_t *state, const uint8_t *src, uint32_t srclen,
         if (ctx) {
             if (sub == 0) {
                 ctx->f_reorder = ctx->f_skip = ctx->f_dup = ctx->f_snap_of = 0;
+                cfw_alloc_diag_clear();
                 ctx->diag_seen = ctx->fid_resync = 0;
                 ctx->last_fid = ctx->high_fid = 0;
                 for (uint32_t i = 0; i < CFW_FID_RING; i++) ctx->recent_fids[i] = 0xffff;
@@ -1226,7 +1257,7 @@ static customCfwContext *peekCustomCfwContext(void) {
 static customCfwContext *getCustomCfwContext(void) {
     customCfwContext *ctx = peekCustomCfwContext();
     if (ctx) return ctx;
-    ctx = (customCfwContext *)FW_MALLOC(sizeof(customCfwContext));
+    ctx = (customCfwContext *)cfw_malloc(sizeof(customCfwContext));
     if (ctx) {
         bzero((uint8_t *)ctx, sizeof(customCfwContext));
         ctx->magic = CFW_CTX_MAGIC;
@@ -1526,8 +1557,8 @@ static void u_to_dec(char *out, uint32_t v, uint32_t maxlen) {
 
 /* Overlay, as a Terminus 6x12 text line across the top-left of the frame (white on a
  * black bar), the diagnostic flags that are set followed by the PREVIOUS message's
- * timings. Flags: REORDER, SKIP, DUP, SNAPOF (mirrors cfw_diag/cfw_snapshot); with the
- * snapshot-FIFO fix all four should stay clear, so this normally reads "OK". The timings
+ * timings. Flags: REORDER, SKIP, DUP, SNAPOF, ALLOC (the last is set by any failed
+ * CFW-owned heap allocation); normally all should stay clear, so this reads "OK". The timings
  * are microseconds: `w` = the whole image_worker, `p` = the present_shadow step within
  * it (packed framebuffer copy + cache clean), e.g. "OK w834us p210us". Suppressed when
  * diag_hide is set (mode 7). Drawn into the physical packed-4bpp framebuffer. */
@@ -1547,6 +1578,7 @@ static void cfw_draw_flags(uint8_t *disp, uint32_t w, uint32_t h) {
     ADD_FLAG(ctx->f_skip,    "SKIP ");
     ADD_FLAG(ctx->f_dup,     "DUP ");
     ADD_FLAG(ctx->f_snap_of, "SNAPOF ");
+    ADD_FLAG(cfw_alloc_diag() & 1u, "ALLOC ");
     #undef ADD_FLAG
     if (num_flags == 0) strlcat(line, "OK ", sizeof(line));
 
@@ -1637,7 +1669,7 @@ int cfw_snapshot(uint8_t *state, uint32_t container_id) {
                 ctx->f_snap_of = 1;
                 slot = oldest_i;
             }
-            uint8_t *copy = (uint8_t *)FW_MALLOC(len);
+            uint8_t *copy = (uint8_t *)cfw_malloc(len);
             if (copy) {
                 for (uint32_t i = 0; i < len; i++) copy[i] = b[i];
                 ctx->snaps[slot].state = state;
