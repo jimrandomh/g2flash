@@ -321,7 +321,7 @@ void faceclaw_evenai_display_entry(void) {
 }
 
 // Capability string "EVENCFW/<ver> <space-separated feature tokens>":
-//   EVENCFW/12 -> magic prefix + contract version (detect: starts-with "EVENCFW/")
+//   EVENCFW/13 -> magic prefix + contract version (detect: starts-with "EVENCFW/")
 //   img576     -> 576x288 image containers (vs stock 288x144 cap)
 //   imgz       -> zlib (DEFLATE) compressed image payloads
 //   rle        -> compact run-length encoded delta rows
@@ -331,6 +331,7 @@ void faceclaw_evenai_display_entry(void) {
 //   fbguard    -> preserve direct frames across stock widget repaints under a fail-open lease
 //   wearnotify -> lifecycle-independent wear events + private current-state query
 //   compass10  -> mode 10 controls the stock compass and its navigation notifications
+//   cleanup11  -> mode 11 returns a departing custom-app session to stock state
 //   fontread12 -> mode 12 reads bounded chunks of stock XIP font slot 0
 //   fontread12x2 -> optional mode-12 selector exposes both 20px and 22px slots
 //   fontprobe13 -> mode 13 reports the live native/FreeType/XIP fallback chains
@@ -340,7 +341,7 @@ void faceclaw_evenai_display_entry(void) {
 // comes from zlib_glue.c, which shares this translation unit via patches_main.c.
 int settings_send_wrapper(int type, int sid, unsigned char *buf, unsigned len) {
     if (sid == 9) {
-        static const char caps[] = "EVENCFW/12 img576 img640 imgz rle wakelease directfb fbguard wearnotify compass10 fontread12 fontread12x2 fontprobe13";
+        static const char caps[] = "EVENCFW/13 img576 img640 imgz rle wakelease directfb fbguard wearnotify compass10 cleanup11 fontread12 fontread12x2 fontprobe13";
         unsigned char *p = buf + len;
         p[0] = 0xA2; p[1] = 0x06;                          // field 100, wire type 2: tag 802
         unsigned clen = strlcpy((char *)(p + 3), caps, sizeof(caps));

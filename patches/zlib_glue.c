@@ -60,6 +60,11 @@
  *                              firmware's own compass start/stop routines on the
  *                              right arm. Stock navigation notifications carry the
  *                              resulting heading/calibration events back to the phone.
+ *   11          -> [11] cleanup the custom-app session before disconnect: release
+ *                              leases/direct-framebuffer ownership, stop and delete
+ *                              CFW timers, stop custom buzzer/compass activity, free
+ *                              queued snapshots, and restore stock behavior. The
+ *                              singleton CFW context and sticky allocation flag remain.
  *   12          -> [12][offset32][length16] read a bounded chunk of XIP font
  *                              slot 0, or [12][slot][offset32][length16] to
  *                              select slot 0/1; return it on sid 0xe0.
@@ -143,6 +148,8 @@ typedef void (*buzz_raw_fn)(uint32_t freq, uint32_t duty);   /* reset+power+PWM(
 typedef int  (*timer_start_fn)(uint32_t handle, uint32_t ms); /* osTimer start (one-shot) */
 typedef uint32_t (*timer_new_fn)(void *cb, uint32_t type, void *arg, void *attr); /* osTimerNew-> handle */
 typedef int  (*timer_stop_fn)(uint32_t handle);     /* osTimer stop */
+typedef int  (*timer_delete_fn)(uint32_t handle);   /* osTimer delete */
+typedef void (*app_start_fn)(unsigned app_id, void *arg, unsigned arg_len, void *cb);
 typedef void (*keepalive_reset_fn)(void);           /* zero the EvenHub keepalive counter */
 typedef uint8_t *(*lookup_fn)(uint32_t container_id); /* container id -> spec-list node (or 0) */
 typedef int  (*complete_emit_fn)(uint32_t id, void *hdr, int kind, uint32_t p4); /* completion emit */
@@ -172,6 +179,8 @@ typedef int (*font_send_fn)(int type, int sid, unsigned char *buf, unsigned len)
 #define FW_TIMER_START ((timer_start_fn)0x00449499U)  /* FUN_00449498 osTimerStart(handle,ms) */
 #define FW_TIMER_NEW   ((timer_new_fn)0x004493b1U)    /* FUN_004493b0 osTimerNew(cb,type,arg,attr) */
 #define FW_TIMER_STOP  ((timer_stop_fn)0x004494d9U)   /* FUN_004494d8 osTimerStop(handle) */
+#define FW_TIMER_DELETE ((timer_delete_fn)0x0044953fU) /* FUN_0044953e osTimerDelete(handle) */
+#define FW_APP_START ((app_start_fn)0x00464b2fU)       /* FUN_00464b2e REQUEST_DISPLAY_START_UP */
 #define FW_KEEPALIVE_RESET ((keepalive_reset_fn)0x004e0cbbU) /* FUN_004e0cba: EvenHub keepalive
                                                      * counter (@0x200745ac) = 0. This is the exact
                                                      * leaf the stock sid-0x0c heartbeat handler in
@@ -427,6 +436,7 @@ static uint32_t rd16(const uint8_t *p);
 static uint32_t rd32(const uint8_t *p);
 static int font_read_reply(const uint8_t *src, uint32_t srclen);
 static int font_probe_reply(const uint8_t *src, uint32_t srclen);
+static int cfw_cleanup_session(void);
 
 /* Per-frame list of updated rectangles (pixel coords), assembled on the stack of the
  * top-level image_worker and threaded through image_dispatch; present_shadow outlines
@@ -498,12 +508,13 @@ static uint32_t cfw_time_end(const uint32_t *t) {
     return dc / cyc_per_us;
 }
 
-/* True for top-level messages that can mutate/present the custom 4bpp shadow.
- * Mode 8 is included because its nested operations are modes 3/6/9. */
+/* True for top-level messages that need exclusive ownership of the stock display
+ * gate. Mode 8 mutates/presents the custom shadow; mode 11 uses the gate as a
+ * barrier so no direct-framebuffer job can still reference session-owned state. */
 static int is_shadow_message(const uint8_t *src, uint32_t srclen) {
     if (src == 0 || srclen == 0) return 0;
     uint8_t mode = src[0] & 0x7fu;
-    return mode == 3 || mode == 6 || mode == 8 || mode == 9;
+    return mode == 3 || mode == 6 || mode == 8 || mode == 9 || mode == 11;
 }
 
 /* The image worker: static, called from image_deferred (the deferred consumer, which
@@ -682,6 +693,13 @@ static int image_dispatch(uint8_t *state, const uint8_t *src, uint32_t srclen,
             return 0;
         }
         return -1;
+    }
+
+    if (mode == 11) {
+        /* Custom-session cleanup. image_worker owns the display gate here, so a
+         * prior direct refresh has completed and the pointers below cannot still
+         * be in use by display_copy_hook. Extra bytes are reserved and ignored. */
+        return cfw_cleanup_session();
     }
 
     if (mode == 12) {
@@ -1300,6 +1318,64 @@ static uint8_t *cfw_shadow_buffer(uint8_t *state) {
 
 static void bzero(uint8_t *buf, uint32_t len) {
     for (uint32_t i = 0; i < len; i++) buf[i] = 0;
+}
+
+/* Return the singleton to its stock-compatible idle state without freeing it.
+ * Idempotent: successfully deleted timer handles and freed snapshot slots are
+ * cleared immediately, while a timer whose delete command fails remains in the
+ * context so a later cleanup can retry it. The sticky allocation diagnostic is
+ * deliberately retained so cleanup cannot erase evidence of an earlier OOM. */
+static int cfw_cleanup_session(void) {
+    customCfwContext *ctx = peekCustomCfwContext();
+    if (ctx == 0) return 0;
+
+    /* Publish fail-open ownership first. image_worker holds the display gate,
+     * making it safe to discard any direct job/pointer left by this session. */
+    ctx->direct_lease_deadline = 0;
+    ctx->direct_active = 0;
+    ctx->direct_pending = 0;
+    ctx->direct_shadow = 0;
+    ctx->direct_failed = 0;
+
+    /* Suppress callbacks before asking the timer service to stop/delete them;
+     * a callback already dispatched on the timer thread will then be harmless. */
+    ctx->seq_count = 0;
+    ctx->seq_cursor = 0;
+    if (ctx->seq_timer) {
+        FW_TIMER_STOP(ctx->seq_timer);
+        if (FW_TIMER_DELETE(ctx->seq_timer) == 0) ctx->seq_timer = 0;
+    }
+    FW_BUZZ_RESET();
+
+    int compass_was_forwarding = ctx->compass_forward != 0;
+    ctx->compass_forward = 0;
+    if (compass_was_forwarding && FW_SIDE() == 1) FW_COMPASS_STOP();
+
+    int launch_dashboard = ctx->wake_dashboard_pending != 0;
+    ctx->wake_lease_deadline = 0;
+    ctx->wake_dashboard_pending = 0;
+    ctx->wake_nonce = 0;
+    if (ctx->wake_fallback_timer) {
+        FW_TIMER_STOP(ctx->wake_fallback_timer);
+        if (FW_TIMER_DELETE(ctx->wake_fallback_timer) == 0)
+            ctx->wake_fallback_timer = 0;
+    }
+
+    for (uint32_t i = 0; i < CFW_SNAP_RING; i++) {
+        if (ctx->snaps[i].state && ctx->snaps[i].buf) FW_FREE(ctx->snaps[i].buf);
+        ctx->snaps[i].state = 0;
+        ctx->snaps[i].buf = 0;
+        ctx->snaps[i].len = 0;
+        ctx->snaps[i].seq = 0;
+    }
+    ctx->snap_seq = 0;
+
+    /* Diagnostics are inert while hidden. Keep their sticky history for later
+     * inspection, but make sure no Faceclaw overlay reaches the stock session. */
+    ctx->diag_hide = 1;
+
+    if (launch_dashboard) FW_APP_START(1, 0, 0, 0);
+    return 0;
 }
 
 static void copy_panel(uint8_t *fb, const uint8_t *shadow) {
