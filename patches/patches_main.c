@@ -19,6 +19,11 @@
  * no load address is needed at build time. Splitting these back into separate CUs would
  * turn those into absolute relocations that build.py rejects.
  */
+
+#include "utils.c"
+#include "malloc.c"
+#include "draw.c"
+#include "cfw_context.c"
 #include "zlib_glue.c"
 #include "settings_ext.c"
 #include "gesture_fwd.c"

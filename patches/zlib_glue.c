@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include "cfw_context.h"
 
 /*
  * zlib (DEFLATE) image support for the G2 CFW — multi-mode load wrapper.
@@ -133,10 +134,6 @@
  * address at build time and stays correct wherever the blob is placed.
  */
 
-typedef void *(*malloc_fn)(uint32_t);
-typedef void (*free_fn)(void *);
-typedef void *(*heap_malloc_fn)(uint32_t descriptor, uint32_t size);
-typedef void (*heap_free_fn)(uint32_t descriptor, void *ptr);
 typedef int (*inflateInit2_fn)(void *strm, int windowBits, const char *ver, int ssize);
 typedef int (*inflate_fn)(void *strm, int flush);
 typedef int (*inflateEnd_fn)(void *strm);
@@ -166,11 +163,6 @@ typedef int (*compass_notify_fn)(uint32_t);           /* stock sid-0x08 compass 
 typedef int (*font_send_fn)(int type, int sid, unsigned char *buf, unsigned len);
 
 /* firmware entry points (Thumb bit set for blx via constant pointer) */
-#define FW_MALLOC  ((malloc_fn)0x00474cd3U)         /* FUN_00474cd2 malloc(size) */
-#define FW_FREE    ((free_fn)0x00474d17U)           /* FUN_00474d16 free(ptr) */
-#define FW_HEAP_MALLOC ((heap_malloc_fn)0x00484181U) /* FUN_00484180 generic heap malloc */
-#define FW_HEAP_FREE   ((heap_free_fn)0x0048429fU)   /* FUN_0048429e generic heap free */
-#define FW_HEAP_13_DESCRIPTOR 0x20000354U            /* TLSF arena @ 0x2013be70, 0xcd000 B */
 #define FW_INIT2   ((inflateInit2_fn)0x005beac3U)   /* FUN_005beac2 inflateInit2_ */
 #define FW_INFLATE ((inflate_fn)0x005beb91U)        /* FUN_005beb90 inflate */
 #define FW_END     ((inflateEnd_fn)0x005bea87U)     /* FUN_005bea86 inflateEnd */
@@ -254,25 +246,6 @@ typedef int (*font_send_fn)(int type, int sid, unsigned char *buf, unsigned len)
 
 #define RLE_CHUNK 256   /* mode-3/6 inflate scratch feeding the RLE decoder (stack) */
 
-/* Persistent CFW-owned state that must survive image-container teardown/rebuild.
- * The image container (its display buffer A @ state+0x8 and recon buffer B @
- * state+0xc) is freed and reallocated on rebuild. The packed shadow lives in A
- * only for the lifetime of the current streaming layout and must be seeded by a
- * mode-6 keyframe after every rebuild. The bookkeeping that does
- * need to survive rebuilds is anchored by a pointer in 1 KiB of SRAM explicitly
- * removed from the top of the stock primary TLSF arena by patch_compress.py. The
- * stock arena is [0x20279670,0x202a6670); the patched size is 0x2cc00, reserving
- * [0x202a6270,0x202a6670) for CFW. Its first word holds the context pointer and
- * its second holds a magic-guarded sticky allocation-failure diagnostic. This is
- * deliberately carved out rather than
- * inferred padding: 0x20003ffc, used before EVENCFW/11, is actually the +0 callback
- * of the BLE-RX lifecycle object and stock code can BLX through it. The struct's
- * `magic` guards against warm-reset garbage; the slot ptr is range-checked before
- * dereference. */
-#define CFW_FID_RING  16     /* recent mode-3 frame ids kept for duplicate detection */
-#define CFW_SNAP_RING 12     /* in-flight compressed-message snapshots (per producer race depth) */
-#define CFW_SNAP_BUSY_SEQ 0xffffffffU /* range is reserved by the deferred worker */
-#define CFW_SEQ_MAX   48     /* max steps in a buzzer tone sequence (mode-5 kind 4) */
 #define CFW_FONT_REPLY_HEADER 12U
 #define CFW_FONT_SEND_MAX 4096U
 #define CFW_FONT_CHUNK_MAX (CFW_FONT_SEND_MAX - CFW_FONT_REPLY_HEADER)
@@ -289,122 +262,6 @@ typedef int (*font_send_fn)(int type, int sid, unsigned char *buf, unsigned len)
 #define CFW_FONT_PROBE_AUX_SIZE 64U
 #define CFW_FONT_PROBE_HEADER 8U
 
-/* One snapshotted compressed image message. Taken at reconstruction-complete (both
- * lenses), consumed FIFO in the deferred handler. Keyed by the owning image-state
- * pointer so multiple containers (e.g. faceclaw's 4 tiles) don't cross-feed. */
-typedef struct {
-    uint8_t *state;      /* owning image-state (key); 0 = empty slot */
-    uint8_t *buf;        /* copy packed into this state's reconstruction-buffer tail */
-    uint32_t len;
-    volatile uint32_t seq; /* push order, or CFW_SNAP_BUSY_SEQ while being consumed */
-} cfw_snap;
-
-typedef struct {
-    uint32_t magic;      /* CFW_CTX_MAGIC when valid */
-    /* --- snapshot FIFO: fixes the producer/consumer race on the shared recon buffer.
-     * snapshot_side() copies each completed message here (both lenses); image_deferred
-     * drains this lens's pending snapshots and runs the worker on each, ignoring the
-     * live (possibly-overwritten) recon buffer B. (The 4bpp shadow of the last frame,
-     * needed by mode-3 deltas, reuses each container's display buffer A — see
-     * cfw_shadow_buffer — so it's per-container and costs no extra RAM.) */
-    cfw_snap snaps[CFW_SNAP_RING];
-    uint32_t snap_seq;   /* next push sequence number */
-    /* --- diagnostics, overlaid as a text line (verify the fix; should stay clear). Mode
-     * 7 clears the flags / toggles the overlay visibility (diag_hide). --- */
-    uint16_t last_fid;   /* last frame id seen (mode-3 messages) */
-    uint16_t high_fid;   /* highest frame id seen */
-    uint8_t  diag_seen;  /* recorded at least one frame yet */
-    uint8_t  fid_resync; /* keyframe rebaselines the next delta's fid (no false skip) */
-    uint8_t  diag_hide;  /* 1 = don't draw the flag overlay (default 0 = visible) */
-    uint32_t last_worker_us;  /* image_worker() duration of the PREVIOUS message (overlay) */
-    uint32_t last_present_us; /* present_shadow() duration of the PREVIOUS present (overlay) */
-    uint32_t cyc_per_ms;      /* calibrated DWT cycles per 1 ms OS tick (0 = not yet done) */
-    uint8_t  f_reorder;  /* FLAG: ever saw a frame id go backward */
-    uint8_t  f_skip;     /* FLAG: ever saw a frame id gap (skipped) */
-    uint8_t  f_dup;      /* FLAG: ever saw a duplicate frame id (in the recent ring) */
-    uint8_t  f_snap_of;  /* FLAG: snapshot ring overflowed (dropped an in-flight frame) */
-    uint16_t recent_fids[CFW_FID_RING]; /* ring of the last N mode-3 frame ids seen */
-    uint8_t  recent_pos; /* next write index into recent_fids */
-    /* --- buzzer tone sequencer (mode-5 kind 4). Plays a list of (freq,duty,ms)
-     * steps back-to-back on OUR OWN one-shot osTimer — the firmware buzzer timer's
-     * callback is the fixed note-walker, which can't emit arbitrary frequencies.
-     * State lives in this singleton so it survives the handler return and is
-     * reachable from seq_tick (the timer callback, in the RTOS timer thread). --- */
-    uint32_t seq_timer;                   /* our osTimer handle; created lazily, reused, never freed */
-    uint8_t  seq_count;                   /* steps in the current sequence (0 = idle) */
-    uint8_t  seq_cursor;                  /* index of the next step to play */
-    uint8_t  seq_steps[CFW_SEQ_MAX * 5];  /* freqLo,freqHi,duty,msLo,msHi per step */
-    /* --- Faceclaw wake takeover. A volatile, fail-open ownership lease lets
-     * Faceclaw defer the stock dashboard only while its phone process is
-     * demonstrably alive. See settings_ext.c for the private sid-0x09 control
-     * protocol and the double-tap / Even AI entry hooks. */
-    uint32_t wake_lease_deadline;          /* FW_MS_TICK deadline; 0 = no owner */
-    uint32_t wake_fallback_timer;          /* one-shot stock-dashboard fallback */
-    uint16_t wake_nonce;                   /* current pending wake, 0 = none */
-    uint8_t  wake_dashboard_pending;       /* dashboard request held for Faceclaw */
-    volatile uint8_t compass_forward;      /* mode 10: forward global heading events to BLE */
-    uint8_t  wake_notify_buf[16];          /* stable storage for sid-0x09 notify */
-    uint8_t  wear_notify_buf[12];          /* stable storage for sid-0x10 wear notify */
-    /* Lazily allocated on the first mode-12/13 request. The stock sender's
-     * copy/queue lifetime is opaque, so it remains allocated until reboot. */
-    uint8_t *font_reply_buf;
-    /* Direct-framebuffer job. The EvenHub worker holds the stock display gate
-     * before it mutates the shadow and until the display task consumes this
-     * pointer, so no second snapshot or full-size display buffer is required. */
-    const uint8_t *direct_shadow;
-    volatile uint8_t direct_pending;
-    uint8_t direct_failed;
-    uint8_t direct_active;                    /* physical framebuffer currently owns the image */
-    uint32_t direct_lease_deadline;            /* fail-open repaint-guard deadline */
-} customCfwContext;
-
-#define CFW_CTX_SLOT  0x202a6270U    /* first word of the CFW-reserved TLSF tail */
-#define CFW_ALLOC_DIAG_SLOT 0x202a6274U /* second word: magic | sticky failure bit */
-#define CFW_ALLOC_DIAG_MAGIC 0xA110CA7EU
-#define CFW_CTX_MAGIC 0xC0FFEE66U    /* bumped for the context layout change */
-
-/* Keep the allocation diagnostic outside customCfwContext so failure to allocate
- * that context is itself observable. The magic rejects uninitialized/warm-reset
- * SRAM; bit 0 is sticky until mode 7/subcommand 0 clears the diagnostics. */
-static uint32_t cfw_alloc_diag(void) {
-    volatile uint32_t *slot = (volatile uint32_t *)CFW_ALLOC_DIAG_SLOT;
-    uint32_t v = *slot;
-    if ((v & ~1u) != CFW_ALLOC_DIAG_MAGIC) {
-        v = CFW_ALLOC_DIAG_MAGIC;
-        *slot = v;
-    }
-    return v;
-}
-
-static void cfw_alloc_diag_clear(void) {
-    *(volatile uint32_t *)CFW_ALLOC_DIAG_SLOT = CFW_ALLOC_DIAG_MAGIC;
-}
-
-__attribute__((noinline))
-static void *cfw_malloc(uint32_t size) {
-    cfw_alloc_diag();
-    void *p = FW_MALLOC(size);
-    if (p == 0)
-        *(volatile uint32_t *)CFW_ALLOC_DIAG_SLOT = CFW_ALLOC_DIAG_MAGIC | 1u;
-    return p;
-}
-
-/* Allocate from the independent 820 KiB TLSF arena at 0x2013be70. Go through
- * the stock generic heap coordinator rather than calling TLSF directly so the
- * descriptor's mutex, current-byte counter, and peak-byte counter stay valid. */
-__attribute__((noinline))
-static void *cfw_heap13_malloc(uint32_t size) {
-    cfw_alloc_diag();
-    void *p = FW_HEAP_MALLOC(FW_HEAP_13_DESCRIPTOR, size);
-    if (p == 0)
-        *(volatile uint32_t *)CFW_ALLOC_DIAG_SLOT = CFW_ALLOC_DIAG_MAGIC | 1u;
-    return p;
-}
-
-__attribute__((noinline))
-static void cfw_heap13_free(void *ptr) {
-    FW_HEAP_FREE(FW_HEAP_13_DESCRIPTOR, ptr);
-}
 
 void *zwrap_alloc(void *opaque, uint32_t items, uint32_t size) {
     (void)opaque;
@@ -450,16 +307,11 @@ static void push_display(uint8_t *state, uint8_t *disp, uint32_t w, uint32_t h);
 static void unpack4bpp(uint8_t *dst, uint32_t dst_stride, const uint8_t *pix,
                        uint32_t w, uint32_t h, uint32_t src_stride, int bottom_up);
 static int load_bmp_fast(uint8_t *state, const uint8_t *bmp, uint32_t len);
-static customCfwContext *peekCustomCfwContext(void);
-static customCfwContext *getCustomCfwContext(void);
 static uint8_t *cfw_shadow_buffer(uint8_t *state);
-static void bzero(uint8_t *buf, uint32_t len);
 static void cfw_snap_clear(cfw_snap *snap);
 static int is_shadow_message(const uint8_t *src, uint32_t srclen);
 static int cfw_diag(int has_fid, uint16_t fid);
 static void cfw_draw_flags(uint8_t *disp, uint32_t w, uint32_t h);
-static uint32_t rd16(const uint8_t *p);
-static uint32_t rd32(const uint8_t *p);
 static uint8_t *cfw_font_reply_buffer(customCfwContext *ctx);
 static int font_read_reply(const uint8_t *src, uint32_t srclen);
 static int font_probe_reply(const uint8_t *src, uint32_t srclen);
@@ -484,9 +336,6 @@ static void rect_copy_4bpp(uint8_t *buf, uint32_t stride, uint32_t sL, uint32_t 
                            uint32_t dL, uint32_t dT, uint32_t bw, uint32_t bh);
 static int image_dispatch(uint8_t *state, const uint8_t *src, uint32_t srclen,
                           int present, cfw_rectlist *rl);
-static uint32_t strlcpy(char *dst, const char *src, uint32_t len);
-static uint32_t strnlen(const char *s, uint32_t maxlen);
-static uint32_t strlcat(char *dst, const char *str, uint32_t len);
 
 
 /* Calibrate DWT cycles-per-millisecond against the firmware's 1 ms OS tick, once,
@@ -1233,11 +1082,6 @@ static void push_display(uint8_t *state, uint8_t *disp, uint32_t w, uint32_t h) 
     FW_INVAL(obj);
 }
 
-/* little-endian unaligned reads (byte-wise; -mno-unaligned-access safe) */
-static uint32_t rd16(const uint8_t *p) { return (uint32_t)p[0] | ((uint32_t)p[1] << 8); }
-static uint32_t rd32(const uint8_t *p) {
-    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
-}
 
 /* Expand a w*h block of 4bpp pixels (2 px/byte, high nibble = left pixel) into an
  * 8bpp destination: nibble n (0..15) -> n*17 (== (n<<4)|n) so 0->0, 15->255.
@@ -1294,37 +1138,6 @@ static int load_bmp_fast(uint8_t *state, const uint8_t *bmp, uint32_t len) {
     return 0;
 }
 
-/* Return the singleton only if it already exists and passes the slot/magic checks.
- * Ordinary stock refreshes pass through display_copy_hook, so that hook must never
- * allocate CFW state. */
-static customCfwContext *peekCustomCfwContext(void) {
-    customCfwContext *ctx = *(customCfwContext **)CFW_CTX_SLOT;
-    if (((uintptr_t)ctx & 3) == 0 && (uintptr_t)ctx - 0x20000000u < 0x00800000u &&
-        ctx->magic == CFW_CTX_MAGIC)
-        return ctx;
-    return 0;
-}
-
-/* Fetch (or lazily create) the CFW singleton context. Its pointer lives in the
- * explicitly reserved primary-TLSF tail (CFW_CTX_SLOT); we only ever touch that
- * word through this helper (image traffic or the private settings lease). The
- * slot ptr is range-checked to SRAM and the struct's magic verified before
- * trusting it, so warm-reset garbage can't be mistaken for a live context.
- * Returns 0 if the one-time struct malloc fails. */
-static customCfwContext *getCustomCfwContext(void) {
-    customCfwContext *ctx = peekCustomCfwContext();
-    if (ctx) return ctx;
-    ctx = (customCfwContext *)cfw_malloc(sizeof(customCfwContext));
-    if (ctx) {
-        bzero((uint8_t *)ctx, sizeof(customCfwContext));
-        ctx->magic = CFW_CTX_MAGIC;
-        ctx->diag_hide = 1;    /* overlay off by default; mode 7 sub 2 turns it on */
-        for (uint32_t i = 0; i < CFW_FID_RING; i++) ctx->recent_fids[i] = 0xffff;  /* sentinel */
-    }
-    *(customCfwContext **)CFW_CTX_SLOT = ctx;      /* 0 on OOM: retried next message */
-    return ctx;
-}
-
 /* Wrapper for the one global display-dispatch call handling sensor event 9 /
  * UI event 0x41 (IMU_COMPASS_DIRECTION). The stock call is always preserved.
  * Navigation normally consumes this event and invokes FW_COMPASS_NOTIFY itself,
@@ -1356,9 +1169,6 @@ static uint8_t *cfw_shadow_buffer(uint8_t *state) {
     return a;
 }
 
-static void bzero(uint8_t *buf, uint32_t len) {
-    for (uint32_t i = 0; i < len; i++) buf[i] = 0;
-}
 
 /* Return the singleton to its stock-compatible idle state without freeing it.
  * Idempotent: successfully deleted timer handles and released snapshot slots are
@@ -1492,166 +1302,6 @@ static int cfw_diag(int has_fid, uint16_t fid) {
     return 0;
 }
 
-/* ---- Terminus 6x12 bitmap font + text overlay ------------------------------
- *
- * Printable ASCII 32..126 from faceclaw/app/fonts/terminus/ter-u12n.bdf, indexed
- * by (ch - FONT_FIRST). One glyph is 12 rows x 6 columns: one byte per row with the
- * six pixels in the top six bits (bit 7 = leftmost column) — the raw BDF layout.
- * 95*12 = 1140 bytes of read-only data, carried inside the injected blob thanks to
- * build.py's -fropi rodata support (string/table literals resolve PC-relative, so
- * no linker/loader fixups are needed). */
-#define FONT_W 6
-#define FONT_H 12
-#define FONT_FIRST 32
-#define FONT_LAST  126
-static const unsigned char font6x12[FONT_LAST - FONT_FIRST + 1][FONT_H] = {
-    { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },  /*  32 ' ' */
-    { 0x00, 0x00, 0x20, 0x20, 0x20, 0x20, 0x20, 0x00, 0x20, 0x20, 0x00, 0x00 },  /*  33 '!' */
-    { 0x00, 0x50, 0x50, 0x50, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },  /*  34 '"' */
-    { 0x00, 0x00, 0x50, 0x50, 0xf8, 0x50, 0x50, 0xf8, 0x50, 0x50, 0x00, 0x00 },  /*  35 '#' */
-    { 0x00, 0x00, 0x20, 0x70, 0xa8, 0xa0, 0x70, 0x28, 0xa8, 0x70, 0x20, 0x00 },  /*  36 '$' */
-    { 0x00, 0x00, 0x48, 0xa8, 0x50, 0x10, 0x20, 0x28, 0x54, 0x48, 0x00, 0x00 },  /*  37 '%' */
-    { 0x00, 0x00, 0x20, 0x50, 0x50, 0x20, 0x68, 0x90, 0x90, 0x68, 0x00, 0x00 },  /*  38 '&' */
-    { 0x00, 0x20, 0x20, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },  /*  39 "'" */
-    { 0x00, 0x00, 0x10, 0x20, 0x40, 0x40, 0x40, 0x40, 0x20, 0x10, 0x00, 0x00 },  /*  40 '(' */
-    { 0x00, 0x00, 0x40, 0x20, 0x10, 0x10, 0x10, 0x10, 0x20, 0x40, 0x00, 0x00 },  /*  41 ')' */
-    { 0x00, 0x00, 0x00, 0x00, 0x50, 0x20, 0xf8, 0x20, 0x50, 0x00, 0x00, 0x00 },  /*  42 '*' */
-    { 0x00, 0x00, 0x00, 0x00, 0x20, 0x20, 0xf8, 0x20, 0x20, 0x00, 0x00, 0x00 },  /*  43 '+' */
-    { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x20, 0x40, 0x00 },  /*  44 ',' */
-    { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xf8, 0x00, 0x00, 0x00, 0x00, 0x00 },  /*  45 '-' */
-    { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x20, 0x00, 0x00 },  /*  46 '.' */
-    { 0x00, 0x00, 0x08, 0x08, 0x10, 0x10, 0x20, 0x20, 0x40, 0x40, 0x00, 0x00 },  /*  47 '/' */
-    { 0x00, 0x00, 0x70, 0x88, 0x98, 0xa8, 0xc8, 0x88, 0x88, 0x70, 0x00, 0x00 },  /*  48 '0' */
-    { 0x00, 0x00, 0x20, 0x60, 0x20, 0x20, 0x20, 0x20, 0x20, 0x70, 0x00, 0x00 },  /*  49 '1' */
-    { 0x00, 0x00, 0x70, 0x88, 0x88, 0x08, 0x10, 0x20, 0x40, 0xf8, 0x00, 0x00 },  /*  50 '2' */
-    { 0x00, 0x00, 0x70, 0x88, 0x08, 0x30, 0x08, 0x08, 0x88, 0x70, 0x00, 0x00 },  /*  51 '3' */
-    { 0x00, 0x00, 0x08, 0x18, 0x28, 0x48, 0x88, 0xf8, 0x08, 0x08, 0x00, 0x00 },  /*  52 '4' */
-    { 0x00, 0x00, 0xf8, 0x80, 0x80, 0xf0, 0x08, 0x08, 0x88, 0x70, 0x00, 0x00 },  /*  53 '5' */
-    { 0x00, 0x00, 0x70, 0x80, 0x80, 0xf0, 0x88, 0x88, 0x88, 0x70, 0x00, 0x00 },  /*  54 '6' */
-    { 0x00, 0x00, 0xf8, 0x08, 0x08, 0x10, 0x10, 0x20, 0x20, 0x20, 0x00, 0x00 },  /*  55 '7' */
-    { 0x00, 0x00, 0x70, 0x88, 0x88, 0x70, 0x88, 0x88, 0x88, 0x70, 0x00, 0x00 },  /*  56 '8' */
-    { 0x00, 0x00, 0x70, 0x88, 0x88, 0x88, 0x78, 0x08, 0x08, 0x70, 0x00, 0x00 },  /*  57 '9' */
-    { 0x00, 0x00, 0x00, 0x00, 0x20, 0x20, 0x00, 0x00, 0x20, 0x20, 0x00, 0x00 },  /*  58 ':' */
-    { 0x00, 0x00, 0x00, 0x00, 0x20, 0x20, 0x00, 0x00, 0x20, 0x20, 0x40, 0x00 },  /*  59 ';' */
-    { 0x00, 0x00, 0x00, 0x08, 0x10, 0x20, 0x40, 0x20, 0x10, 0x08, 0x00, 0x00 },  /*  60 '<' */
-    { 0x00, 0x00, 0x00, 0x00, 0xf8, 0x00, 0x00, 0xf8, 0x00, 0x00, 0x00, 0x00 },  /*  61 '=' */
-    { 0x00, 0x00, 0x00, 0x40, 0x20, 0x10, 0x08, 0x10, 0x20, 0x40, 0x00, 0x00 },  /*  62 '>' */
-    { 0x00, 0x00, 0x70, 0x88, 0x88, 0x10, 0x20, 0x00, 0x20, 0x20, 0x00, 0x00 },  /*  63 '?' */
-    { 0x00, 0x00, 0x70, 0x88, 0x98, 0xa8, 0xa8, 0x98, 0x80, 0x78, 0x00, 0x00 },  /*  64 '@' */
-    { 0x00, 0x00, 0x70, 0x88, 0x88, 0x88, 0xf8, 0x88, 0x88, 0x88, 0x00, 0x00 },  /*  65 'A' */
-    { 0x00, 0x00, 0xf0, 0x88, 0x88, 0xf0, 0x88, 0x88, 0x88, 0xf0, 0x00, 0x00 },  /*  66 'B' */
-    { 0x00, 0x00, 0x70, 0x88, 0x80, 0x80, 0x80, 0x80, 0x88, 0x70, 0x00, 0x00 },  /*  67 'C' */
-    { 0x00, 0x00, 0xe0, 0x90, 0x88, 0x88, 0x88, 0x88, 0x90, 0xe0, 0x00, 0x00 },  /*  68 'D' */
-    { 0x00, 0x00, 0xf8, 0x80, 0x80, 0xf0, 0x80, 0x80, 0x80, 0xf8, 0x00, 0x00 },  /*  69 'E' */
-    { 0x00, 0x00, 0xf8, 0x80, 0x80, 0xf0, 0x80, 0x80, 0x80, 0x80, 0x00, 0x00 },  /*  70 'F' */
-    { 0x00, 0x00, 0x70, 0x88, 0x80, 0x80, 0xb8, 0x88, 0x88, 0x70, 0x00, 0x00 },  /*  71 'G' */
-    { 0x00, 0x00, 0x88, 0x88, 0x88, 0xf8, 0x88, 0x88, 0x88, 0x88, 0x00, 0x00 },  /*  72 'H' */
-    { 0x00, 0x00, 0x70, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x70, 0x00, 0x00 },  /*  73 'I' */
-    { 0x00, 0x00, 0x38, 0x10, 0x10, 0x10, 0x10, 0x90, 0x90, 0x60, 0x00, 0x00 },  /*  74 'J' */
-    { 0x00, 0x00, 0x88, 0x90, 0xa0, 0xc0, 0xc0, 0xa0, 0x90, 0x88, 0x00, 0x00 },  /*  75 'K' */
-    { 0x00, 0x00, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0xf8, 0x00, 0x00 },  /*  76 'L' */
-    { 0x00, 0x00, 0x88, 0xd8, 0xa8, 0xa8, 0x88, 0x88, 0x88, 0x88, 0x00, 0x00 },  /*  77 'M' */
-    { 0x00, 0x00, 0x88, 0x88, 0xc8, 0xa8, 0x98, 0x88, 0x88, 0x88, 0x00, 0x00 },  /*  78 'N' */
-    { 0x00, 0x00, 0x70, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x70, 0x00, 0x00 },  /*  79 'O' */
-    { 0x00, 0x00, 0xf0, 0x88, 0x88, 0x88, 0xf0, 0x80, 0x80, 0x80, 0x00, 0x00 },  /*  80 'P' */
-    { 0x00, 0x00, 0x70, 0x88, 0x88, 0x88, 0x88, 0x88, 0xa8, 0x70, 0x08, 0x00 },  /*  81 'Q' */
-    { 0x00, 0x00, 0xf0, 0x88, 0x88, 0x88, 0xf0, 0xa0, 0x90, 0x88, 0x00, 0x00 },  /*  82 'R' */
-    { 0x00, 0x00, 0x70, 0x88, 0x80, 0x70, 0x08, 0x08, 0x88, 0x70, 0x00, 0x00 },  /*  83 'S' */
-    { 0x00, 0x00, 0xf8, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x00, 0x00 },  /*  84 'T' */
-    { 0x00, 0x00, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x70, 0x00, 0x00 },  /*  85 'U' */
-    { 0x00, 0x00, 0x88, 0x88, 0x88, 0x50, 0x50, 0x50, 0x20, 0x20, 0x00, 0x00 },  /*  86 'V' */
-    { 0x00, 0x00, 0x88, 0x88, 0x88, 0x88, 0xa8, 0xa8, 0xd8, 0x88, 0x00, 0x00 },  /*  87 'W' */
-    { 0x00, 0x00, 0x88, 0x88, 0x50, 0x20, 0x20, 0x50, 0x88, 0x88, 0x00, 0x00 },  /*  88 'X' */
-    { 0x00, 0x00, 0x88, 0x88, 0x50, 0x50, 0x20, 0x20, 0x20, 0x20, 0x00, 0x00 },  /*  89 'Y' */
-    { 0x00, 0x00, 0xf8, 0x08, 0x10, 0x20, 0x40, 0x80, 0x80, 0xf8, 0x00, 0x00 },  /*  90 'Z' */
-    { 0x00, 0x00, 0x70, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x70, 0x00, 0x00 },  /*  91 '[' */
-    { 0x00, 0x00, 0x40, 0x40, 0x20, 0x20, 0x10, 0x10, 0x08, 0x08, 0x00, 0x00 },  /*  92 '\\' */
-    { 0x00, 0x00, 0x70, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x70, 0x00, 0x00 },  /*  93 ']' */
-    { 0x00, 0x20, 0x50, 0x88, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },  /*  94 '^' */
-    { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xf8, 0x00 },  /*  95 '_' */
-    { 0x40, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },  /*  96 '`' */
-    { 0x00, 0x00, 0x00, 0x00, 0x70, 0x08, 0x78, 0x88, 0x88, 0x78, 0x00, 0x00 },  /*  97 'a' */
-    { 0x00, 0x00, 0x80, 0x80, 0xf0, 0x88, 0x88, 0x88, 0x88, 0xf0, 0x00, 0x00 },  /*  98 'b' */
-    { 0x00, 0x00, 0x00, 0x00, 0x70, 0x88, 0x80, 0x80, 0x88, 0x70, 0x00, 0x00 },  /*  99 'c' */
-    { 0x00, 0x00, 0x08, 0x08, 0x78, 0x88, 0x88, 0x88, 0x88, 0x78, 0x00, 0x00 },  /* 100 'd' */
-    { 0x00, 0x00, 0x00, 0x00, 0x70, 0x88, 0xf8, 0x80, 0x80, 0x78, 0x00, 0x00 },  /* 101 'e' */
-    { 0x00, 0x00, 0x18, 0x20, 0x70, 0x20, 0x20, 0x20, 0x20, 0x20, 0x00, 0x00 },  /* 102 'f' */
-    { 0x00, 0x00, 0x00, 0x00, 0x78, 0x88, 0x88, 0x88, 0x88, 0x78, 0x08, 0x70 },  /* 103 'g' */
-    { 0x00, 0x00, 0x80, 0x80, 0xf0, 0x88, 0x88, 0x88, 0x88, 0x88, 0x00, 0x00 },  /* 104 'h' */
-    { 0x00, 0x20, 0x20, 0x00, 0x60, 0x20, 0x20, 0x20, 0x20, 0x70, 0x00, 0x00 },  /* 105 'i' */
-    { 0x00, 0x08, 0x08, 0x00, 0x18, 0x08, 0x08, 0x08, 0x08, 0x08, 0x48, 0x30 },  /* 106 'j' */
-    { 0x00, 0x00, 0x40, 0x40, 0x48, 0x50, 0x60, 0x60, 0x50, 0x48, 0x00, 0x00 },  /* 107 'k' */
-    { 0x00, 0x00, 0x60, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x70, 0x00, 0x00 },  /* 108 'l' */
-    { 0x00, 0x00, 0x00, 0x00, 0xf0, 0xa8, 0xa8, 0xa8, 0xa8, 0xa8, 0x00, 0x00 },  /* 109 'm' */
-    { 0x00, 0x00, 0x00, 0x00, 0xf0, 0x88, 0x88, 0x88, 0x88, 0x88, 0x00, 0x00 },  /* 110 'n' */
-    { 0x00, 0x00, 0x00, 0x00, 0x70, 0x88, 0x88, 0x88, 0x88, 0x70, 0x00, 0x00 },  /* 111 'o' */
-    { 0x00, 0x00, 0x00, 0x00, 0xf0, 0x88, 0x88, 0x88, 0x88, 0xf0, 0x80, 0x80 },  /* 112 'p' */
-    { 0x00, 0x00, 0x00, 0x00, 0x78, 0x88, 0x88, 0x88, 0x88, 0x78, 0x08, 0x08 },  /* 113 'q' */
-    { 0x00, 0x00, 0x00, 0x00, 0xb8, 0xc0, 0x80, 0x80, 0x80, 0x80, 0x00, 0x00 },  /* 114 'r' */
-    { 0x00, 0x00, 0x00, 0x00, 0x78, 0x80, 0x70, 0x08, 0x08, 0xf0, 0x00, 0x00 },  /* 115 's' */
-    { 0x00, 0x00, 0x20, 0x20, 0x70, 0x20, 0x20, 0x20, 0x20, 0x18, 0x00, 0x00 },  /* 116 't' */
-    { 0x00, 0x00, 0x00, 0x00, 0x88, 0x88, 0x88, 0x88, 0x88, 0x78, 0x00, 0x00 },  /* 117 'u' */
-    { 0x00, 0x00, 0x00, 0x00, 0x88, 0x88, 0x50, 0x50, 0x20, 0x20, 0x00, 0x00 },  /* 118 'v' */
-    { 0x00, 0x00, 0x00, 0x00, 0x88, 0x88, 0xa8, 0xa8, 0xa8, 0x70, 0x00, 0x00 },  /* 119 'w' */
-    { 0x00, 0x00, 0x00, 0x00, 0x88, 0x50, 0x20, 0x20, 0x50, 0x88, 0x00, 0x00 },  /* 120 'x' */
-    { 0x00, 0x00, 0x00, 0x00, 0x88, 0x88, 0x88, 0x88, 0x88, 0x78, 0x08, 0x70 },  /* 121 'y' */
-    { 0x00, 0x00, 0x00, 0x00, 0xf8, 0x10, 0x20, 0x40, 0x80, 0xf8, 0x00, 0x00 },  /* 122 'z' */
-    { 0x00, 0x00, 0x18, 0x20, 0x20, 0x40, 0x20, 0x20, 0x20, 0x18, 0x00, 0x00 },  /* 123 '{' */
-    { 0x00, 0x00, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x00, 0x00 },  /* 124 '|' */
-    { 0x00, 0x00, 0x60, 0x10, 0x10, 0x08, 0x10, 0x10, 0x10, 0x60, 0x00, 0x00 },  /* 125 '}' */
-    { 0x00, 0x48, 0xa8, 0x90, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },  /* 126 '~' */
-};
-
-/* Set one pixel in the physical packed-4bpp framebuffer. */
-static void set_pixel4(uint8_t *disp, uint32_t w, uint32_t x, uint32_t y, uint8_t v) {
-    uint8_t *p = disp + y * ((w + 1u) >> 1) + (x >> 1);
-    if ((x & 1u) == 0) *p = (uint8_t)((*p & 0x0fu) | ((v & 0x0fu) << 4));
-    else                *p = (uint8_t)((*p & 0xf0u) |  (v & 0x0fu));
-}
-
-/* Draw one glyph's set pixels at (x0,y0) in color `fg` (4bpp nibble); unset pixels
- * are left untouched. Fully clipped to the packed w*h buffer; a non-printable char draws
- * nothing. */
-static void draw_glyph(uint8_t *disp, uint32_t w, uint32_t h,
-                       int x0, int y0, char ch, uint8_t fg) {
-    unsigned uc = (unsigned char)ch;
-    if (uc < FONT_FIRST || uc > FONT_LAST) return;
-    const unsigned char *g = font6x12[uc - FONT_FIRST];
-    for (int ry = 0; ry < FONT_H; ry++) {
-        int y = y0 + ry;
-        if (y < 0 || (uint32_t)y >= h) continue;
-        unsigned bits = g[ry];
-        for (int rx = 0; rx < FONT_W; rx++) {
-            int x = x0 + rx;
-            if ((bits & (0x80u >> rx)) && x >= 0 && (uint32_t)x < w)
-                set_pixel4(disp, w, (uint32_t)x, (uint32_t)y, fg);
-        }
-    }
-}
-
-/* Draw a NUL-terminated ASCII string at (x0,y0), advancing FONT_W per char, in
- * color `fg` (4bpp nibble). If bg >= 0, first fill a 1px-padded background box
- * (font height x string width) in color `bg` so the text stays legible over any
- * underlying image. */
-static void draw_string(uint8_t *disp, uint32_t w, uint32_t h,
-                        int x0, int y0, const char *s, uint8_t fg, int bg) {
-    int len = 0;
-    for (const char *p = s; *p; p++) len++;
-    if (bg >= 0) {
-        for (int ry = -1; ry <= FONT_H; ry++) {
-            int y = y0 + ry;
-            if (y < 0 || (uint32_t)y >= h) continue;
-            for (int rx = -1; rx <= len * FONT_W; rx++) {
-                int x = x0 + rx;
-                if (x >= 0 && (uint32_t)x < w)
-                    set_pixel4(disp, w, (uint32_t)x, (uint32_t)y, (uint8_t)bg);
-            }
-        }
-    }
-    int x = x0;
-    for (const char *p = s; *p; p++, x += FONT_W)
-        draw_glyph(disp, w, h, x, y0, *p, fg);
-}
 
 // Convert an unsigned int to string, and append it to a string. Truncated if
 // the resulting combined string is longer than maxlen.
@@ -1667,58 +1317,6 @@ static void u_to_dec(char *out, uint32_t v, uint32_t maxlen) {
     out[pos] = 0;
 }
 
-/* The stock TLSF build is the 32-bit, 4-byte-aligned configuration. A pool made
- * by tlsf_create_with_pool() starts after its 0xc74-byte control structure. Its
- * physical block chain has a size/status word at the pool address, then another
- * size/status word every (block size + 4) bytes, and ends with a zero-size word
- * at arena_end - 4. Sum the payload capacity of free blocks, validating every
- * step so an uninitialized pool or a concurrent split/coalesce produces "?"
- * instead of an out-of-arena read or a bogus free-space value.
- *
- * TLSF is not itself thread-safe. These diagnostics deliberately do not take the
- * allocator mutexes: they run in the display path, must not stall it, and a
- * validated approximate snapshot is preferable to introducing lock ordering
- * into that path. The aligned 32-bit metadata reads are atomic on this core. */
-#define TLSF_CONTROL_BYTES 0x0c74U
-#define TLSF_BLOCK_MIN     12U
-#define TLSF_FREE_INVALID  0xffffffffU
-
-static uint32_t tlsf_arena_free(uint32_t arena, uint32_t arena_size) {
-    uint32_t arena_end = arena + arena_size;
-    if ((arena & 3u) || arena_end < arena || arena_size < TLSF_CONTROL_BYTES + 8u)
-        return TLSF_FREE_INVALID;
-
-    uint32_t size_word = arena + TLSF_CONTROL_BYTES;
-    uint32_t free_bytes = 0;
-    uint32_t max_blocks = (arena_size - TLSF_CONTROL_BYTES - 4u) / 16u + 1u;
-    for (uint32_t n = 0; n < max_blocks; n++) {
-        if ((size_word & 3u) || size_word > arena_end - 4u)
-            return TLSF_FREE_INVALID;
-
-        uint32_t size_flags = *(volatile uint32_t *)(uintptr_t)size_word;
-        uint32_t block_size = size_flags & ~3u;
-        if (block_size == 0)
-            return size_word == arena_end - 4u ? free_bytes : TLSF_FREE_INVALID;
-        if (size_word > arena_end - 8u || block_size < TLSF_BLOCK_MIN ||
-            block_size > arena_end - size_word - 8u)
-            return TLSF_FREE_INVALID;
-
-        if (size_flags & 1u) free_bytes += block_size;
-        size_word += block_size + 4u;
-    }
-    return TLSF_FREE_INVALID;
-}
-
-/* Generic heap descriptors made by FUN_0048413c contain their TLSF pointer at
- * +4, arena size at +0x10, and arena base at +0x14. Check all three before
- * trusting the pool. The policy byte at +0x18 belongs to the higher selector. */
-static uint32_t heap_object_free(uint32_t descriptor, uint32_t arena,
-                                 uint32_t arena_size) {
-    volatile uint32_t *heap = (volatile uint32_t *)(uintptr_t)descriptor;
-    if (heap[1] != arena || heap[4] != arena_size || heap[5] != arena)
-        return TLSF_FREE_INVALID;
-    return tlsf_arena_free(arena, arena_size);
-}
 
 static void append_free_kib(char *out, uint32_t free_bytes, uint32_t maxlen) {
     if (free_bytes == TLSF_FREE_INVALID)
@@ -1782,38 +1380,6 @@ static void cfw_draw_flags(uint8_t *disp, uint32_t w, uint32_t h) {
     draw_string(disp, w, h, IMAGE_X + 2, IMAGE_Y + 2, line, 15, 0);
 }
 
-static uint32_t strlcpy(char *dst, const char *src, uint32_t len) {
-  if (len == 0) {
-      return 0;
-  }
-  for (uint32_t i=0; i<len; i++) {
-    dst[i] = src[i];
-    if (src[i] == 0) {
-      return i;
-    }
-  }
-  dst[len-1] = 0;
-  return len;
-}
-
-static uint32_t strnlen(const char *s, uint32_t maxlen) {
-  for (uint32_t i=0; i<maxlen; i++) {
-    if (s[i] == 0) {
-      return i;
-    }
-  }
-  return maxlen;
-}
-
-static uint32_t strlcat(char *dst, const char *src, uint32_t len) {
-    uint32_t i = strnlen(dst, len), j = 0;
-    for (; i < len; i++, j++) {
-        dst[i] = src[j];
-        if (src[j] == 0) return i;
-    }
-    if (len) dst[len-1] = 0;
-    return len;
-}
 
 /* ---- snapshot / restore: fix the producer/consumer race on the shared recon buffer ----
  *

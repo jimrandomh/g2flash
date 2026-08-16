@@ -47,6 +47,9 @@ typedef void (*longpress_fn)(unsigned command, unsigned app_id);
 #define ET_REL      10   /* OsEventTypeList: RING_LONG_PRESS_RELEASE_EVENT */
 #define SRC_RING    4    /* input event source byte: R1 ring */
 
+void evenhub_longpress(unsigned command, unsigned app_id);
+int ring_release(void *ctx, int code, void *data);
+
 /* Replaces the subtype-3 EvenHub force-quit dialog call. Preserve that exact
  * stock behavior unless Faceclaw owns the active EvenHub display session. Under
  * Faceclaw, gate on source==ring so press pairs with the ring-only release below;

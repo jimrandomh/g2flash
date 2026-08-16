@@ -1,3 +1,5 @@
+#include "cfw_context.h"
+
 // CFW capability advertisement and Faceclaw wake-takeover lease.
 //
 // Appends one extra protobuf field to the sid=0x09 device-settings READ response
@@ -73,8 +75,7 @@ static customCfwContext *faceclaw_context_if_valid(void) {
 
 /* Signed subtraction makes the comparison safe across the 32-bit millisecond
  * tick wrap, provided every deadline is less than 2^31 ms away (ours are). */
-__attribute__((used, noinline))
-int cfw_wake_lease_active(void) {
+__attribute__((used, noinline)) int cfw_wake_lease_active(void) {
     customCfwContext *ctx = faceclaw_context_if_valid();
     if (!ctx || ctx->wake_lease_deadline == 0) return 0;
     if ((int32_t)(ctx->wake_lease_deadline - FW_MS_TICK) <= 0) {
@@ -87,8 +88,7 @@ int cfw_wake_lease_active(void) {
 /* Faceclaw acquires this lease for every display session, unlike the optional
  * wake-takeover lease. It is therefore also the session-ownership signal used
  * by compatibility-sensitive EvenHub hooks such as long-press forwarding. */
-__attribute__((used, noinline))
-int cfw_fb_lease_active(void) {
+__attribute__((used, noinline)) int cfw_fb_lease_active(void) {
     customCfwContext *ctx = faceclaw_context_if_valid();
     if (!ctx || ctx->direct_lease_deadline == 0) return 0;
     if ((int32_t)(ctx->direct_lease_deadline - FW_MS_TICK) <= 0) {
@@ -155,8 +155,7 @@ static void faceclaw_send_wake_event(customCfwContext *ctx) {
  *   field 2 magic=0
  *   field 5 { field 1 event=1, field 2 eventParam=wearing }
  */
-__attribute__((used, noinline))
-void faceclaw_send_wear_event(unsigned wearing) {
+__attribute__((used, noinline)) void faceclaw_send_wear_event(unsigned wearing) {
     customCfwContext *ctx = getCustomCfwContext();
     if (!ctx) return;
     unsigned char *p = ctx->wear_notify_buf;
@@ -299,8 +298,7 @@ int settings_decode_wrapper(void *stream, const void *fields, void *dest) {
  * (`push {r0-r6,lr}; mov r6,r0`) are replaced by a B.W here. Reproduce them,
  * suppress only START while a valid Faceclaw lease exists, and otherwise
  * resume the stock function at 0x004e1fd6 with every argument restored. */
-__attribute__((naked))
-void faceclaw_evenai_display_entry(void) {
+__attribute__((naked)) void faceclaw_evenai_display_entry(void) {
     __asm volatile(
         "push {r0-r6, lr}\n"
         "mov r6, r0\n"
