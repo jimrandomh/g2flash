@@ -62,8 +62,8 @@
  *                              resulting heading/calibration events back to the phone.
  *   11          -> [11] cleanup the custom-app session before disconnect: release
  *                              leases/direct-framebuffer ownership, stop and delete
- *                              CFW timers, stop custom buzzer/compass activity, free
- *                              queued snapshots, and restore stock behavior. The
+ *                              CFW timers, stop custom buzzer/compass activity, release
+ *                              queued snapshot ranges, and restore stock behavior. The
  *                              singleton CFW context and sticky allocation flag remain.
  *   12          -> [12][offset32][length16] read a bounded chunk of XIP font
  *                              slot 0, or [12][slot][offset32][length16] to
@@ -80,9 +80,11 @@
  *
  * Custom modes 3/6/8/9 operate on the full 640x480 physical image. The EvenHub
  * container remains 576x288 and supplies two 165888-byte allocations: its display
- * buffer A holds the 153600-byte packed-4bpp shadow, while reconstruction buffer B
- * remains wholly available for multi-packet messages. Direct mode does not otherwise
- * use A, so this separation reaches the full panel without another large allocation.
+ * buffer A holds the 153600-byte packed-4bpp shadow. Completed compressed messages
+ * are packed into the unused tail of reconstruction buffer B until the deferred
+ * consumer runs, avoiding a separate heap allocation per in-flight frame. Direct
+ * mode does not otherwise use A, so this separation reaches the full panel without
+ * another large allocation.
  *
  * RLE (modes 3 and 6 only): those two modes do not deflate the packed 4bpp bytes
  * directly — the pixels are first run-length encoded and the RLE STREAM is what gets
@@ -133,6 +135,8 @@
 
 typedef void *(*malloc_fn)(uint32_t);
 typedef void (*free_fn)(void *);
+typedef void *(*heap_malloc_fn)(uint32_t descriptor, uint32_t size);
+typedef void (*heap_free_fn)(uint32_t descriptor, void *ptr);
 typedef int (*inflateInit2_fn)(void *strm, int windowBits, const char *ver, int ssize);
 typedef int (*inflate_fn)(void *strm, int flush);
 typedef int (*inflateEnd_fn)(void *strm);
@@ -164,6 +168,9 @@ typedef int (*font_send_fn)(int type, int sid, unsigned char *buf, unsigned len)
 /* firmware entry points (Thumb bit set for blx via constant pointer) */
 #define FW_MALLOC  ((malloc_fn)0x00474cd3U)         /* FUN_00474cd2 malloc(size) */
 #define FW_FREE    ((free_fn)0x00474d17U)           /* FUN_00474d16 free(ptr) */
+#define FW_HEAP_MALLOC ((heap_malloc_fn)0x00484181U) /* FUN_00484180 generic heap malloc */
+#define FW_HEAP_FREE   ((heap_free_fn)0x0048429fU)   /* FUN_0048429e generic heap free */
+#define FW_HEAP_13_DESCRIPTOR 0x20000354U            /* TLSF arena @ 0x2013be70, 0xcd000 B */
 #define FW_INIT2   ((inflateInit2_fn)0x005beac3U)   /* FUN_005beac2 inflateInit2_ */
 #define FW_INFLATE ((inflate_fn)0x005beb91U)        /* FUN_005beb90 inflate */
 #define FW_END     ((inflateEnd_fn)0x005bea87U)     /* FUN_005bea86 inflateEnd */
@@ -264,6 +271,7 @@ typedef int (*font_send_fn)(int type, int sid, unsigned char *buf, unsigned len)
  * dereference. */
 #define CFW_FID_RING  16     /* recent mode-3 frame ids kept for duplicate detection */
 #define CFW_SNAP_RING 12     /* in-flight compressed-message snapshots (per producer race depth) */
+#define CFW_SNAP_BUSY_SEQ 0xffffffffU /* range is reserved by the deferred worker */
 #define CFW_SEQ_MAX   48     /* max steps in a buzzer tone sequence (mode-5 kind 4) */
 #define CFW_FONT_REPLY_HEADER 12U
 #define CFW_FONT_SEND_MAX 4096U
@@ -286,9 +294,9 @@ typedef int (*font_send_fn)(int type, int sid, unsigned char *buf, unsigned len)
  * pointer so multiple containers (e.g. faceclaw's 4 tiles) don't cross-feed. */
 typedef struct {
     uint8_t *state;      /* owning image-state (key); 0 = empty slot */
-    uint8_t *buf;        /* malloc'd copy of the reassembled message */
+    uint8_t *buf;        /* copy packed into this state's reconstruction-buffer tail */
     uint32_t len;
-    uint32_t seq;        /* push order, for per-state FIFO */
+    volatile uint32_t seq; /* push order, or CFW_SNAP_BUSY_SEQ while being consumed */
 } cfw_snap;
 
 typedef struct {
@@ -337,9 +345,9 @@ typedef struct {
     volatile uint8_t compass_forward;      /* mode 10: forward global heading events to BLE */
     uint8_t  wake_notify_buf[16];          /* stable storage for sid-0x09 notify */
     uint8_t  wear_notify_buf[12];          /* stable storage for sid-0x10 wear notify */
-    /* Mode-12 response storage. The stock sender's copy/queue lifetime is opaque,
-     * so keep the largest permitted response alive until the next request. */
-    uint8_t  font_reply_buf[CFW_FONT_REPLY_HEADER + CFW_FONT_CHUNK_MAX];
+    /* Lazily allocated on the first mode-12/13 request. The stock sender's
+     * copy/queue lifetime is opaque, so it remains allocated until reboot. */
+    uint8_t *font_reply_buf;
     /* Direct-framebuffer job. The EvenHub worker holds the stock display gate
      * before it mutates the shadow and until the display task consumes this
      * pointer, so no second snapshot or full-size display buffer is required. */
@@ -353,7 +361,7 @@ typedef struct {
 #define CFW_CTX_SLOT  0x202a6270U    /* first word of the CFW-reserved TLSF tail */
 #define CFW_ALLOC_DIAG_SLOT 0x202a6274U /* second word: magic | sticky failure bit */
 #define CFW_ALLOC_DIAG_MAGIC 0xA110CA7EU
-#define CFW_CTX_MAGIC 0xC0FFEE65U    /* bumped for the relocated context anchor */
+#define CFW_CTX_MAGIC 0xC0FFEE66U    /* bumped for the context layout change */
 
 /* Keep the allocation diagnostic outside customCfwContext so failure to allocate
  * that context is itself observable. The magic rejects uninitialized/warm-reset
@@ -381,14 +389,31 @@ static void *cfw_malloc(uint32_t size) {
     return p;
 }
 
+/* Allocate from the independent 820 KiB TLSF arena at 0x2013be70. Go through
+ * the stock generic heap coordinator rather than calling TLSF directly so the
+ * descriptor's mutex, current-byte counter, and peak-byte counter stay valid. */
+__attribute__((noinline))
+static void *cfw_heap13_malloc(uint32_t size) {
+    cfw_alloc_diag();
+    void *p = FW_HEAP_MALLOC(FW_HEAP_13_DESCRIPTOR, size);
+    if (p == 0)
+        *(volatile uint32_t *)CFW_ALLOC_DIAG_SLOT = CFW_ALLOC_DIAG_MAGIC | 1u;
+    return p;
+}
+
+__attribute__((noinline))
+static void cfw_heap13_free(void *ptr) {
+    FW_HEAP_FREE(FW_HEAP_13_DESCRIPTOR, ptr);
+}
+
 void *zwrap_alloc(void *opaque, uint32_t items, uint32_t size) {
     (void)opaque;
-    return cfw_malloc(items * size);
+    return cfw_heap13_malloc(items * size);
 }
 
 void zwrap_free(void *opaque, void *ptr) {
     (void)opaque;
-    FW_FREE(ptr);
+    cfw_heap13_free(ptr);
 }
 
 /* Buzzer tone-sequence timer callback (mode-5 kind 4). Plays seq_steps[cursor],
@@ -429,11 +454,13 @@ static customCfwContext *peekCustomCfwContext(void);
 static customCfwContext *getCustomCfwContext(void);
 static uint8_t *cfw_shadow_buffer(uint8_t *state);
 static void bzero(uint8_t *buf, uint32_t len);
+static void cfw_snap_clear(cfw_snap *snap);
 static int is_shadow_message(const uint8_t *src, uint32_t srclen);
 static int cfw_diag(int has_fid, uint16_t fid);
 static void cfw_draw_flags(uint8_t *disp, uint32_t w, uint32_t h);
 static uint32_t rd16(const uint8_t *p);
 static uint32_t rd32(const uint8_t *p);
+static uint8_t *cfw_font_reply_buffer(customCfwContext *ctx);
 static int font_read_reply(const uint8_t *src, uint32_t srclen);
 static int font_probe_reply(const uint8_t *src, uint32_t srclen);
 static int cfw_cleanup_session(void);
@@ -800,9 +827,9 @@ static int image_dispatch(uint8_t *state, const uint8_t *src, uint32_t srclen,
          *
          * The stale-base race that used to force a CFW-owned shadow is now fixed at the
          * source: the worker runs on a per-frame SNAPSHOT (drained in order by
-         * image_deferred), not the live recon buffer, so successive deltas compose onto
-         * the shadow in the right order. The shadow is stable in A, while B remains
-         * dedicated to reassembly and can use its full carrier-sized allocation.
+         * image_deferred), not the live recon prefix, so successive deltas compose onto
+         * the shadow in the right order. The shadow is stable in A; snapshots occupy
+         * only B's unused tail until their deferred workers finish.
          *
          *   [3][left/4][top/2][width/4][height/2][fid_lo][fid_hi][zlib(rle(box pixels))]
          * left/width are *4 (=> multiples of 4 => even) so left>>1 and bw>>1 are whole
@@ -859,6 +886,16 @@ static int image_dispatch(uint8_t *state, const uint8_t *src, uint32_t srclen,
     return -1;
 }
 
+/* Allocate the shared mode-12/13 sender buffer only if font data is actually
+ * requested. It deliberately persists until reboot: the firmware sender's
+ * ownership/copy point is not known, and font downloads are normally a rare
+ * install-time operation. */
+static uint8_t *cfw_font_reply_buffer(customCfwContext *ctx) {
+    if (ctx->font_reply_buf == 0)
+        ctx->font_reply_buf = (uint8_t *)cfw_malloc(CFW_FONT_SEND_MAX);
+    return ctx->font_reply_buf;
+}
+
 /* Mode 12 exports only the two stock XIP font slots, never arbitrary memory:
  *
  *   legacy request = [12][offset u32 LE][length u16 LE] (slot 0)
@@ -880,7 +917,8 @@ static int font_read_reply(const uint8_t *src, uint32_t srclen) {
     customCfwContext *ctx = getCustomCfwContext();
     if (ctx == 0) return -1;
 
-    uint8_t *reply = ctx->font_reply_buf;
+    uint8_t *reply = cfw_font_reply_buffer(ctx);
+    if (reply == 0) return -1;
     uint32_t status = 0;
     uint32_t slot = srclen == 8 ? src[1] : 0;
     uint32_t offset = srclen == 8 ? rd32(src + 2) :
@@ -952,7 +990,8 @@ static int font_probe_reply(const uint8_t *src, uint32_t srclen) {
     customCfwContext *ctx = getCustomCfwContext();
     if (ctx == 0) return -1;
 
-    uint8_t *reply = ctx->font_reply_buf;
+    uint8_t *reply = cfw_font_reply_buffer(ctx);
+    if (reply == 0) return -1;
     uint32_t status = srclen == 1 ? 0 : 1;
     uint32_t payload_len = status == 0 ?
         CFW_FONT_PROBE_SNAPSHOT_SIZE +
@@ -1304,8 +1343,9 @@ int compass_event_forward(uint32_t display, uint32_t event, void *value) {
 
 /* Return the full-panel packed-4bpp shadow stored in this container's display
  * allocation A. The 576x288 carrier allocates 165888 bytes for A; the 640x480
- * shadow needs 153600, leaving 12288 bytes unused. Buffer B remains independent
- * and wholly available for reconstruction/snapshotting incoming messages. */
+ * shadow needs 153600, leaving 12288 bytes unused. Buffer B is an independent,
+ * same-sized allocation shared by live reconstruction at its head and snapshots
+ * packed into its tail. */
 static uint8_t *cfw_shadow_buffer(uint8_t *state) {
     uint8_t *a = *(uint8_t **)(state + 0x8);
     if (a == 0) return 0;
@@ -1321,7 +1361,7 @@ static void bzero(uint8_t *buf, uint32_t len) {
 }
 
 /* Return the singleton to its stock-compatible idle state without freeing it.
- * Idempotent: successfully deleted timer handles and freed snapshot slots are
+ * Idempotent: successfully deleted timer handles and released snapshot slots are
  * cleared immediately, while a timer whose delete command fails remains in the
  * context so a later cleanup can retry it. The sticky allocation diagnostic is
  * deliberately retained so cleanup cannot erase evidence of an earlier OOM. */
@@ -1362,11 +1402,7 @@ static int cfw_cleanup_session(void) {
     }
 
     for (uint32_t i = 0; i < CFW_SNAP_RING; i++) {
-        if (ctx->snaps[i].state && ctx->snaps[i].buf) FW_FREE(ctx->snaps[i].buf);
-        ctx->snaps[i].state = 0;
-        ctx->snaps[i].buf = 0;
-        ctx->snaps[i].len = 0;
-        ctx->snaps[i].seq = 0;
+        cfw_snap_clear(&ctx->snaps[i]);
     }
     ctx->snap_seq = 0;
 
@@ -1631,18 +1667,80 @@ static void u_to_dec(char *out, uint32_t v, uint32_t maxlen) {
     out[pos] = 0;
 }
 
+/* The stock TLSF build is the 32-bit, 4-byte-aligned configuration. A pool made
+ * by tlsf_create_with_pool() starts after its 0xc74-byte control structure. Its
+ * physical block chain has a size/status word at the pool address, then another
+ * size/status word every (block size + 4) bytes, and ends with a zero-size word
+ * at arena_end - 4. Sum the payload capacity of free blocks, validating every
+ * step so an uninitialized pool or a concurrent split/coalesce produces "?"
+ * instead of an out-of-arena read or a bogus free-space value.
+ *
+ * TLSF is not itself thread-safe. These diagnostics deliberately do not take the
+ * allocator mutexes: they run in the display path, must not stall it, and a
+ * validated approximate snapshot is preferable to introducing lock ordering
+ * into that path. The aligned 32-bit metadata reads are atomic on this core. */
+#define TLSF_CONTROL_BYTES 0x0c74U
+#define TLSF_BLOCK_MIN     12U
+#define TLSF_FREE_INVALID  0xffffffffU
+
+static uint32_t tlsf_arena_free(uint32_t arena, uint32_t arena_size) {
+    uint32_t arena_end = arena + arena_size;
+    if ((arena & 3u) || arena_end < arena || arena_size < TLSF_CONTROL_BYTES + 8u)
+        return TLSF_FREE_INVALID;
+
+    uint32_t size_word = arena + TLSF_CONTROL_BYTES;
+    uint32_t free_bytes = 0;
+    uint32_t max_blocks = (arena_size - TLSF_CONTROL_BYTES - 4u) / 16u + 1u;
+    for (uint32_t n = 0; n < max_blocks; n++) {
+        if ((size_word & 3u) || size_word > arena_end - 4u)
+            return TLSF_FREE_INVALID;
+
+        uint32_t size_flags = *(volatile uint32_t *)(uintptr_t)size_word;
+        uint32_t block_size = size_flags & ~3u;
+        if (block_size == 0)
+            return size_word == arena_end - 4u ? free_bytes : TLSF_FREE_INVALID;
+        if (size_word > arena_end - 8u || block_size < TLSF_BLOCK_MIN ||
+            block_size > arena_end - size_word - 8u)
+            return TLSF_FREE_INVALID;
+
+        if (size_flags & 1u) free_bytes += block_size;
+        size_word += block_size + 4u;
+    }
+    return TLSF_FREE_INVALID;
+}
+
+/* Generic heap descriptors made by FUN_0048413c contain their TLSF pointer at
+ * +4, arena size at +0x10, and arena base at +0x14. Check all three before
+ * trusting the pool. The policy byte at +0x18 belongs to the higher selector. */
+static uint32_t heap_object_free(uint32_t descriptor, uint32_t arena,
+                                 uint32_t arena_size) {
+    volatile uint32_t *heap = (volatile uint32_t *)(uintptr_t)descriptor;
+    if (heap[1] != arena || heap[4] != arena_size || heap[5] != arena)
+        return TLSF_FREE_INVALID;
+    return tlsf_arena_free(arena, arena_size);
+}
+
+static void append_free_kib(char *out, uint32_t free_bytes, uint32_t maxlen) {
+    if (free_bytes == TLSF_FREE_INVALID)
+        strlcat(out, "?", maxlen);
+    else
+        u_to_dec(out, free_bytes >> 10, maxlen); /* round down: never overstate */
+}
+
 /* Overlay, as a Terminus 6x12 text line across the top-left of the frame (white on a
  * black bar), the diagnostic flags that are set followed by the PREVIOUS message's
  * timings. Flags: REORDER, SKIP, DUP, SNAPOF, ALLOC (the last is set by any failed
- * CFW-owned heap allocation); normally all should stay clear, so this reads "OK". The timings
+ * CFW-owned allocation); normally all should stay clear, so this reads "OK". The timings
  * are microseconds: `w` = the whole image_worker, `p` = the present_shadow step within
- * it (packed framebuffer copy + cache clean), e.g. "OK w834us p210us". Suppressed when
- * diag_hide is set (mode 7). Drawn into the physical packed-4bpp framebuffer. */
+ * it (packed framebuffer copy + cache clean), e.g. "OK w834us p210us". The trailing
+ * `f13/20/27=A/B/Ck` values are free KiB (rounded down) in the TLSF arenas beginning at
+ * 0x2013be70, 0x20208e70, and 0x20279670 respectively. Suppressed when diag_hide is set
+ * (mode 7). Drawn into the physical packed-4bpp framebuffer. */
 static void cfw_draw_flags(uint8_t *disp, uint32_t w, uint32_t h) {
     customCfwContext *ctx = getCustomCfwContext();
     if (ctx == 0 || ctx->diag_hide) return;
 
-    char line[80]; line[0] = 0;
+    char line[96]; line[0] = 0;
     uint32_t num_flags = 0;
     #define ADD_FLAG(cond, name) do {                                         \
         if (cond) {                                                           \
@@ -1664,6 +1762,22 @@ static void cfw_draw_flags(uint8_t *disp, uint32_t w, uint32_t h) {
     strlcat(line, "us p", sizeof(line));
     u_to_dec(line, ctx->last_present_us, sizeof(line));
     strlcat(line, "us", sizeof(line));
+
+    uint32_t free_13 = heap_object_free(0x20000354u, 0x2013be70u, 0x000cd000u);
+    uint32_t free_20 =
+        *(volatile uint32_t *)0x20074abcu == 0x20208e70u
+            ? tlsf_arena_free(0x20208e70u, 0x00070800u)
+            : TLSF_FREE_INVALID;
+    /* The stock 0x20000338 descriptor is initialized with 0x2d000 bytes. The
+     * CFW patch reduces it to 0x2cc00, reserving the final 1 KiB for CFW state. */
+    uint32_t free_27 = heap_object_free(0x20000338u, 0x20279670u, 0x0002cc00u);
+    strlcat(line, " f13/20/27=", sizeof(line));
+    append_free_kib(line, free_13, sizeof(line));
+    strlcat(line, "/", sizeof(line));
+    append_free_kib(line, free_20, sizeof(line));
+    strlcat(line, "/", sizeof(line));
+    append_free_kib(line, free_27, sizeof(line));
+    strlcat(line, "k", sizeof(line));
 
     draw_string(disp, w, h, IMAGE_X + 2, IMAGE_Y + 2, line, 15, 0);
 }
@@ -1712,15 +1826,72 @@ static uint32_t strlcat(char *dst, const char *src, uint32_t len) {
  * deferred handler reads it -> old frame lost (skip), new one read twice (dup).
  *
  * Fix: snapshot the (small) compressed message at completion, on BOTH lenses, into a
- * per-state FIFO (snapshot_side, hooked at the both-lens `bl FUN_0045a8ec`); the
- * deferred handler (image_deferred, both lenses) pops this lens's oldest snapshot and
- * runs the worker on IT, never touching the possibly-overwritten live B. Both lenses
- * do identical work on identical data, so the sync is preserved. */
+ * per-state FIFO (snapshot_side, hooked at the both-lens `bl FUN_0045a8ec`). Snapshot
+ * bytes are packed from the END of that state's oversized reconstruction allocation;
+ * the beginning remains the stock receiver's live assembly area. The deferred handler
+ * (image_deferred, both lenses) consumes the oldest tail range, never the overwritten
+ * live prefix. Both lenses do identical work on identical data, preserving sync. */
+
+static void cfw_snap_clear(cfw_snap *snap) {
+    snap->state = 0;
+    snap->buf = 0;
+    snap->len = 0;
+    snap->seq = 0;
+}
+
+/* Find a len-byte hole as high as possible in B, avoiding all queued ranges for
+ * this reconstruction buffer. The new range may overlap the just-completed live
+ * prefix: cfw_snapshot uses a backward copy in that case, like memmove. A later
+ * reconstruction that reaches a queued range invalidates it below. */
+static uint8_t *cfw_snap_tail_alloc(customCfwContext *ctx, uint8_t *state,
+                                    uint8_t *b, uint32_t capacity,
+                                    uint32_t live_len, uint32_t len) {
+    uintptr_t base = (uintptr_t)b;
+    uintptr_t live_end = base + live_len;
+    uintptr_t end = base + capacity;
+
+    for (uint32_t i = 0; i < CFW_SNAP_RING; i++) {
+        cfw_snap *snap = &ctx->snaps[i];
+        if (snap->state != state) continue;
+        uintptr_t start = (uintptr_t)snap->buf;
+        if (start < base || start > end || snap->len > end - start) {
+            if (snap->seq != CFW_SNAP_BUSY_SEQ) cfw_snap_clear(snap);
+            continue;
+        }
+        /* The stock receiver has already written the live prefix. If it reached
+         * a queued tail range, that old frame is no longer usable. */
+        if (start < live_end && snap->seq != CFW_SNAP_BUSY_SEQ) {
+            cfw_snap_clear(snap);
+            ctx->f_snap_of = 1;
+        }
+    }
+
+    uintptr_t ceiling = end;
+    while (ceiling >= base && len <= ceiling - base) {
+        uintptr_t candidate = ceiling - len;
+        uintptr_t below = ceiling;
+        int overlap = 0;
+        for (uint32_t i = 0; i < CFW_SNAP_RING; i++) {
+            cfw_snap *snap = &ctx->snaps[i];
+            if (snap->state != state || snap->buf == 0) continue;
+            uintptr_t start = (uintptr_t)snap->buf;
+            uintptr_t finish = start + snap->len;
+            if (candidate < finish && start < ceiling) {
+                if (start < below) below = start;
+                overlap = 1;
+            }
+        }
+        if (!overlap) return (uint8_t *)candidate;
+        ceiling = below;
+    }
+    return 0;
+}
 
 /* Snapshot a just-completed CompressMode=0 message (B = *(state+0xc), len =
- * *(state+0x20)) into the per-state FIFO, then return the lens id (real
- * FUN_0045a8ec) so the caller's RIGHT gate still works. Stock-compressed messages
- * bypass this FIFO. Reached via snapshot_side, which supplies r7/r8. */
+ * *(state+0x20), capacity = *(state+0x44)) into B's tail FIFO, then return the
+ * lens id (real FUN_0045a8ec) so the caller's RIGHT gate still works.
+ * Stock-compressed messages bypass this FIFO. Reached via snapshot_side, which
+ * supplies r7/r8. */
 int cfw_snapshot(uint8_t *state, uint32_t container_id) {
     (void)container_id;
     /* CompressMode is stock-owned on 2.2.6.10: mode 1/2 payloads are RLE/LZ4
@@ -1733,25 +1904,60 @@ int cfw_snapshot(uint8_t *state, uint32_t container_id) {
         uint8_t *b = *(uint8_t **)(state + 0xc);
         uint32_t len = *(uint32_t *)(state + 0x20);
         if (b && len) {
-            int slot = -1, oldest_i = 0;
+            uint32_t capacity = *(uint32_t *)(state + 0x44);
+            int slot = -1, oldest_i = -1;
             uint32_t oldest = 0xffffffffu;
             for (int i = 0; i < CFW_SNAP_RING; i++) {
                 if (ctx->snaps[i].state == 0) { slot = i; break; }
-                if (ctx->snaps[i].seq < oldest) { oldest = ctx->snaps[i].seq; oldest_i = i; }
+                if (ctx->snaps[i].seq != CFW_SNAP_BUSY_SEQ &&
+                    ctx->snaps[i].seq < oldest) {
+                    oldest = ctx->snaps[i].seq; oldest_i = i;
+                }
             }
-            if (slot < 0) {                          /* full: evict globally-oldest */
-                FW_FREE(ctx->snaps[oldest_i].buf);
-                ctx->snaps[oldest_i].state = 0;
+            if (slot < 0 && oldest_i >= 0) {          /* full: evict globally-oldest */
+                cfw_snap_clear(&ctx->snaps[oldest_i]);
                 ctx->f_snap_of = 1;
                 slot = oldest_i;
             }
-            uint8_t *copy = (uint8_t *)cfw_malloc(len);
-            if (copy) {
-                for (uint32_t i = 0; i < len; i++) copy[i] = b[i];
+
+            uint8_t *copy = 0;
+            while (slot >= 0 && len <= capacity)
+            {
+                copy = cfw_snap_tail_alloc(ctx, state, b, capacity, len, len);
+                if (copy) break;
+
+                /* Make room by dropping this state's oldest queued (not busy)
+                 * range. Other states have independent reconstruction buffers. */
+                int victim = -1;
+                oldest = 0xffffffffu;
+                for (int i = 0; i < CFW_SNAP_RING; i++) {
+                    if (ctx->snaps[i].state == state &&
+                        ctx->snaps[i].seq != CFW_SNAP_BUSY_SEQ &&
+                        ctx->snaps[i].seq < oldest) {
+                        oldest = ctx->snaps[i].seq;
+                        victim = i;
+                    }
+                }
+                if (victim < 0) break;
+                cfw_snap_clear(&ctx->snaps[victim]);
+                ctx->f_snap_of = 1;
+            }
+            if (copy && slot >= 0) {
+                /* Tail destinations can overlap the completed live prefix for a
+                 * near-capacity message, so copy backward when it is higher. */
+                if (copy > b) {
+                    for (uint32_t i = len; i-- > 0; ) copy[i] = b[i];
+                } else if (copy < b) {
+                    for (uint32_t i = 0; i < len; i++) copy[i] = b[i];
+                }
                 ctx->snaps[slot].state = state;
                 ctx->snaps[slot].buf = copy;
                 ctx->snaps[slot].len = len;
-                ctx->snaps[slot].seq = ctx->snap_seq++;
+                uint32_t seq = ctx->snap_seq++;
+                if (seq == CFW_SNAP_BUSY_SEQ) seq = ctx->snap_seq++;
+                ctx->snaps[slot].seq = seq;
+            } else {
+                ctx->f_snap_of = 1;
             }
         }
     }
@@ -1773,7 +1979,8 @@ __attribute__((naked)) int snapshot_side(void) {
 /* Replaces the deferred consumer's worker call (bl at 0x496a0e, both lenses). Stock-
  * compressed updates use the stock-decoded call arguments directly. Otherwise DRAINS
  * all of this lens's pending snapshots for `state` in FIFO (seq) order, running the
- * worker on each (ignoring the live B, which may be overwritten), then frees them. Draining all —
+ * worker on each (ignoring the live B, which may be overwritten), then releases their
+ * tail ranges. Draining all —
  * not just one — is required because the cross-lens timing sync can COALESCE several
  * completion messages into a single deferred call; handling only one would let the FIFO
  * fall arbitrarily far behind (-> ring overflow). If nothing is pending (a coalesced
@@ -1802,9 +2009,9 @@ int image_deferred(uint8_t *state, uint8_t *src, uint32_t len) {
         if (slot < 0) break;                              /* drained all pending for this state */
         uint8_t *buf = ctx->snaps[slot].buf;
         uint32_t blen = ctx->snaps[slot].len;
-        ctx->snaps[slot].state = 0;                       /* release the slot before working */
+        ctx->snaps[slot].seq = CFW_SNAP_BUSY_SEQ;         /* keep its tail range reserved */
         r = image_worker(state, buf, blen);
-        FW_FREE(buf);
+        cfw_snap_clear(&ctx->snaps[slot]);                /* range is reusable now */
     }
     (void)src; (void)len;
     return r;                                             /* 0 if nothing pending (no dup) */

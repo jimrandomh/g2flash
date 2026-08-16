@@ -111,10 +111,10 @@ def align_up(x, a):
 LOADBMP_BL_SITE        = (0x496a0e, "45 f0 ce fd")
 # The two both-lens `bl FUN_0045a568` (lens-identity check) sites at image-
 # reconstruction-complete in the EvenHub data parser (single- and multi-fragment).
-# Redirected to snapshot_side, which copies the fresh recon buffer into a per-state FIFO
-# (both lenses) then tail-calls the real lens-side fn so the RIGHT gate still works. This
-# + image_deferred consuming the FIFO fixes the producer/consumer race on the shared
-# recon buffer. See the snapshot/restore note in zlib_glue.c.
+# Redirected to snapshot_side, which copies the fresh message into a per-state FIFO
+# packed into the recon-buffer tail (both lenses), then tail-calls the real lens-side fn
+# so the RIGHT gate still works. This + image_deferred consuming the FIFO fixes the
+# producer/consumer race on the live recon-buffer prefix. See zlib_glue.c.
 SNAPSHOT_BL_SITES      = {   # both decode to `bl 0x45a568` (verified)
     0x4db968: "7e f7 fe fd",   # single-fragment complete
     0x4dbd5c: "7e f7 04 fc",   # multi-fragment last-fragment complete
@@ -304,10 +304,10 @@ def layout(img):
         (g2f(0x4dc08e), "bd f8 2e 00", "40 f2 21 11", "container height movw #0x121"),
         (g2f(0x4dc092), "91 28",       "88 42",       "container height cmp r0,r1"),
         # Snapshot/restore (fixes the shared-recon-buffer producer/consumer race): at the
-        # both-lens completion, redirect `bl FUN_0045a8ec` -> snapshot_side (copies the fresh
-        # message into a per-state FIFO, then returns the lens id); the deferred consumer
-        # `bl FUN_0050164a` -> image_deferred (pops the FIFO and runs the worker on the
-        # snapshot, ignoring the possibly-overwritten live buffer).
+        # both-lens completion, redirect `bl FUN_0045a8ec` -> snapshot_side (copies the
+        # fresh message into a FIFO in the recon-buffer tail, then returns the lens id);
+        # the deferred consumer `bl FUN_0050164a` -> image_deferred (pops the FIFO and
+        # runs the worker on the snapshot, ignoring the possibly-overwritten live buffer).
         *[(g2f(site), orig, enc_bl(site, snapshot_addr), f"bl snapshot_side @ {site:#x}")
           for site, orig in SNAPSHOT_BL_SITES.items()],
         (g2f(LOADBMP_BL_SITE[0]), LOADBMP_BL_SITE[1], enc_bl(LOADBMP_BL_SITE[0], deferred_addr),
