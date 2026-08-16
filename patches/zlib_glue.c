@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include "cfw_context.h"
+#include "rle.h"
 
 /*
  * zlib (DEFLATE) image support for the G2 CFW — multi-mode load wrapper.
@@ -332,8 +333,6 @@ static void rl_add(cfw_rectlist *rl, uint32_t l, uint32_t t, uint32_t w, uint32_
 static int inflate_rle(uint8_t *strm, uint8_t *base, uint32_t stride,
                        uint32_t rowbytes, uint32_t rows);
 static void present_shadow(uint8_t *state, uint32_t w, uint32_t h, cfw_rectlist *rl);
-static void rect_copy_4bpp(uint8_t *buf, uint32_t stride, uint32_t sL, uint32_t sT,
-                           uint32_t dL, uint32_t dT, uint32_t bw, uint32_t bh);
 static int image_dispatch(uint8_t *state, const uint8_t *src, uint32_t srclen,
                           int present, cfw_rectlist *rl);
 
@@ -914,127 +913,6 @@ static void present_shadow(uint8_t *state, uint32_t w, uint32_t h, cfw_rectlist 
     if (rl) rl->direct_submitted = 1;
 }
 
-/* Copy a bw x bh block of 4bpp pixels within one buffer (stride bytes/row) from
- * (sL,sT) to (dL,dT). The rects may overlap: iteration direction is chosen per axis
- * like a 2D memmove (bottom-up when the destination is lower, right-to-left when it is
- * further right). Fast whole-byte path when sL, dL and bw are all even; otherwise a
- * per-pixel nibble path (high nibble = the left / even pixel). */
-static void rect_copy_4bpp(uint8_t *buf, uint32_t stride, uint32_t sL, uint32_t sT,
-                           uint32_t dL, uint32_t dT, uint32_t bw, uint32_t bh) {
-    int rev_y = (dT > sT);
-    int rev_x = (dL > sL);
-    if ((sL & 1) == 0 && (dL & 1) == 0 && (bw & 1) == 0) {
-        uint32_t bytes = bw >> 1;
-        for (uint32_t i = 0; i < bh; i++) {
-            uint32_t y = rev_y ? (bh - 1 - i) : i;
-            uint8_t *srow = buf + (sT + y) * stride + (sL >> 1);
-            uint8_t *drow = buf + (dT + y) * stride + (dL >> 1);
-            if (rev_x) { for (uint32_t x = bytes; x-- > 0; ) drow[x] = srow[x]; }
-            else       { for (uint32_t x = 0; x < bytes; x++) drow[x] = srow[x]; }
-        }
-    } else {
-        for (uint32_t i = 0; i < bh; i++) {
-            uint32_t y = rev_y ? (bh - 1 - i) : i;
-            uint8_t *srow = buf + (sT + y) * stride;
-            uint8_t *drow = buf + (dT + y) * stride;
-            for (uint32_t j = 0; j < bw; j++) {
-                uint32_t x = rev_x ? (bw - 1 - j) : j;
-                uint32_t sx = sL + x, dx = dL + x;
-                uint8_t sv = (sx & 1) ? (srow[sx >> 1] & 0x0f) : (uint8_t)(srow[sx >> 1] >> 4);
-                uint8_t *db = &drow[dx >> 1];
-                if (dx & 1) *db = (uint8_t)((*db & 0xf0) | sv);
-                else        *db = (uint8_t)((*db & 0x0f) | (uint8_t)(sv << 4));
-            }
-        }
-    }
-}
-
-/* ---- RLE over 4bpp pixels (the inner layer of modes 3 and 6) ----------------
- *
- * See the RLE paragraph at the top of the file for the token format. The decoder is a
- * byte-at-a-time state machine so it can be driven straight from inflate's output in
- * small chunks (a token may straddle a chunk boundary), writing pixels into a
- * rectangular 4bpp destination: `rows` rows of `rowbytes` bytes, row r at
- * base + r*stride. For mode 6 that's the whole shadow; for mode 3 it's the box within
- * it (rowbytes < stride). Runs cross rows freely — the nibble stream is the wire
- * order, not per-row.
- *
- * `left` counts the nibbles still expected; the decode is complete only when it hits
- * exactly 0 with no token half-parsed. Overrunning it (or running past the last row)
- * sets `err` and the caller drops the frame. */
-typedef struct {
-    uint8_t *base;
-    uint32_t stride;      /* bytes between rows in the destination */
-    uint32_t rowbytes;    /* bytes per row actually written */
-    uint32_t rows;
-    uint32_t r;           /* current row */
-    uint32_t bpos;        /* byte offset within the current row */
-    uint32_t hi;          /* 1 = next nibble is the high (left) one */
-    uint32_t left;        /* nibbles still expected */
-    uint32_t st;          /* token parser: 0 = opcode, 1 = cnt8, 2 = cntLo, 3 = cntHi */
-    uint32_t cnt;
-    uint8_t  color;
-    uint8_t  err;
-} rle_state;
-
-static void rle_init(rle_state *s, uint8_t *base, uint32_t stride,
-                     uint32_t rowbytes, uint32_t rows) {
-    s->base = base; s->stride = stride; s->rowbytes = rowbytes; s->rows = rows;
-    s->r = 0; s->bpos = 0; s->hi = 1;
-    s->left = rowbytes * rows * 2;
-    s->st = 0; s->cnt = 0; s->color = 0; s->err = 0;
-}
-
-/* Write `n` pixels of color `v`. Aligned whole-byte spans are filled a byte at a time
- * (both nibbles at once, v*0x11); only a leading/trailing odd nibble is read-modify-
- * written. */
-static void rle_emit(rle_state *s, uint8_t v, uint32_t n) {
-    if (n > s->left) { s->err = 1; return; }        /* overruns the frame -> malformed */
-    s->left -= n;
-    uint8_t pair = (uint8_t)(v * 0x11u);
-    while (n) {
-        if (s->r >= s->rows) { s->err = 1; return; }
-        uint8_t *row = s->base + s->r * s->stride;
-        if (!s->hi) {                                /* finish the byte we're inside */
-            row[s->bpos] = (uint8_t)((row[s->bpos] & 0xf0u) | v);
-            s->bpos++; s->hi = 1; n--;
-        } else {
-            uint32_t avail = s->rowbytes - s->bpos;  /* whole bytes left in this row */
-            uint32_t bytes = n >> 1;
-            if (bytes > avail) bytes = avail;
-            for (uint32_t i = 0; i < bytes; i++) row[s->bpos + i] = pair;
-            s->bpos += bytes; n -= bytes * 2;
-            if (n && s->bpos < s->rowbytes) {        /* odd tail: open the next byte */
-                row[s->bpos] = (uint8_t)((row[s->bpos] & 0x0fu) | (uint8_t)(v << 4));
-                s->hi = 0; n--;
-            }
-        }
-        if (s->hi && s->bpos >= s->rowbytes) { s->bpos = 0; s->r++; }   /* next row */
-    }
-}
-
-/* Feed `n` bytes of RLE stream. Stops early (leaving err set) on a malformed stream. */
-static void rle_feed(rle_state *s, const uint8_t *p, uint32_t n) {
-    for (uint32_t i = 0; i < n && !s->err; i++) {
-        uint8_t b = p[i];
-        if (s->st == 0) {
-            s->color = (uint8_t)(b & 0x0fu);
-            uint32_t c = b >> 4;
-            if (c) rle_emit(s, s->color, c);         /* short form: count in the high nibble */
-            else s->st = 1;                          /* escape: count follows */
-        } else if (s->st == 1) {
-            if (b) { rle_emit(s, s->color, b); s->st = 0; }
-            else s->st = 2;                          /* second escape: 16-bit count follows */
-        } else if (s->st == 2) {
-            s->cnt = b; s->st = 3;
-        } else {
-            s->cnt |= (uint32_t)b << 8;
-            if (s->cnt == 0) s->err = 1;             /* a 0-length run can't be encoded */
-            else rle_emit(s, s->color, s->cnt);
-            s->st = 0;
-        }
-    }
-}
 
 /* Inflate an already-primed z_stream (NEXT_IN/AVAIL_IN set by the caller) and RLE-decode
  * its output into the rectangular 4bpp destination, streaming through a stack chunk so
@@ -1300,21 +1178,6 @@ static int cfw_diag(int has_fid, uint16_t fid) {
     ctx->recent_fids[ctx->recent_pos] = fid;
     ctx->recent_pos = (uint8_t)((ctx->recent_pos + 1) % CFW_FID_RING);
     return 0;
-}
-
-
-// Convert an unsigned int to string, and append it to a string. Truncated if
-// the resulting combined string is longer than maxlen.
-static void u_to_dec(char *out, uint32_t v, uint32_t maxlen) {
-    uint32_t pos = strnlen(out, maxlen);
-    uint32_t div = 1;
-    while (v / div >= 10) div *= 10;   // largest power of 10 <= v
-    do {
-        if (pos >= maxlen-1) break;
-        out[pos++] = (char)('0' + (v / div));
-        v %= div; div /= 10;
-    } while (div);
-    out[pos] = 0;
 }
 
 

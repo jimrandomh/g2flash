@@ -45,3 +45,19 @@ static uint32_t rd16(const uint8_t *p) {
 static uint32_t rd32(const uint8_t *p) {
     return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
 }
+
+
+// Convert an unsigned int to string, and append it to a string. Truncated if
+// the resulting combined string is longer than maxlen.
+static void u_to_dec(char *out, uint32_t v, uint32_t maxlen) {
+    uint32_t pos = strnlen(out, maxlen);
+    uint32_t div = 1;
+    while (v / div >= 10) div *= 10;   // largest power of 10 <= v
+    do {
+        if (pos >= maxlen-1) break;
+        out[pos++] = (char)('0' + (v / div));
+        v %= div; div /= 10;
+    } while (div);
+    out[pos] = 0;
+}
+

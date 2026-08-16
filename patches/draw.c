@@ -158,3 +158,39 @@ static void draw_string(uint8_t *disp, uint32_t w, uint32_t h, int x0, int y0, c
     for (const char *p = s; *p; p++, x += FONT_W)
         draw_glyph(disp, w, h, x, y0, *p, fg);
 }
+
+/* Copy a bw x bh block of 4bpp pixels within one buffer (stride bytes/row) from
+ * (sL,sT) to (dL,dT). The rects may overlap: iteration direction is chosen per axis
+ * like a 2D memmove (bottom-up when the destination is lower, right-to-left when it is
+ * further right). Fast whole-byte path when sL, dL and bw are all even; otherwise a
+ * per-pixel nibble path (high nibble = the left / even pixel). */
+static void rect_copy_4bpp(uint8_t *buf, uint32_t stride, uint32_t sL, uint32_t sT,
+                           uint32_t dL, uint32_t dT, uint32_t bw, uint32_t bh)
+{
+    int rev_y = (dT > sT);
+    int rev_x = (dL > sL);
+    if ((sL & 1) == 0 && (dL & 1) == 0 && (bw & 1) == 0) {
+        uint32_t bytes = bw >> 1;
+        for (uint32_t i = 0; i < bh; i++) {
+            uint32_t y = rev_y ? (bh - 1 - i) : i;
+            uint8_t *srow = buf + (sT + y) * stride + (sL >> 1);
+            uint8_t *drow = buf + (dT + y) * stride + (dL >> 1);
+            if (rev_x) { for (uint32_t x = bytes; x-- > 0; ) drow[x] = srow[x]; }
+            else       { for (uint32_t x = 0; x < bytes; x++) drow[x] = srow[x]; }
+        }
+    } else {
+        for (uint32_t i = 0; i < bh; i++) {
+            uint32_t y = rev_y ? (bh - 1 - i) : i;
+            uint8_t *srow = buf + (sT + y) * stride;
+            uint8_t *drow = buf + (dT + y) * stride;
+            for (uint32_t j = 0; j < bw; j++) {
+                uint32_t x = rev_x ? (bw - 1 - j) : j;
+                uint32_t sx = sL + x, dx = dL + x;
+                uint8_t sv = (sx & 1) ? (srow[sx >> 1] & 0x0f) : (uint8_t)(srow[sx >> 1] >> 4);
+                uint8_t *db = &drow[dx >> 1];
+                if (dx & 1) *db = (uint8_t)((*db & 0xf0) | sv);
+                else        *db = (uint8_t)((*db & 0x0f) | (uint8_t)(sv << 4));
+            }
+        }
+    }
+}
