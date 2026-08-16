@@ -27,13 +27,6 @@ for each. Two things bit us and are worth remembering if this is ever rebased ag
     addresses still exist in the new image as unrelated variables. They were re-derived
     through the instruction that loads them (firmware/map_ram.py).
 
-The old CompressMode-based per-fragment expander (frag_write, patches/decompress.c) is
-GONE as of this rebase: stock 2.2.6.10 defines CompressMode 1=RLE / 2=LZ4 for its own
-image compression, which collided with our use of that field. Their implementation
-benchmarks ~10 fps vs our zlib path's ~23 fps, so we ignore it and keep image_deferred,
-which dispatches on the image's own leading bytes ('BM' vs a small u8 mode) and runs at a
-later stage. See notes/fw-2.2.6.10-lz4-images.md.
-
 PLACEMENT MODEL — APPEND, don't overwrite. The injected code blobs
 (zlib glue, settings wrapper, gesture_fwd) are APPENDED to
 the tail of the main-app component (ota/s200_firmware_ota.bin) rather than being

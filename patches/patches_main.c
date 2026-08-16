@@ -18,11 +18,6 @@
  * `&fn`: -fropi makes an intra-CU function address PC-relative and relocation-free, so
  * no load address is needed at build time. Splitting these back into separate CUs would
  * turn those into absolute relocations that build.py rejects.
- *
- * decompress.c (frag_write: the CompressMode-driven per-fragment 1bpp->4bpp expander)
- * was dropped in the 2.2.6.10 rebase — stock now uses CompressMode itself for RLE/LZ4,
- * and image_deferred in zlib_glue.c is the better decompressor. The file is kept in the
- * tree for reference but is deliberately NOT built.
  */
 #include "zlib_glue.c"
 #include "settings_ext.c"
