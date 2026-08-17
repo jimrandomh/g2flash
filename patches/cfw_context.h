@@ -77,9 +77,6 @@ typedef struct {
     volatile uint8_t compass_forward;      /* mode 10: forward global heading events to BLE */
     uint8_t  wake_notify_buf[16];          /* stable storage for sid-0x09 notify */
     uint8_t  wear_notify_buf[12];          /* stable storage for sid-0x10 wear notify */
-    /* Lazily allocated on the first mode-12/13 request. The stock sender's
-     * copy/queue lifetime is opaque, so it remains allocated until reboot. */
-    uint8_t *font_reply_buf;
     /* Direct-framebuffer job. The EvenHub worker holds the stock display gate
      * before it mutates the shadow and until the display task consumes this
      * pointer, so no second snapshot or full-size display buffer is required. */

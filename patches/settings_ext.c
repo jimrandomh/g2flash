@@ -330,16 +330,13 @@ __attribute__((naked)) void faceclaw_evenai_display_entry(void) {
 //   wearnotify -> lifecycle-independent wear events + private current-state query
 //   compass10  -> mode 10 controls the stock compass and its navigation notifications
 //   cleanup11  -> mode 11 returns a departing custom-app session to stock state
-//   fontread12 -> mode 12 reads bounded chunks of stock XIP font slot 0
-//   fontread12x2 -> optional mode-12 selector exposes both 20px and 22px slots
-//   fontprobe13 -> mode 13 reports the live native/FreeType/XIP fallback chains
 //
 // The string is a normal rodata literal now that build.py emits/relocates .rodata
 // (earlier this had to be spelled out byte-by-byte to avoid a rodata section). strlcpy
 // comes from zlib_glue.c, which shares this translation unit via patches_main.c.
 int settings_send_wrapper(int type, int sid, unsigned char *buf, unsigned len) {
     if (sid == 9) {
-        static const char caps[] = "EVENCFW/13 img576 img640 imgz rle wakelease directfb fbguard wearnotify compass10 cleanup11 fontread12 fontread12x2 fontprobe13";
+        static const char caps[] = "EVENCFW/13 img576 img640 imgz rle wakelease directfb fbguard wearnotify compass10 cleanup11";
         unsigned char *p = buf + len;
         p[0] = 0xA2; p[1] = 0x06;                          // field 100, wire type 2: tag 802
         unsigned clen = strlcpy((char *)(p + 3), caps, sizeof(caps));

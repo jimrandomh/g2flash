@@ -67,12 +67,6 @@
  *                              CFW timers, stop custom buzzer/compass activity, release
  *                              queued snapshot ranges, and restore stock behavior. The
  *                              singleton CFW context and sticky allocation flag remain.
- *   12          -> [12][offset32][length16] read a bounded chunk of XIP font
- *                              slot 0, or [12][slot][offset32][length16] to
- *                              select slot 0/1; return it on sid 0xe0.
- *   13          -> [13] snapshot the two four-entry runtime font chains and
- *                              the first 64 bytes addressed by each record;
- *                              return the diagnostic data on sid 0xe0.
  *   anything else / too short  -> load_bmp_fast (rejects cleanly if not a BMP).
  *
  * The HIGH BIT of the mode byte is a "lenses differ" flag; most modes ignore it. For
@@ -161,7 +155,6 @@ typedef void (*display_copy_fn)(void);               /* stock 576x288 -> 640x480
 typedef int (*compass_control_fn)(void);              /* stock Start/StopIMUCompassFunc */
 typedef int (*display_event_forward_fn)(uint32_t, uint32_t, void *); /* display event -> active UI */
 typedef int (*compass_notify_fn)(uint32_t);           /* stock sid-0x08 compass notifier */
-typedef int (*font_send_fn)(int type, int sid, unsigned char *buf, unsigned len);
 
 /* firmware entry points (Thumb bit set for blx via constant pointer) */
 #define FW_INIT2   ((inflateInit2_fn)0x005beac3U)   /* FUN_005beac2 inflateInit2_ */
@@ -196,7 +189,6 @@ typedef int (*font_send_fn)(int type, int sid, unsigned char *buf, unsigned len)
 #define FW_COMPASS_STOP   ((compass_control_fn)0x0054566dU) /* FUN_0054566c StopIMUCompassFunc */
 #define FW_DISPLAY_EVENT_FORWARD ((display_event_forward_fn)0x0045f8fdU) /* FUN_0045f8fc */
 #define FW_COMPASS_NOTIFY ((compass_notify_fn)0x0058705dU) /* FUN_0058705c navigation_notify_compass_changed_cmd */
-#define FW_FONT_SEND ((font_send_fn)0x00475b15U) /* FUN_00475b14 generic aa12 sender */
 #define FW_DISPLAY_FB     (*(uint8_t * volatile *)0x200007b8U) /* stock copier's 640x480 destination */
 #define BUZZ_TIMER_ADDR 0x20074504U                   /* RAM: buzzer osTimer handle (buzzer osTimer handle global) */
 #define ZLIB_VER   ((const char *)0x0078d654U)      /* "1.1.4" */
@@ -247,23 +239,6 @@ typedef int (*font_send_fn)(int type, int sid, unsigned char *buf, unsigned len)
 
 #define RLE_CHUNK 256   /* mode-3/6 inflate scratch feeding the RLE decoder (stack) */
 
-#define CFW_FONT_REPLY_HEADER 12U
-#define CFW_FONT_SEND_MAX 4096U
-#define CFW_FONT_CHUNK_MAX (CFW_FONT_SEND_MAX - CFW_FONT_REPLY_HEADER)
-#define CFW_FONT_XIP_BASE_20 0x80100000U
-#define CFW_FONT_XIP_BASE_22 0x80700000U
-#define CFW_FONT_XIP_SLOT_SIZE (CFW_FONT_XIP_BASE_22 - CFW_FONT_XIP_BASE_20)
-#define CFW_FONT_HEADER_MAGIC 0x5A5A5A5AU
-#define CFW_FONT_PROBE_BASE 0x20002C00U
-#define CFW_FONT_PROBE_SNAPSHOT_SIZE 0xA8U
-#define CFW_FONT_PROBE_CONFIG_0 0x48U
-#define CFW_FONT_PROBE_CONFIG_1 0x78U
-#define CFW_FONT_PROBE_RECORD_SIZE 12U
-#define CFW_FONT_PROBE_RECORDS 8U
-#define CFW_FONT_PROBE_AUX_SIZE 64U
-#define CFW_FONT_PROBE_HEADER 8U
-
-
 void *zwrap_alloc(void *opaque, uint32_t items, uint32_t size) {
     (void)opaque;
     return cfw_heap13_malloc(items * size);
@@ -313,9 +288,6 @@ static void cfw_snap_clear(cfw_snap *snap);
 static int is_shadow_message(const uint8_t *src, uint32_t srclen);
 static int cfw_diag(int has_fid, uint16_t fid);
 static void cfw_draw_flags(uint8_t *disp, uint32_t w, uint32_t h);
-static uint8_t *cfw_font_reply_buffer(customCfwContext *ctx);
-static int font_read_reply(const uint8_t *src, uint32_t srclen);
-static int font_probe_reply(const uint8_t *src, uint32_t srclen);
 static int cfw_cleanup_session(void);
 
 /* Per-frame list of updated rectangles (pixel coords), assembled on the stack of the
@@ -577,14 +549,6 @@ static int image_dispatch(uint8_t *state, const uint8_t *src, uint32_t srclen,
         return cfw_cleanup_session();
     }
 
-    if (mode == 12) {
-        return font_read_reply(src, srclen);
-    }
-
-    if (mode == 13) {
-        return font_probe_reply(src, srclen);
-    }
-
     /* Custom shadow geometry is deliberately independent from the EvenHub carrier. */
     uint32_t w = IMAGE_W;
     uint32_t h = IMAGE_H;
@@ -732,157 +696,6 @@ static int image_dispatch(uint8_t *state, const uint8_t *src, uint32_t srclen,
     }
 
     return -1;
-}
-
-/* Allocate the shared mode-12/13 sender buffer only if font data is actually
- * requested. It deliberately persists until reboot: the firmware sender's
- * ownership/copy point is not known, and font downloads are normally a rare
- * install-time operation. */
-static uint8_t *cfw_font_reply_buffer(customCfwContext *ctx) {
-    if (ctx->font_reply_buf == 0)
-        ctx->font_reply_buf = (uint8_t *)cfw_malloc(CFW_FONT_SEND_MAX);
-    return ctx->font_reply_buf;
-}
-
-/* Mode 12 exports only the two stock XIP font slots, never arbitrary memory:
- *
- *   legacy request = [12][offset u32 LE][length u16 LE] (slot 0)
- *   request        = [12][slot][offset u32 LE][length u16 LE]
- *   response = [12][status][offset u32 LE][total u32 LE][length u16 LE][data]
- *
- * Status 0 is success, 1 is a malformed request, 2 is an invalid font header,
- * 3 is an invalid offset/length, and 4 is an unknown slot. Only the right/master
- * lens sends; the synchronized left-lens handler remains silent. Stock firmware
- * initializes headers at 0x80100000 (SourceHanSansSC Light 20) and 0x80700000
- * (Light 22), a 6 MiB stride. The header has no byte-length field; offset 0x3c
- * belongs to its font configuration. Therefore `total` is the bounded 6 MiB slot
- * size. Each request is separately bounds-checked. The font data is capped at
- * 4084 bytes so the 12-byte response header plus data fits the stock sender's
- * 4096-byte limit. The seven-byte request remains compatible with EVENCFW/10-11.
- */
-static int font_read_reply(const uint8_t *src, uint32_t srclen) {
-    if (FW_SIDE() != 1) return 0;
-    customCfwContext *ctx = getCustomCfwContext();
-    if (ctx == 0) return -1;
-
-    uint8_t *reply = cfw_font_reply_buffer(ctx);
-    if (reply == 0) return -1;
-    uint32_t status = 0;
-    uint32_t slot = srclen == 8 ? src[1] : 0;
-    uint32_t offset = srclen == 8 ? rd32(src + 2) :
-                      (srclen == 7 ? rd32(src + 1) : 0);
-    uint32_t length = srclen == 8 ? rd16(src + 6) :
-                      (srclen == 7 ? rd16(src + 5) : 0);
-    uint32_t total = CFW_FONT_XIP_SLOT_SIZE;
-    uint32_t font_base = slot == 1 ? CFW_FONT_XIP_BASE_22 : CFW_FONT_XIP_BASE_20;
-    const volatile uint8_t *font = (const volatile uint8_t *)font_base;
-
-    if (srclen != 7 && srclen != 8) {
-        status = 1;
-    } else if (slot > 1) {
-        status = 4;
-    } else if (*(const volatile uint32_t *)font_base != CFW_FONT_HEADER_MAGIC) {
-        status = 2;
-    } else if (length == 0 || length > CFW_FONT_CHUNK_MAX ||
-               offset > total || length > total - offset) {
-        status = 3;
-    }
-
-    reply[0] = 12;
-    reply[1] = (uint8_t)status;
-    reply[2] = (uint8_t)offset;
-    reply[3] = (uint8_t)(offset >> 8);
-    reply[4] = (uint8_t)(offset >> 16);
-    reply[5] = (uint8_t)(offset >> 24);
-    reply[6] = (uint8_t)total;
-    reply[7] = (uint8_t)(total >> 8);
-    reply[8] = (uint8_t)(total >> 16);
-    reply[9] = (uint8_t)(total >> 24);
-    reply[10] = status == 0 ? (uint8_t)length : 0;
-    reply[11] = status == 0 ? (uint8_t)(length >> 8) : 0;
-    if (status == 0) {
-        for (uint32_t i = 0; i < length; i++) {
-            reply[CFW_FONT_REPLY_HEADER + i] = font[offset + i];
-        }
-    }
-    FW_FONT_SEND(
-        1, 0xe0, reply, CFW_FONT_REPLY_HEADER + (status == 0 ? length : 0)
-    );
-    return 0;
-}
-
-/* Snapshot the live font-manager state that is absent from the static firmware
- * image. The 2.2.6.10 manager owns one contiguous 0xa8-byte RAM region:
- *
- *   +0x00  background XIP-backed lv_font_t descriptor (0x24 bytes)
- *   +0x24  foreground XIP-backed lv_font_t descriptor (0x24 bytes)
- *   +0x48  background chain: four 12-byte configuration records
- *   +0x78  foreground chain: four 12-byte configuration records
- *
- * For each configuration record, append the first 64 bytes at its +4 pointer.
- * A type-0 record therefore yields its native lv_font_t; a type-1 record yields
- * its FreeType face path. Reads are allowed only from the mapped main image,
- * SRAM, or the two known XIP font slots, preventing malformed runtime state from
- * turning this diagnostic into an arbitrary peripheral read. Wire format:
- *
- *   [13][status][version=1][count=8][snapshot_len16][aux_len16]
- *   [0xa8-byte snapshot][8 * 64-byte pointed-to prefixes]
- *
- * Status 0 is success and 1 is a malformed request. Only the right/master lens
- * sends, matching mode 12. The response fits well below FW_FONT_SEND's 4096-byte
- * ceiling and reuses the persistent mode-12 response buffer.
- */
-static int font_probe_reply(const uint8_t *src, uint32_t srclen) {
-    (void)src;
-    if (FW_SIDE() != 1) return 0;
-    customCfwContext *ctx = getCustomCfwContext();
-    if (ctx == 0) return -1;
-
-    uint8_t *reply = cfw_font_reply_buffer(ctx);
-    if (reply == 0) return -1;
-    uint32_t status = srclen == 1 ? 0 : 1;
-    uint32_t payload_len = status == 0 ?
-        CFW_FONT_PROBE_SNAPSHOT_SIZE +
-        CFW_FONT_PROBE_RECORDS * CFW_FONT_PROBE_AUX_SIZE : 0;
-
-    reply[0] = 13;
-    reply[1] = (uint8_t)status;
-    reply[2] = 1;
-    reply[3] = CFW_FONT_PROBE_RECORDS;
-    reply[4] = (uint8_t)CFW_FONT_PROBE_SNAPSHOT_SIZE;
-    reply[5] = (uint8_t)(CFW_FONT_PROBE_SNAPSHOT_SIZE >> 8);
-    reply[6] = (uint8_t)CFW_FONT_PROBE_AUX_SIZE;
-    reply[7] = (uint8_t)(CFW_FONT_PROBE_AUX_SIZE >> 8);
-
-    if (status == 0) {
-        const volatile uint8_t *snapshot =
-            (const volatile uint8_t *)CFW_FONT_PROBE_BASE;
-        for (uint32_t i = 0; i < CFW_FONT_PROBE_SNAPSHOT_SIZE; i++) {
-            reply[CFW_FONT_PROBE_HEADER + i] = snapshot[i];
-        }
-
-        uint32_t aux_base = CFW_FONT_PROBE_HEADER + CFW_FONT_PROBE_SNAPSHOT_SIZE;
-        for (uint32_t record = 0; record < CFW_FONT_PROBE_RECORDS; record++) {
-            uint32_t chain_record = record & 3u;
-            uint32_t config_offset =
-                (record < 4 ? CFW_FONT_PROBE_CONFIG_0 : CFW_FONT_PROBE_CONFIG_1) +
-                chain_record * CFW_FONT_PROBE_RECORD_SIZE;
-            uint32_t pointer =
-                *(const volatile uint32_t *)(CFW_FONT_PROBE_BASE + config_offset + 4u);
-            uint32_t aux_offset = aux_base + record * CFW_FONT_PROBE_AUX_SIZE;
-            int readable =
-                (pointer >= 0x00437FE0U && pointer <= 0x007942E4U) ||
-                (pointer >= 0x20000000U && pointer <= 0x202A6630U) ||
-                (pointer >= CFW_FONT_XIP_BASE_20 && pointer <= 0x80CFFFC0U);
-            const volatile uint8_t *pointed = (const volatile uint8_t *)pointer;
-            for (uint32_t i = 0; i < CFW_FONT_PROBE_AUX_SIZE; i++) {
-                reply[aux_offset + i] = readable ? pointed[i] : 0;
-            }
-        }
-    }
-
-    FW_FONT_SEND(1, 0xe0, reply, CFW_FONT_PROBE_HEADER + payload_len);
-    return 0;
 }
 
 /* Append (l,t,w,h) to the per-frame updated-rect list, if there's room. */

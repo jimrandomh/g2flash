@@ -42,9 +42,6 @@ fully documented):
  * Play sound effects with the piezo buzzer
  * Receive on-head detection wear/unwear events, to trigger a lock-screen
  * Use the magnetometer as a compass
- * Download either stock 6 MiB XIP font slot in bounded chunks for phone-side text-metric compatibility
- * Probe the live four-entry font fallback chains to identify native LVGL fonts
-   and FreeType face paths that are not present in the stripped firmware image
  * Take over the wakeword ("hey Even") and replace what it opens with a
    different phone-side transcription and AI agent pipeline
  * Take over the screen-wake even on the dashboard, so that you can end the
