@@ -21,6 +21,7 @@
 #define CFW_SNAP_RING 12     /* in-flight compressed-message snapshots (per producer race depth) */
 #define CFW_SNAP_BUSY_SEQ 0xffffffffU /* range is reserved by the deferred worker */
 #define CFW_SEQ_MAX   48     /* max steps in a buzzer tone sequence (mode-5 kind 4) */
+
 /* One snapshotted compressed image message. Taken at reconstruction-complete (both
  * lenses), consumed FIFO in the deferred handler. Keyed by the owning image-state
  * pointer so multiple containers (e.g. faceclaw's 4 tiles) don't cross-feed. */
@@ -91,6 +92,8 @@ typedef struct {
 #define CFW_ALLOC_DIAG_SLOT 0x202a6274U /* second word: magic | sticky failure bit */
 #define CFW_ALLOC_DIAG_MAGIC 0xA110CA7EU
 #define CFW_CTX_MAGIC 0xC0FFEE66U    /* bumped for the context layout change */
+
+#define FW_MS_TICK  (*(volatile uint32_t *)0x20074a34U)  /* firmware 1 ms OS tick (SysTick chain) */
 
 static customCfwContext *peekCustomCfwContext(void);
 static customCfwContext *getCustomCfwContext(void);

@@ -28,3 +28,4 @@
 #include "zlib_glue.c"
 #include "settings_ext.c"
 #include "gesture_fwd.c"
+#include "debug.c"
