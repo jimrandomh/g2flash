@@ -68,6 +68,22 @@
  *                              CFW timers, stop custom buzzer/compass activity, release
  *                              queued snapshot ranges, and restore stock behavior. The
  *                              singleton CFW context and sticky allocation flag remain.
+ *   12          -> [12][offset16][length16][data]... update the lazily allocated,
+ *                              zero-initialized 64 KiB phone-owned texture cache.
+ *                              Every entry is validated before any bytes are written.
+ *   13          -> [13][offset16][x16][y16][options8] draw a cached image. At offset:
+ *                              [width8][height8][4bpp RLE], decoded directly into
+ *                              the full-panel shadow with clipping.
+ *   14          -> [14][font-offset16][x16][y16][options8][strlen8][string]
+ *                              draw cached glyphs. Options contains a low-nibble
+ *                              top color plus transparency (bit 4) and inverse (bit 5).
+ *                              The font is a 96-entry uint16 image-offset table for
+ *                              characters 32..127. Bytes 1..31 adjust x by -10..20;
+ *                              each glyph advances x by its cached image width.
+ *   15          -> [15][x16][y16][options8][strlen8][UTF-8 string] draw with the
+ *                              stock background 20 px font chain and its default
+ *                              pair kerning. Bytes 1..31 adjust x by -10..20 as in
+ *                              mode 14; options and clipping also match mode 14.
  *   anything else / too short  -> load_bmp_fast (rejects cleanly if not a BMP).
  *
  * The HIGH BIT of the mode byte is a "lenses differ" flag; most modes ignore it. For
@@ -75,7 +91,7 @@
  * a stereo shift without duplicating pixels; each lens draws at its own box. For mode 9
  * it carries two rect-sets (left then right); each lens uses its own.
  *
- * Custom modes 3/6/8/9 operate on the full 640x480 physical image. The EvenHub
+ * Custom modes 3/6/8/9/13/14/15 operate on the full 640x480 physical image. The EvenHub
  * container remains 576x288 and supplies two 165888-byte allocations: its display
  * buffer A holds the 153600-byte packed-4bpp shadow. Completed compressed messages
  * are packed into the unused tail of reconstruction buffer B until the deferred
@@ -277,7 +293,8 @@ static int image_dispatch(uint8_t *state, const uint8_t *src, uint32_t srclen, i
 static int is_shadow_message(const uint8_t *src, uint32_t srclen) {
     if (src == 0 || srclen == 0) return 0;
     uint8_t mode = src[0] & 0x7fu;
-    return mode == 3 || mode == 6 || mode == 8 || mode == 9 || mode == 11;
+    return mode == 3 || mode == 6 || mode == 8 || mode == 9 || mode == 11 ||
+           mode == 13 || mode == 14 || mode == 15;
 }
 
 /* The image worker: static, called from image_deferred (the deferred consumer, which
@@ -464,9 +481,33 @@ static int image_dispatch(uint8_t *state, const uint8_t *src, uint32_t srclen, i
         return cfw_cleanup_session();
     }
 
+    if (mode == 12) {
+        /* Cache update is not a shadow mutation and therefore does not hold the
+         * display gate. The helper validates the entire entry list first. */
+        return cfw_texture_cache_update(src + 1, srclen - 1);
+    }
+
     /* Custom shadow geometry is deliberately independent from the EvenHub carrier. */
     uint32_t w = IMAGE_W;
     uint32_t h = IMAGE_H;
+
+    if (mode == 13 || mode == 14 || mode == 15) {
+        uint8_t *shadow = cfw_shadow_buffer(state);
+        if (shadow == 0) return -1;
+        int r;
+        if (mode == 13)
+            r = cfw_texture_draw_image(shadow, (w + 1u) >> 1, w, h,
+                                       src + 1, srclen - 1, rl);
+        else if (mode == 14)
+            r = cfw_texture_draw_string(shadow, (w + 1u) >> 1, w, h,
+                                        src + 1, srclen - 1, rl);
+        else
+            r = cfw_builtin_draw_string(shadow, (w + 1u) >> 1, w, h,
+                                        src + 1, srclen - 1, rl);
+        if (r != 0) return r;
+        if (present) present_shadow(state, w, h, rl);
+        return 0;
+    }
 
     if (mode == 8) {
         /* Multi-segment: [8][count][len16][submsg]... — dispatch each sub with
@@ -474,7 +515,7 @@ static int image_dispatch(uint8_t *state, const uint8_t *src, uint32_t srclen, i
          * multi-op update (e.g. scroll = rect-copy + delta, no intermediate flash).
          * Sized no larger than an uncompressed 4bpp logical image; no nesting
          * (a sub-message may not itself be a multi-segment message). Only shadow
-         * operations (modes 3/6/9) are accepted. */
+         * operations (modes 3/6/9/13/14/15) are accepted. */
         if (!present) return -1;                       /* only valid at top level */
         if (srclen < 2) return -1;
         uint32_t bmp_max = 118 + ((((w + 1) >> 1) + 3) & ~3u) * h;
@@ -487,7 +528,8 @@ static int image_dispatch(uint8_t *state, const uint8_t *src, uint32_t srclen, i
             pos += 2;
             if (seglen < 1 || pos + seglen > srclen) return -1;
             uint8_t submode = src[pos] & 0x7fu;
-            if (submode != 3 && submode != 6 && submode != 9) return -1;
+            if (submode != 3 && submode != 6 && submode != 9 &&
+                submode != 13 && submode != 14 && submode != 15) return -1;
             if (image_dispatch(state, src + pos, seglen, 0, rl) != 0) return -1;
             pos += seglen;
         }
@@ -783,6 +825,7 @@ static int cfw_cleanup_session(void) {
     ctx->direct_pending = 0;
     ctx->direct_shadow = 0;
     ctx->direct_failed = 0;
+    cfw_texture_cache_release(ctx);
 
     /* Suppress callbacks before asking the timer service to stop/delete them;
      * a callback already dispatched on the timer thread will then be harmless. */

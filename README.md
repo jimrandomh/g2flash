@@ -32,7 +32,17 @@ updating the whole screen at once, and you can send messages which perform
 rect-to-rect copies for low-bandwidth scroll animations. Because this mode
 writes directly to the framebuffer without going through EvenHub's
 screen-update functions, you cannot mix this mode with EvenHub list or text or
-list containers.
+list containers. A lease-scoped 64 KiB texture cache lets the phone upload RLE
+icons and glyphs once, then draw cached images and strings with small update
+messages. The cache is allocated and zeroed on its first write and released
+when the Faceclaw framebuffer lease ends. Cached draw commands carry an options
+byte whose low nibble selects the top output color; bit 4 makes source color 0
+transparent, and bit 5 reverses the proportional 16-entry color ramp.
+Image-handler mode 15 draws a length-prefixed UTF-8 string with the glasses'
+built-in 20 px font chain and its default pair kerning. Its payload after the
+mode byte is `[x:u16][y:u16][options:u8][strlen:u8][UTF-8 bytes]`; options match
+the cached draw commands, and inline bytes 1–31 adjust x by -10 through 20 just
+as they do in cached-font mode 14.
 
 Some other features this has (used by Faceclaw, but the exact API may not be
 fully documented):

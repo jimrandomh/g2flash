@@ -94,6 +94,7 @@ __attribute__((used, noinline)) int cfw_fb_lease_active(void) {
     if ((int32_t)(ctx->direct_lease_deadline - FW_MS_TICK) <= 0) {
         ctx->direct_lease_deadline = 0;
         ctx->direct_active = 0;
+        cfw_texture_cache_release(ctx);
         return 0;
     }
     return 1;
@@ -239,12 +240,15 @@ static void faceclaw_apply_control(const uint8_t *data, uint32_t len) {
         /* A fresh lease must earn preservation with a newly presented direct
          * frame; a renewal keeps the current one. */
         if (ctx->direct_lease_deadline == 0 ||
-            (int32_t)(ctx->direct_lease_deadline - FW_MS_TICK) <= 0)
+            (int32_t)(ctx->direct_lease_deadline - FW_MS_TICK) <= 0) {
             ctx->direct_active = 0;
+            cfw_texture_cache_release(ctx);
+        }
         ctx->direct_lease_deadline = FW_MS_TICK + FACECLAW_LEASE_MS;
     } else if (op == FACECLAW_OP_FB_RELEASE) {
         ctx->direct_lease_deadline = 0;
         ctx->direct_active = 0;
+        cfw_texture_cache_release(ctx);
     } else if (op == FACECLAW_OP_WEAR_QUERY) {
         unsigned status = FW_WEAR_STATUS();
         if (status == 1u || status == 2u)
@@ -319,24 +323,28 @@ __attribute__((naked)) void faceclaw_evenai_display_entry(void) {
 }
 
 // Capability string "EVENCFW/<ver> <space-separated feature tokens>":
-//   EVENCFW/13 -> magic prefix + contract version (detect: starts-with "EVENCFW/")
+//   EVENCFW/15 -> magic prefix + contract version (detect: starts-with "EVENCFW/")
 //   img576     -> 576x288 image containers (vs stock 288x144 cap)
 //   imgz       -> zlib (DEFLATE) compressed image payloads
 //   rle        -> compact run-length encoded delta rows
 //   wakelease  -> fail-open Faceclaw ownership of idle wakes / local Even AI
 //   directfb   -> bypass LVGL and copy the packed shadow into the panel framebuffer
-//   img640     -> modes 3/6/8/9 use the full 640x480 panel independent of the carrier
+//   img640     -> shadow drawing modes use the full 640x480 panel independent of the carrier
 //   fbguard    -> preserve direct frames across stock widget repaints under a fail-open lease
 //   wearnotify -> lifecycle-independent wear events + private current-state query
 //   compass10  -> mode 10 controls the stock compass and its navigation notifications
 //   cleanup11  -> mode 11 returns a departing custom-app session to stock state
+//   texcache12 -> mode 12 updates a lease-scoped, phone-owned 64 KiB texture cache
+//   teximg13   -> mode 13 draws/recolors a 4bpp RLE image from the texture cache
+//   texstr14   -> mode 14 draws/recolors strings through a cached glyph-offset table
+//   font15     -> mode 15 draws UTF-8 with the built-in 20 px font and kerning
 //
 // The string is a normal rodata literal now that build.py emits/relocates .rodata
 // (earlier this had to be spelled out byte-by-byte to avoid a rodata section). strlcpy
 // comes from zlib_glue.c, which shares this translation unit via patches_main.c.
 int settings_send_wrapper(int type, int sid, unsigned char *buf, unsigned len) {
     if (sid == 9) {
-        static const char caps[] = "EVENCFW/13 img576 img640 imgz rle wakelease directfb fbguard wearnotify compass10 cleanup11";
+        static const char caps[] = "EVENCFW/15 img576 img640 imgz rle wakelease directfb fbguard wearnotify compass10 cleanup11 texcache12 teximg13 texstr14 font15";
         unsigned char *p = buf + len;
         p[0] = 0xA2; p[1] = 0x06;                          // field 100, wire type 2: tag 802
         unsigned clen = strlcpy((char *)(p + 3), caps, sizeof(caps));

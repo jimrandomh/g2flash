@@ -15,7 +15,9 @@ Build a CFW image for g2_2.2.6.10 with:
       framebuffer, and
   (7) stock wear-state notifications outside onboarding plus a current-state query, and
   (8) Faceclaw compass forwarding from the global sensor display event to the stock
-      navigation BLE notifier while image-handler mode 10 is enabled.
+      navigation BLE notifier while image-handler mode 10 is enabled, and
+  (9) a lease-scoped 64 KiB texture cache plus cached-image/cached-string drawing
+      through image-handler modes 12, 13, and 14, and built-in-font mode 15.
 
 REBASED 2.2.4.34 -> 2.2.6.10 (2026-07-16). Every address below was re-derived and
 cross-checked; see notes/fw-2.2.6.10-cfw-rebase.md for the full table and the evidence

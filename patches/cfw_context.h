@@ -86,14 +86,19 @@ typedef struct {
     uint8_t direct_failed;
     uint8_t direct_active;                    /* physical framebuffer currently owns the image */
     uint32_t direct_lease_deadline;            /* fail-open repaint-guard deadline */
+    /* Phone-owned texture data, allocated lazily on the first mode-12 write and
+     * released with the Faceclaw framebuffer lease. Protocol references into
+     * this block are uint16 offsets. */
+    uint8_t *texture_cache;
 } customCfwContext;
 
 #define CFW_CTX_SLOT  0x202a6270U    /* first word of the CFW-reserved TLSF tail */
 #define CFW_ALLOC_DIAG_SLOT 0x202a6274U /* second word: magic | sticky failure bit */
 #define CFW_ALLOC_DIAG_MAGIC 0xA110CA7EU
-#define CFW_CTX_MAGIC 0xC0FFEE66U    /* bumped for the context layout change */
+#define CFW_CTX_MAGIC 0xC0FFEE67U    /* bumped for the context layout change */
 
 #define FW_MS_TICK  (*(volatile uint32_t *)0x20074a34U)  /* firmware 1 ms OS tick (SysTick chain) */
 
 static customCfwContext *peekCustomCfwContext(void);
 static customCfwContext *getCustomCfwContext(void);
+int cfw_fb_lease_active(void);

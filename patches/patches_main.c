@@ -25,6 +25,7 @@
 #include "draw.c"
 #include "cfw_context.c"
 #include "rle.c"
+#include "texture_cache.c"
 #include "zlib_glue.c"
 #include "settings_ext.c"
 #include "gesture_fwd.c"
