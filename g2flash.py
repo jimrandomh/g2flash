@@ -25,13 +25,19 @@ Protocol:
      each write acked on notify as [opcode,status]; status 0 = OK else NAK.
   per-component CRC32C (MSB-first, init0, xorout0) is in the subheader, verified
   by the glasses on END.
-  CTRL/EvenHub channel (svc e5450: write e5401 / notify e5402) carries the sid
-  0x80 heartbeat ~15s — keep it alive during the transfer.
+  Before BEGIN, authenticate on the CTRL channel with the stock app's
+  DEVICE_SETTINGS/AUTHENTICATION request. Firmware 2.2.9 appears to disconnect
+  an unauthenticated GATT client about 30 seconds after connection even while
+  OTA data is flowing.
+  The official-app OTA capture sends no EvenHub/CTRL heartbeat traffic between
+  BEGIN and the final END. OTA data fragments themselves refresh the firmware's
+  transfer watchdog, so this flasher likewise keeps CTRL traffic out of OTA.
 
 --stop-before gates the stages so a dry-run can't run past where we intend to stop.
 """
-import time, json, struct, threading, queue, asyncio, sys, argparse, re, os, random, zlib, tempfile
-import urllib.request, urllib.parse
+import time, json, struct, threading, queue, asyncio, sys, argparse, re, os, random, zlib, tempfile, types
+import urllib.parse
+import http.client
 
 # Debug fault injection (env-driven): force a single failure on component
 # G2_FAULT_COMPONENT, block G2_FAULT_BLOCK, mode G2_FAULT_MODE ('frag'|'ack').
@@ -51,8 +57,8 @@ CTRL = ("00002760-08c2-11e1-9073-0e8ac72e5450",   # EvenHub/heartbeat svc (handl
         "00002760-08c2-11e1-9073-0e8ac72e5401",   # write  0x0842
         "00002760-08c2-11e1-9073-0e8ac72e5402")   # notify 0x0844
 
-# Expected firmware layout: exactly 5 segments, one of which is the main image.
-EXPECTED_SEGMENTS = 5
+# Known firmware layouts contain five or six segments and always include the
+# main application image below.
 REQUIRED_SEGMENT = "ota/s200_firmware_ota.bin"
 
 # --- main-app MRAM size ceiling (see memory: g2-firmware-size-limit) ---------
@@ -79,6 +85,9 @@ def allowed(stage, stop_before): return STAGES.index(stage) < STAGES.index(stop_
 # and the flash-writer advances ONE block per accepted block. Re-sending a block
 # that was already written therefore double-advances the flash offset and corrupts
 # everything after it -> the per-component END check (status 7 = CHECK_FAIL) fails.
+# Stock 2.2.9's BLE-close handler also zeroes the OTA session and receive cursor
+# (its logged path is "conn close reset"), so there is no reconnect-and-resume
+# path. The protocol exposes neither a block number nor a committed-offset query.
 # So: only resend in place on an explicit NAK (firmware rejected it, did not advance);
 # on a bare ack-timeout (ambiguous: ack may just be lost on the bridge hop) abandon
 # the attempt and re-flash the WHOLE component, which restarts cleanly from FILE_CHECK.
@@ -89,6 +98,8 @@ BLOCK_ACK_TIMEOUT = 4      # s to wait for a 4 KB block ack. A healthy block ack
                            # drops the connection. Fail fast and re-flash the component.
 BLOCK_NAK_RETRIES = 3      # in-place resends on an explicit NAK (safe: firmware did not advance)
 COMPONENT_RETRIES = 3      # whole-component re-flash attempts on END check-fail / ack-timeout
+RECONNECT_ATTEMPTS = 3     # connection attempts after a timeout tears down the OTA session
+RECONNECT_DELAY = 10.0     # let the arm finish disconnecting and advertise again
 
 # eOTATransmitRsp (ota_transmit.proto) — ack status byte meanings.
 OTA_RSP = {0:"SUCCESS",1:"HEADER_ERR",2:"PATH_ERR",3:"CRC_ERR",4:"TIMEOUT",5:"NO_RESOURCES",
@@ -117,7 +128,8 @@ def crc32c_msb(buf,_t=[]):
     return crc
 CHUNK=232
 _seq=[0]
-_seq_lock=threading.Lock()    # heartbeat thread + data path both call _nextseq()
+_seq_lock=threading.Lock()
+_write_lock=threading.RLock() # keep marker+block writes as one transaction
 def _reset_seq():
     with _seq_lock: _seq[0]=0
 def _nextseq():
@@ -135,6 +147,28 @@ def frames(sid,pb,flag=0x00,seq=None):
     return out
 def ctrl_frames(op,data=b'',seq=None): return frames(0xc0,bytes([op])+data,seq=seq)
 def data_frames(block,seq=None):        return frames(0xc1,block,seq=seq)
+
+def auth_frames():
+    """Build the stock single-packet G2 authentication request.
+
+    We use the envelope sequence as the protobuf magic/request id (the counters
+    need not be equal, but both are arbitrary request identifiers). A 2.2.8
+    stock app capture sent this DEVICE_SETTINGS/AUTHENTICATION(4) message after
+    enabling CCCDs; its success response echoes the magic id.
+    """
+    magic=_nextseq()
+    pb=bytes([0x08,0x04,0x10,magic,0x1a,0x04,0x08,0x01,0x10,0x04])
+    return magic, frames(0x80,pb,seq=magic)
+
+def write_group(tp, writes):
+    """Write one indivisible protocol transaction.
+
+    A block marker and its data fragments share an envelope sequence number and
+    must stay adjacent on the OTA characteristic.
+    """
+    with _write_lock:
+        for svc, ch, frame, wtype in writes:
+            tp.write(svc, ch, frame.hex(), wtype)
 
 # ---------------- firmware parsing / validation ----------------
 def parse_firmware_segments(img):
@@ -288,12 +322,49 @@ class Bridge:
         self.base=base.rstrip('/'); self.token=token
         self.notes=queue.Queue()      # (char_uuid_lower, bytes)
         self._stop=False
+        endpoint=urllib.parse.urlparse(self.base)
+        self._http_host=endpoint.hostname
+        self._http_port=endpoint.port or (443 if endpoint.scheme=='https' else 80)
+        self._http_cls=http.client.HTTPSConnection if endpoint.scheme=='https' else http.client.HTTPConnection
+        self._http=None
+        self._http_lock=threading.Lock()
     def _req(self,path,obj=None,method=None):
         data=json.dumps(obj).encode() if obj is not None else None
-        r=urllib.request.Request(self.base+path,data=data,method=method or ('POST' if data else 'GET'))
-        if self.token: r.add_header('Authorization','Bearer '+self.token)
-        if data: r.add_header('Content-Type','application/json')
-        with urllib.request.urlopen(r,timeout=30) as resp: return resp.read()
+        verb=method or ('POST' if data else 'GET')
+        headers={}
+        if self.token: headers['Authorization']='Bearer '+self.token
+        if data: headers['Content-Type']='application/json'
+        # One 4 KB OTA block is 19 writes. urllib opens a new TCP connection for
+        # every request, which makes the DroidBridge path slow enough to approach
+        # 2.2.9's 90-second OTA watchdog on the 80-block codec component. Reuse a
+        # single HTTP/1.1 connection and retry once if the server closed it.
+        with self._http_lock:
+            for attempt in range(2):
+                try:
+                    if self._http is None:
+                        self._http=self._http_cls(self._http_host,self._http_port,timeout=30)
+                    self._http.request(verb,path,body=data,headers=headers)
+                    resp=self._http.getresponse()
+                    body=resp.read()
+                    if resp.will_close:
+                        self._http.close(); self._http=None
+                    if not 200 <= resp.status < 300:
+                        raise RuntimeError(f"DroidBridge {verb} {path} failed: HTTP {resp.status}: "
+                                           f"{body.decode('utf-8','replace')[:300]}")
+                    return body
+                except (http.client.HTTPException, OSError):
+                    if self._http is not None:
+                        try: self._http.close()
+                        except Exception: pass
+                        self._http=None
+                    if attempt: raise
+    def close(self):
+        self._stop=True
+        with self._http_lock:
+            if self._http is not None:
+                try: self._http.close()
+                except Exception: pass
+                self._http=None
     def status(self): return json.loads(self._req('/status'))
     def connect(self,a): return self._req('/connect',{"address":a})
     def discover(self,a): return self._req('/discover',{"address":a})
@@ -335,11 +406,12 @@ class DroidBridgeTransport:
     def status(self):
         try: return f"droidbridge {self.br.base}: {self.br.status()}"
         except Exception as e: return f"droidbridge {self.br.base}: status failed ({e})"
-    def connect(self):
-        # fresh GATT state: stale notify/connection state makes begin time out
+    def disconnect(self):
         try: self.br._req('/disconnect',{"address":self.address})
         except Exception: pass
-        time.sleep(2)
+    def connect(self):
+        # The caller disconnects first so reconnect recovery can control the
+        # advertising-settle interval explicitly.
         self.br.connect(self.address); time.sleep(2)
     def discover(self):
         self.br.discover(self.address)
@@ -357,8 +429,7 @@ class DroidBridgeTransport:
             return  # debug: simulate a dropped write-without-response fragment
         self.br.write(self.address, svc, ch, hexdata, wtype)
     def close(self):
-        try: self.br._req('/disconnect',{"address":self.address})
-        except Exception: pass
+        self.disconnect()
 
 # G2 arms advertise as "Even G#_<serial>_<L|R>_<last-3-MAC-bytes>", e.g.
 # "Even G2_32_L_693CCB" for MAC EC:D7:82:69:3C:CB. Groups: (serial, side, mactail).
@@ -366,6 +437,19 @@ G2_NAME_RE = re.compile(r'(?:even\s+)?G\d+_(\d+)_([LR])_([0-9a-fA-F]{6})', re.I)
 SCAN_TIMEOUT = 20   # s to scan before giving up on finding an arm
 
 def _norm_addr(s): return re.sub(r'[^0-9a-f]', '', (s or '').lower())
+
+def _corebluetooth_error_detail(error):
+    """Format the NSError Bleak normally discards on CoreBluetooth disconnect."""
+    if error is None:
+        return "CoreBluetooth error=nil"
+    def field(name, fallback):
+        try:
+            value=getattr(error, name)
+            return value() if callable(value) else value
+        except Exception:
+            return fallback
+    return (f"CoreBluetooth domain={field('domain', '?')} code={field('code', '?')}"
+            f" description={field('localizedDescription', str(error))}")
 
 def match_scanned_device(devs, address, side):
     """Pick a scanned arm for the requested address/side. `devs` is bleak's
@@ -405,12 +489,47 @@ class LocalBleTransport:
         self.address=address; self.address_type=address_type; self.side=side
         self.notes=queue.Queue()
         self.client=None
+        self.disconnected_event=threading.Event()
+        self.disconnected_at=None
+        self.disconnect_detail=None
+        self._disconnect_requested=False
+        self._disconnect_manager=None
+        self._disconnect_original=None
         self._loop=asyncio.new_event_loop()
         self._thr=threading.Thread(target=self._run_loop, daemon=True)
         self._thr.start()
     def _run_loop(self):
         asyncio.set_event_loop(self._loop); self._loop.run_forever()
     def _call(self, coro): return asyncio.run_coroutine_threadsafe(coro, self._loop).result()
+    def _remove_disconnect_error_hook(self):
+        if self._disconnect_manager is not None and self._disconnect_original is not None:
+            try:
+                self._disconnect_manager.did_disconnect_peripheral=self._disconnect_original
+            except Exception:
+                pass
+        self._disconnect_manager=None
+        self._disconnect_original=None
+    def _install_disconnect_error_hook(self):
+        """Retain CoreBluetooth's disconnect NSError before Bleak drops it.
+
+        This is deliberately best-effort because these are Bleak backend internals;
+        failure to install the diagnostic must never prevent a flash.
+        """
+        self._remove_disconnect_error_hook()
+        manager=getattr(self.client, '_central_manager_delegate', None)
+        if manager is None:
+            return
+        original=manager.did_disconnect_peripheral
+        owner=self
+        def hooked(_manager, central, peripheral, error):
+            owner.disconnect_detail=_corebluetooth_error_detail(error)
+            return original(central, peripheral, error)
+        try:
+            manager.did_disconnect_peripheral=types.MethodType(hooked, manager)
+            self._disconnect_manager=manager
+            self._disconnect_original=original
+        except Exception:
+            pass
     def status(self):
         return f"local BLE {self.side or '?'} {self.address}" + (f" ({self.address_type})" if self.address_type else "")
     def connect(self):
@@ -426,12 +545,37 @@ class LocalBleTransport:
                     f"G2 arms advertising now: {seen or 'none'}. "
                     "The arm must be powered on and NOT connected to the phone (close the Even app / "
                     "turn off the phone's Bluetooth) so it advertises for a direct connection.")
-            self.client=BleakClient(dev)
+            self.disconnected_event.clear()
+            self.disconnected_at=None
+            self.disconnect_detail=None
+            self._disconnect_requested=False
+            def on_disconnect(_client):
+                self.disconnected_at=time.monotonic()
+                self.disconnected_event.set()
+                if DEBUG and not self._disconnect_requested:
+                    detail=f"; {self.disconnect_detail}" if self.disconnect_detail else ""
+                    print(f"    [BLE disconnected unexpectedly{detail}]")
+            self.client=BleakClient(dev, disconnected_callback=on_disconnect)
             await self.client.connect()
+            self._install_disconnect_error_hook()
         self._call(_c())
     def discover(self):
         # bleak performs service discovery during connect()
         return bool(self.client and self.client.is_connected)
+    def disconnect(self):
+        self._disconnect_requested=True
+        async def _d():
+            if self.client and self.client.is_connected:
+                await self.client.disconnect()
+        try: self._call(_d())
+        except Exception: pass
+        self.client=None
+    def connection_state(self):
+        connected=bool(self.client and self.client.is_connected)
+        if self.disconnected_event.is_set() and not connected:
+            detail=f"; {self.disconnect_detail}" if self.disconnect_detail else ""
+            return f"BLE disconnected before ACK{detail}"
+        return "BLE connected" if connected else "BLE not connected"
     def _on_note(self, fallback_ch):
         fb=fallback_ch.lower()
         def cb(sender, data):
@@ -453,11 +597,8 @@ class LocalBleTransport:
         async def _w(): await self.client.write_gatt_char(ch, data, response=response)
         self._call(_w())
     def close(self):
-        async def _d():
-            if self.client and self.client.is_connected:
-                await self.client.disconnect()
-        try: self._call(_d())
-        except Exception: pass
+        self.disconnect()
+        self._remove_disconnect_error_hook()
         self._loop.call_soon_threadsafe(self._loop.stop)
 
 # ---------------- ack handling ----------------
@@ -476,11 +617,31 @@ def wait_ack(tp, want_op, ch_uuid, timeout=8):
         sid,pb=parse_rx(frame)
         if DEBUG: print(f"    [rx ...{ch[-4:]} sid=0x{sid:02x} pb={pb.hex()}]" if sid is not None else f"    [rx ...{ch[-4:]} {frame.hex()}]")
         if ch==ch_uuid and len(pb)>=2 and pb[0]==want_op: return pb[1]
-    raise TimeoutError(f"no ack op=0x{want_op:02x} on {ch_uuid}")
+    state=getattr(tp, 'connection_state', lambda: 'connection state unavailable')()
+    raise TimeoutError(f"no ack op=0x{want_op:02x} on {ch_uuid}; {state}")
+
+def authenticate(tp, timeout=4):
+    """Authenticate this GATT connection on CTRL and require the echoed reply."""
+    magic, request=auth_frames()
+    write_group(tp, [(CTRL[0],CTRL[1],f,1) for f in request])
+    ch_uuid=CTRL[2].lower(); deadline=time.time()+timeout
+    while time.time()<deadline:
+        try: ch,frame=tp.notes.get(timeout=max(0.1,deadline-time.time()))
+        except queue.Empty: break
+        sid,pb=parse_rx(frame)
+        if DEBUG: print(f"    [rx ...{ch[-4:]} sid=0x{sid:02x} pb={pb.hex()}]" if sid is not None else f"    [rx ...{ch[-4:]} {frame.hex()}]")
+        # Successful stock response protobuf: command=4, magic=<request>, empty
+        # result message (the omitted/default resultCode is zero).
+        if ch==ch_uuid and sid==0x80 and pb.startswith(bytes([0x08,0x04,0x10,magic])):
+            if pb[4:] == b'\x1a\x00':
+                return 0
+            raise RuntimeError(f"authentication rejected: response pb={pb.hex()}")
+    state=getattr(tp, 'connection_state', lambda: 'connection state unavailable')()
+    raise TimeoutError(f"no authentication reply on {ch_uuid}; {state}")
 
 def send_data_msg(tp, frames_list, want_op):
     svc,wch,nch=DATA
-    for f in frames_list: tp.write(svc,wch,f.hex(),1)
+    write_group(tp, [(svc,wch,f,1) for f in frames_list])
     return wait_ack(tp, want_op, nch)
 
 def send_block(tp, blk, fault=None):
@@ -494,13 +655,14 @@ def send_block(tp, blk, fault=None):
                raise TimeoutError, simulating a lost ack on a written block."""
     seq=_nextseq()
     while not tp.notes.empty(): tp.notes.get()
-    for f in ctrl_frames(0x02, seq=seq): tp.write(DATA[0],DATA[1],f.hex(),1)   # marker: reset rx offset
+    marker=ctrl_frames(0x02, seq=seq)
     dfr=data_frames(blk, seq=seq)
     if fault=='frag':
         drop=len(dfr)//2
         print(f"     [FAULT] dropping data frag {drop}/{len(dfr)} to force a block NAK")
         dfr=[f for k,f in enumerate(dfr) if k!=drop]
-    for f in dfr: tp.write(DATA[0],DATA[1],f.hex(),1)                          # 4 KB payload
+    # The marker and all payload fragments are one transaction.
+    write_group(tp, [(DATA[0],DATA[1],f,1) for f in marker+dfr])
     if fault=='ack':
         print("     [FAULT] block sent; swallowing its ack to simulate ack-loss -> timeout")
         try: wait_ack(tp, 0x02, DATA[2], timeout=BLOCK_ACK_TIMEOUT)
@@ -521,6 +683,7 @@ def flash_component(tp, seg, img, stop_before, comp_index=-1):
         return None
     nb=-(-len(payload)//4096)
     resends=0
+    data_started=time.monotonic()
     for b in range(nb):
         blk=payload[b*4096:(b+1)*4096]
         for tries in range(BLOCK_NAK_RETRIES):
@@ -530,7 +693,9 @@ def flash_component(tp, seg, img, stop_before, comp_index=-1):
             try:
                 st=send_block(tp, blk, fault=fault)
             except TimeoutError:
-                print(f"     block {b}/{nb} ACK TIMEOUT after {BLOCK_ACK_TIMEOUT}s")
+                elapsed=time.monotonic()-data_started
+                print(f"     block {b}/{nb} ACK TIMEOUT after {BLOCK_ACK_TIMEOUT}s"
+                      f" (component data elapsed {elapsed:.1f}s)")
                 raise                                            # -> whole-component re-flash (clean reset)
             if st==0: break
             resends+=1
@@ -538,10 +703,11 @@ def flash_component(tp, seg, img, stop_before, comp_index=-1):
         else:
             raise RuntimeError(f"block {b} NAK'd {BLOCK_NAK_RETRIES}x")
         if b%100==0 or b==nb-1: print(f"     {fn}: block {b+1}/{nb}")
-    print(f"     {fn}: data phase done, {resends} block resend(s); sending END")
+    print(f"     {fn}: data phase done in {time.monotonic()-data_started:.1f}s,"
+          f" {resends} block resend(s); sending END")
     return send_data_msg(tp, ctrl_frames(0x03), 0x03)            # END / OTA_TRANSMIT_RESULT_CHECK
 
-def flash_component_with_retry(tp, i, seg, img, stop_before):
+def flash_component_with_retry(tp, i, seg, img, stop_before, recover_session=None):
     """Flash a component, re-flashing the whole thing if END verification fails or a
     block ack times out. Returns 0 on success, None if stopped early, raises if it
     can't get a clean END within COMPONENT_RETRIES attempts."""
@@ -549,26 +715,36 @@ def flash_component_with_retry(tp, i, seg, img, stop_before):
     payload=img[seg['off']+128:seg['off']+128+ps]
     print(f"[{i}] {fn} ({ps}B crc32c=0x{crc32c_msb(payload):08x})")
     for attempt in range(COMPONENT_RETRIES):
+        timed_out=False
         if attempt: print(f"   re-flash attempt {attempt+1}/{COMPONENT_RETRIES}")
         try:
             end_st=flash_component(tp, seg, img, stop_before, comp_index=i)
         except (TimeoutError, RuntimeError) as e:
             print(f"   block phase failed: {e}")
             end_st=-1
+            timed_out=isinstance(e, TimeoutError)
         if end_st is None: return None
         if end_st in END_OK:
             print(f"   END verify OK ({fn}) status={end_st} ({rsp_name(end_st)})")
             return 0
         if end_st>=0:
             print(f"   END verify FAILED status={end_st} ({rsp_name(end_st)})")
-        while not tp.notes.empty(): tp.notes.get()    # settle before the next attempt
-        time.sleep(1.5)
+        if attempt+1 < COMPONENT_RETRIES:
+            if end_st==-1 and timed_out and recover_session is not None:
+                # A bare timeout is ambiguous at the block layer and frequently
+                # means 2.2.9 has dropped GATT.  Rebuild the connection and issue
+                # a fresh BEGIN before FILE_CHECK restarts the whole component.
+                recover_session()
+            else:
+                while not tp.notes.empty(): tp.notes.get()
+                time.sleep(1.5)
     raise RuntimeError(f"component {fn} failed after {COMPONENT_RETRIES} attempts")
 
 # ---------------- flash one lens ----------------
 def flash_lens(tp, img, segs, stop_before):
     _reset_seq()
     print("status:", tp.status())
+    tp.disconnect()
     tp.connect()
     ok=tp.discover()
     print("discovery:", "ok" if ok else "FAILED")
@@ -582,19 +758,17 @@ def flash_lens(tp, img, segs, stop_before):
     tp.set_notify(CTRL[0],CTRL[2],True)
     time.sleep(2.5)
     while not tp.notes.empty(): tp.notes.get()
+    authenticate(tp)
+    print("authentication: ok")
+    # CTRL and OTA use independent envelope counters in the stock app.
+    _reset_seq()
+    while not tp.notes.empty(): tp.notes.get()
     if not allowed("file_check", stop_before):
-        print(f"[stop-before={stop_before}] notify set up; stopping before FILE_CHECK."); return
+        print(f"[stop-before={stop_before}] authenticated; stopping before FILE_CHECK."); return
 
     # ---- (gated) actual flash ----
-    # heartbeat keepalive on CTRL channel during the transfer (~12s, like the app)
-    hb_stop=threading.Event()
-    def hb_loop():
-        while not hb_stop.wait(12):
-            try:
-                for f in frames(0x80, bytes.fromhex("080e10266a00")): tp.write(CTRL[0],CTRL[1],f.hex(),1)
-            except Exception: pass
-    threading.Thread(target=hb_loop,daemon=True).start()
-
+    # Do not send CTRL/EvenHub heartbeats here. In the official OTA capture the
+    # last sid=0x80 message precedes BEGIN and the next follows the final END.
     N=len(segs)
     print(f"flashing {len(img)}B, {N} components")
     while not tp.notes.empty(): tp.notes.get()          # drain stale notifications
@@ -602,13 +776,39 @@ def flash_lens(tp, img, segs, stop_before):
     print(f"begin ack {bst} ({rsp_name(bst)})")
     if bst not in END_OK: print(f"   WARNING: unexpected begin status {bst} ({rsp_name(bst)}); continuing")
     t_start=time.time()
-    try:
-        for i,seg in enumerate(segs):
-            if flash_component_with_retry(tp, i, seg, img, stop_before) is None:
-                print(f"[stop-before={stop_before}] FILE_CHECK acked; stopping before data blocks.")
+    def recover_session():
+        """Recreate GATT + CCCDs and start a new OTA session after a timeout."""
+        last=None
+        for attempt in range(RECONNECT_ATTEMPTS):
+            print(f"   reconnecting OTA session ({attempt+1}/{RECONNECT_ATTEMPTS})"
+                  f" after {RECONNECT_DELAY:g}s settle")
+            try:
+                with _write_lock:
+                    tp.disconnect()
+                    time.sleep(RECONNECT_DELAY)
+                    tp.connect()
+                    if not tp.discover():
+                        raise RuntimeError("service discovery failed after reconnect")
+                    tp.set_notify(DATA[0],DATA[2],True)
+                    tp.set_notify(CTRL[0],CTRL[2],True)
+                    time.sleep(2.5)
+                    while not tp.notes.empty(): tp.notes.get()
+                    authenticate(tp)
+                    _reset_seq()
+                    while not tp.notes.empty(): tp.notes.get()
+                    st=send_data_msg(tp, ctrl_frames(0x00), 0x00)
+                if st not in END_OK:
+                    raise RuntimeError(f"BEGIN rejected status={st} ({rsp_name(st)})")
+                print(f"   reconnected; begin ack {st} ({rsp_name(st)})")
                 return
-    finally:
-        hb_stop.set()
+            except Exception as e:
+                last=e
+                print(f"   reconnect attempt failed: {e}")
+        raise RuntimeError(f"could not restore OTA session: {last}")
+    for i,seg in enumerate(segs):
+        if flash_component_with_retry(tp, i, seg, img, stop_before, recover_session) is None:
+            print(f"[stop-before={stop_before}] FILE_CHECK acked; stopping before data blocks.")
+            return
     print(f"=== all {N} components verified in {time.time()-t_start:.0f}s; glasses should reboot into the new firmware ===")
 
 # ---------------- connection string ----------------
@@ -655,7 +855,7 @@ def confirm_warranty(skip):
 
 # ---------------- main ----------------
 def main(argv=None):
-    global DEBUG, COMPONENT_RETRIES, BLOCK_NAK_RETRIES
+    global DEBUG, COMPONENT_RETRIES, BLOCK_NAK_RETRIES, RECONNECT_ATTEMPTS, RECONNECT_DELAY
     p=argparse.ArgumentParser(description="Flash firmware onto Even Realities G2 glasses.")
     p.add_argument('-c','--connection',
                    help="connection string: g2://droidbridge?phone=..&port=..&token=..&left=..&right=.. "
@@ -675,12 +875,18 @@ def main(argv=None):
                    help=f"whole-component re-flash attempts on END fail/timeout (default {COMPONENT_RETRIES})")
     p.add_argument('--block-nak-retries', type=int, default=BLOCK_NAK_RETRIES,
                    help=f"in-place block resends on an explicit NAK (default {BLOCK_NAK_RETRIES})")
+    p.add_argument('--reconnect-attempts', type=int, default=RECONNECT_ATTEMPTS,
+                   help=f"GATT reconnect attempts after an ACK timeout (default {RECONNECT_ATTEMPTS})")
+    p.add_argument('--reconnect-delay', type=float, default=RECONNECT_DELAY,
+                   help=f"seconds to let an arm settle before reconnecting (default {RECONNECT_DELAY:g})")
     p.add_argument('--debug', action='store_true', help="print received frames")
     args=p.parse_args(argv)
 
     DEBUG=args.debug
     COMPONENT_RETRIES=args.component_retries
     BLOCK_NAK_RETRIES=args.block_nak_retries
+    RECONNECT_ATTEMPTS=max(1,args.reconnect_attempts)
+    RECONNECT_DELAY=max(0,args.reconnect_delay)
 
     if args.recompute_checksums:
         try:
@@ -732,7 +938,7 @@ def main(argv=None):
             tp.close()
 
     if bridge is not None:
-        bridge._stop=True
+        bridge.close()
 
     if failures:
         print(f"\nFAILED lenses: {failures}"); sys.exit(1)
