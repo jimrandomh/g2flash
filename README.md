@@ -44,6 +44,25 @@ mode byte is `[x:u16][y:u16][options:u8][strlen:u8][UTF-8 bytes]`; options match
 the cached draw commands, and inline bytes 1–31 adjust x by -10 through 20 just
 as they do in cached-font mode 14.
 
+The firmware also adds a microphone control plane (capability tokens `micctl`,
+`micmc`, `micraw`). Each temple carries a front + rear microphone pair, and the
+stock firmware only ever sends the phone a mono 16 kHz LC3 stream. The mic
+extension lets the phone choose, per temple, the capture front end (codec vs
+PDM), which of the pair's microphones are used, the codec (LC3 vs raw PCM
+passthrough), sample format/rate, and LC3 bitrate, over a private
+settings-channel message (sid 0x09 field 103), with live read-back on field 104
+so a UI (e.g. SybilSight's glasses -> microphones menu) can display and confirm
+the active configuration of both temples. When armed, capture is streamed as
+`'SM'` frames carrying the multi-channel samples, a millisecond timestamp, and
+the on-device SSR + TDOA angle estimate — everything a phone-side beamformer
+needs to do direction-of-arrival processing across the four microphones,
+fused with the compass/IMU heading the firmware already forwards. Streaming is
+held by a fail-open 90-second renewal lease, so mics can never be left running
+when the phone goes away. Bringing up the capture hardware is additionally
+gated behind an explicit arm flag because several of the recovered stock audio
+entry points are ABI-inferred and must be validated on hardware first; see the
+contract comment in `patches/mic_control.c`.
+
 Some other features this has (used by Faceclaw, but the exact API may not be
 fully documented):
 

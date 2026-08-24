@@ -41,6 +41,15 @@
 
 typedef int  (*send_fn)(int type, int sid, unsigned char *buf, unsigned len);
 typedef int  (*pb_decode_fn)(void *stream, const void *fields, void *dest);
+
+/* Microphone-control extension (mic_control.c, same translation unit). Field 103
+ * carries mic configuration (ops CONFIGURE/QUERY/STOP/RENEW); field 104 reads the
+ * live config back, both appended to every settings READ and pushed as a
+ * standalone notify on CONFIGURE/QUERY/STOP. Both ride the already-wired
+ * sid-0x09 hooks below — no new patch sites. */
+#define MIC_CONTROL_FIELD 103u
+void mic_apply_control(const uint8_t *data, uint32_t len);
+unsigned mic_append_status(unsigned char *p);
 typedef void (*display_start_fn)(unsigned app_id, void *arg, unsigned arg_len, void *cb);
 
 #define FW_SEND 0x00475b15 /* FUN_00475b14 | thumb bit */
@@ -276,6 +285,8 @@ static void faceclaw_scan_settings_control(const uint8_t *buf, uint32_t len) {
                 item_len > (uint32_t)(end - p)) return;
             if (field == FACECLAW_CONTROL_FIELD)
                 faceclaw_apply_control(p, item_len);
+            else if (field == MIC_CONTROL_FIELD)
+                mic_apply_control(p, item_len);
             p += item_len;
         } else if (wire == 5) {
             if ((uint32_t)(end - p) < 4) return;
@@ -323,7 +334,7 @@ __attribute__((naked)) void faceclaw_evenai_display_entry(void) {
 }
 
 // Capability string "EVENCFW/<ver> <space-separated feature tokens>":
-//   EVENCFW/15 -> magic prefix + contract version (detect: starts-with "EVENCFW/")
+//   EVENCFW/16 -> magic prefix + contract version (detect: starts-with "EVENCFW/")
 //   img576     -> 576x288 image containers (vs stock 288x144 cap)
 //   imgz       -> zlib (DEFLATE) compressed image payloads
 //   rle        -> compact run-length encoded delta rows
@@ -338,18 +349,22 @@ __attribute__((naked)) void faceclaw_evenai_display_entry(void) {
 //   teximg13   -> mode 13 draws/recolors a 4bpp RLE image from the texture cache
 //   texstr14   -> mode 14 draws/recolors strings through a cached glyph-offset table
 //   font15     -> mode 15 draws UTF-8 with the built-in 20 px font and kerning
+//   micctl     -> private mic-control channel (field 103 / read-back field 104)
+//   micmc      -> per-temple multi-channel (dual-mic) capture selectable
+//   micraw     -> raw PCM passthrough selectable (vs on-device LC3)
 //
 // The string is a normal rodata literal now that build.py emits/relocates .rodata
 // (earlier this had to be spelled out byte-by-byte to avoid a rodata section). strlcpy
 // comes from zlib_glue.c, which shares this translation unit via patches_main.c.
 int settings_send_wrapper(int type, int sid, unsigned char *buf, unsigned len) {
     if (sid == 9) {
-        static const char caps[] = "EVENCFW/15 img576 img640 imgz rle wakelease directfb fbguard wearnotify compass10 cleanup11 texcache12 teximg13 texstr14 font15";
+        static const char caps[] = "EVENCFW/16 img576 img640 imgz rle wakelease directfb fbguard wearnotify compass10 cleanup11 texcache12 teximg13 texstr14 font15 micctl micmc micraw";
         unsigned char *p = buf + len;
         p[0] = 0xA2; p[1] = 0x06;                          // field 100, wire type 2: tag 802
         unsigned clen = strlcpy((char *)(p + 3), caps, sizeof(caps));
         p[2] = (unsigned char)clen;                        // length-delimited payload length
         len += 3 + clen;
+        len += mic_append_status(buf + len);               // field 104: live mic status
     }
     return ((send_fn)FW_SEND)(type, sid, buf, len);
 }

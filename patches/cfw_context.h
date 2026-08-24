@@ -90,12 +90,34 @@ typedef struct {
      * released with the Faceclaw framebuffer lease. Protocol references into
      * this block are uint16 offsets. */
     uint8_t *texture_cache;
+    /* --- Microphone control + multi-channel routing (SybilSight "glasses ->
+     * microphones"). See the contract comment in mic_control.c; the stock-entry
+     * recovery evidence lives in evenRealities-openCFW/g2/docs/research/
+     * (g2-service-audio-recovery.md, g2-service-algo-recovery.md,
+     * g2-production-mic-recovery.md). Config is advertised/read back over
+     * sid-0x09 fields 103/104; capture + streaming are gated behind
+     * MIC_FLAG_ARM_HW plus a fail-open renewal lease. Appended at the tail so
+     * every existing field offset is unchanged. --- */
+    uint8_t  mic_active;                    /* 1 = a CFW mic configuration is in effect */
+    uint8_t  mic_source;                    /* 0 = codec DMIC/I2S, 1 = Ambiq PDM mics */
+    uint8_t  mic_channels;                  /* requested channel count (1 = mono, 2 = dual) */
+    uint8_t  mic_chan_mask;                 /* per-mic enable bitmask (bit0=front, bit1=rear) */
+    uint8_t  mic_codec;                     /* requested: 0 = LC3 encoded, 1 = raw PCM passthrough */
+    uint8_t  mic_format;                    /* PCM width: 0=16-bit, 1=24-bit, 2=32-bit */
+    uint8_t  mic_flags;                     /* MIC_FLAG_* (beamform append, arm hardware) */
+    uint8_t  mic_hw_armed;                  /* 1 = capture + tap are live */
+    uint16_t mic_rate_hz_div;               /* requested sample rate, units of 100 Hz (160 = 16 kHz) */
+    uint16_t mic_bitrate_100;               /* LC3 target bitrate, units of 100 bps (0 = default) */
+    uint32_t mic_frames;                    /* stream frames emitted since session start */
+    uint32_t mic_lease_deadline;            /* FW_MS_TICK streaming-lease deadline; 0 = none */
+    uint32_t mic_watchdog_timer;            /* one-shot osTimer tearing down a lapsed session */
+    uint8_t  mic_notify_buf[32];            /* stable storage for the field-104 sid-0x09 notify */
 } customCfwContext;
 
 #define CFW_CTX_SLOT  0x202a6270U    /* first word of the CFW-reserved TLSF tail */
 #define CFW_ALLOC_DIAG_SLOT 0x202a6274U /* second word: magic | sticky failure bit */
 #define CFW_ALLOC_DIAG_MAGIC 0xA110CA7EU
-#define CFW_CTX_MAGIC 0xC0FFEE67U    /* bumped for the context layout change */
+#define CFW_CTX_MAGIC 0xC0FFEE68U    /* bumped for the context layout change (mic fields) */
 
 #define FW_MS_TICK  (*(volatile uint32_t *)0x20074a34U)  /* firmware 1 ms OS tick (SysTick chain) */
 

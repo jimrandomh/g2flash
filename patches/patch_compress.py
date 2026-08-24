@@ -17,7 +17,11 @@ Build a CFW image for g2_2.2.6.10 with:
   (8) Faceclaw compass forwarding from the global sensor display event to the stock
       navigation BLE notifier while image-handler mode 10 is enabled, and
   (9) a lease-scoped 64 KiB texture cache plus cached-image/cached-string drawing
-      through image-handler modes 12, 13, and 14, and built-in-font mode 15.
+      through image-handler modes 12, 13, and 14, and built-in-font mode 15, and
+  (10) a phone-controlled microphone configuration + multi-channel audio streaming
+      channel (settings fields 103/104 + the 'SM' stream frame) riding the
+      already-hooked sid-0x09 settings seams -- no new patch sites; see
+      mic_control.c for the contract and its hardware validation gate.
 
 REBASED 2.2.4.34 -> 2.2.6.10 (2026-07-16). Every address below was re-derived and
 cross-checked; see notes/fw-2.2.6.10-cfw-rebase.md for the full table and the evidence
