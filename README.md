@@ -47,8 +47,8 @@ as they do in cached-font mode 14.
 Some other features this has (used by Faceclaw, but the exact API may not be
 fully documented):
 
- * Receive R1 ring long-press and long-press-release as regular gestures, rather
-   than opening a modal offering to quit
+ * Receive ring and temple-touchpad long-press and long-press-release as regular
+   source-qualified gestures, rather than opening a modal offering to quit
  * Play sound effects with the piezo buzzer
  * Receive on-head detection wear/unwear events, to trigger a lock-screen
  * Use the magnetometer as a compass
