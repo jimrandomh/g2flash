@@ -320,12 +320,13 @@ def layout(img):
         *[(g2f(site), orig, enc_bl(site, display_start_addr),
            f"bl faceclaw_display_start @ {site:#x} (fail-open double-tap takeover)")
           for site, orig in DISPLAY_START_BL_SITES.items()],
-        # EvenHub long-press + ring release-long-press forwarding
+        # EvenHub long-press + release-long-press forwarding, preserving source
         (g2f(GESTURE_LONGPRESS_SITE[0]), GESTURE_LONGPRESS_SITE[1],
          enc_bl(GESTURE_LONGPRESS_SITE[0], longpress_addr),
          "bl evenhub_longpress (Faceclaw lease gates custom event vs stock dialog)"),
         (g2f(GESTURE_RELEASE_SITE[0]), GESTURE_RELEASE_SITE[1],
-         enc_bl(GESTURE_RELEASE_SITE[0], release_addr), "bl ring_release (forward ring release-long-press)"),
+         enc_bl(GESTURE_RELEASE_SITE[0], release_addr),
+         "bl ring_release (forward source-qualified release-long-press)"),
         (g2f(EVENAI_ENTRY_SITE[0]), EVENAI_ENTRY_SITE[1],
          enc_bw(EVENAI_ENTRY_SITE[0], evenai_entry_addr),
          "even_ai_display_ctrl entry -> conditional Faceclaw lease trampoline"),
