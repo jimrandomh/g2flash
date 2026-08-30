@@ -21,6 +21,7 @@
  */
 
 #include "utils.c"
+#include "protobuf.c"
 #include "malloc.c"
 #include "draw.c"
 #include "cfw_context.c"

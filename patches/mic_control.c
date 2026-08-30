@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include "cfw_context.h"
 #include "malloc.h"
+#include "protobuf.h"
 
 /*
  * Microphone-control + multi-channel routing CFW extension for the G2
@@ -426,10 +427,11 @@ static unsigned mic_status_body(customCfwContext *ctx, unsigned char *body) {
 }
 
 /* Append the live mic configuration as settings field 104 (wire type 2) to the
- * sid-0x09 settings READ response. tag = (104<<3)|2 = 834 -> varint 0xC2 0x06.
- * Returns bytes written. A missing context reports an all-zero (inactive) body
- * of the same shape so the phone parser never needs a special case. */
-unsigned mic_append_status(unsigned char *p) {
+ * sid-0x09 settings READ response. A missing context reports an all-zero
+ * (inactive) body of the same shape so the phone parser never needs a special
+ * case. Returns the new message length, or the original length if it will not
+ * fit in the settings response buffer. */
+unsigned mic_append_status(unsigned char *buf, unsigned len, unsigned capacity) {
     customCfwContext *ctx = peekCustomCfwContext();
     unsigned char body[24];
     unsigned n;
@@ -440,7 +442,5 @@ unsigned mic_append_status(unsigned char *p) {
         body[n++] = 'M'; body[n++] = 'C'; body[n++] = (unsigned char)MIC_PROTO_VERSION;
         while (n < 21u) body[n++] = 0;
     }
-    p[0] = 0xC2; p[1] = 0x06; p[2] = (unsigned char)n;
-    for (unsigned i = 0; i < n; i++) p[3 + i] = body[i];
-    return 3u + n;
+    return pb_append_bytes_field(buf, len, capacity, 104u, body, n);
 }
