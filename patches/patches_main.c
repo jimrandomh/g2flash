@@ -21,6 +21,7 @@
  */
 
 #include "utils.c"
+#include "protobuf.c"
 #include "malloc.c"
 #include "draw.c"
 #include "cfw_context.c"
@@ -28,5 +29,6 @@
 #include "texture_cache.c"
 #include "zlib_glue.c"
 #include "settings_ext.c"
+#include "mic_control.c"
 #include "gesture_fwd.c"
 #include "debug.c"
