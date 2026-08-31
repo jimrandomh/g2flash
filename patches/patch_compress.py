@@ -132,6 +132,15 @@ LOADBMP_BL_SITE        = (0x4a4402, "49 f0 da ff")
 # the RIGHT gate still works. This + image_deferred consuming the FIFO fixes the live-
 # recon-buffer producer/consumer race for both completion paths with one patch.
 SNAPSHOT_BL_SITE       = (0x4ec0ee, "70 f7 75 ff")
+# On the RIGHT lens, 2.2.9.22 normally returns from the shared completion helper
+# after successfully queueing the deferred image event.  The ACK context lives in
+# one unguarded state slot (+0x48..+0x54), so a second pipelined completion can
+# overwrite the first magic before the deferred consumer sends its ACK.  Retarget
+# the success branch to the helper's existing immediate-response block instead:
+# it clears +0x48 and ACKs the current magic after the event has been accepted.
+# The later deferred callback then sees no pending ACK and cannot duplicate it.
+IMAGE_ACK_SUCCESS_SITE = (0x4ec10e, "30 d0")  # beq 0x4ec172 (defer ACK)
+IMAGE_ACK_IMMEDIATE    = "1c d0"              # beq 0x4ec14a (send ACK now)
 SETTINGS_BL_SITE       = (0x4a90e4, "d4 f7 90 fb")  # bl FUN_0047d808 (aa21 send) -> wrapper
 # nanopb decode in pb_service_setting's inbound parser. The wrapper scans raw
 # unknown field 101 before the stock decoder discards it, then tail-calls decode.
@@ -340,6 +349,9 @@ def layout(img):
         (g2f(SNAPSHOT_BL_SITE[0]), SNAPSHOT_BL_SITE[1],
          enc_bl(SNAPSHOT_BL_SITE[0], snapshot_addr),
          f"bl snapshot_side @ {SNAPSHOT_BL_SITE[0]:#x} (shared image-complete helper)"),
+        (g2f(IMAGE_ACK_SUCCESS_SITE[0]), IMAGE_ACK_SUCCESS_SITE[1],
+         IMAGE_ACK_IMMEDIATE,
+         "image-complete success -> immediate ACK (pipelining-safe)"),
         (g2f(LOADBMP_BL_SITE[0]), LOADBMP_BL_SITE[1], enc_bl(LOADBMP_BL_SITE[0], deferred_addr),
          "bl image_deferred (deferred consumer -> FIFO restore + worker, both lenses)"),
         # redirect the settings responder send -> settings_send_wrapper (caps field 100)

@@ -1,7 +1,7 @@
 {
   "base": "g2_2.2.9.22.bin",
   "base_sha256": "a03fbea9f68a9de6bc271daabb9f3a41c59053d1086622c76a4e990f829cc561",
-  "output_sha256": "53edd52086e5df99764bd444ba9df0926d68c2f1c2d9cf928b8c9303bda33608",
+  "output_sha256": "ceeede999529505ebc0a1369f57ab3c941273379a90b16669ccd39cc6bd99135",
   "patches": [
     {
       "offset": 1124178,
@@ -32,6 +32,12 @@
       "old": "70f775ff",
       "new": "d6f217fb",
       "desc": "bl snapshot_side @ 0x4ec0ee (shared image-complete helper)"
+    },
+    {
+      "offset": 1516816,
+      "old": "30d0",
+      "new": "1cd0",
+      "desc": "image-complete success -> immediate ACK (pipelining-safe)"
     },
     {
       "offset": 1222660,
@@ -144,19 +150,19 @@
     {
       "offset": 779238,
       "old": "85c355a2",
-      "new": "88a2b7bc",
+      "new": "a7a15eca",
       "desc": "[5] ota/s200_firmware_ota.bin preamble crc32"
     },
     {
       "offset": 156,
       "old": "ed292ee4",
-      "new": "3486bc4e",
+      "new": "94a735cb",
       "desc": "[5] ota/s200_firmware_ota.bin component crc32c (TOC)"
     },
     {
       "offset": 779118,
       "old": "ed292ee4",
-      "new": "3486bc4e",
+      "new": "94a735cb",
       "desc": "[5] ota/s200_firmware_ota.bin component crc32c (subheader)"
     }
   ]
