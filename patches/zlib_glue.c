@@ -6,7 +6,8 @@
 /*
  * zlib (DEFLATE) image support for the G2 CFW — multi-mode load wrapper.
  *
- * Replaces the one BMP-loader call FUN_0050164a(state, buf, len) in FUN_004ae69c.
+ * Replaces the BMP-loader call FUN_004ee3ba(state, buf, len) in the 2.2.9.22
+ * EvenHub reflash-event handler.
  * Dispatch on the first byte of the reassembled image buffer:
  *
  *   'B' (0x42)  -> raw BMP: decode with our own fast 4bpp decoder (load_bmp_fast).
@@ -125,7 +126,7 @@
  * a client streaming image updates to maximize throughput would otherwise trip the
  * "Connection lost" teardown. See FW_KEEPALIVE_RESET at the top of load_image_z.
  *
- * BMP handling (mode 'B') does NOT use the stock loader FUN_0050164a: that
+ * BMP handling (mode 'B') does NOT use the stock loader FUN_004ee3ba: that
  * decoder runs two non-inlined function calls PER PIXEL (palette pack + luminance
  * blend) plus a whole-buffer CRC, which costs more CPU than the airtime it saves.
  * load_bmp_fast instead does a direct 4bpp-nibble -> 8bpp (nibble*17) expand,
@@ -174,41 +175,41 @@ typedef int (*display_event_forward_fn)(uint32_t, uint32_t, void *); /* display 
 typedef int (*compass_notify_fn)(uint32_t);           /* stock sid-0x08 compass notifier */
 
 /* firmware entry points (Thumb bit set for blx via constant pointer) */
-#define FW_INIT2   ((inflateInit2_fn)0x005beac3U)   /* FUN_005beac2 inflateInit2_ */
-#define FW_INFLATE ((inflate_fn)0x005beb91U)        /* FUN_005beb90 inflate */
-#define FW_END     ((inflateEnd_fn)0x005bea87U)     /* FUN_005bea86 inflateEnd */
-#define FW_LOADBMP ((loadbmp_fn)0x004dc5afU)        /* FUN_004dc5ae set_image_data / BMP decoder */
-#define FW_FLUSH   ((cacheflush_fn)0x0047510fU)     /* FUN_0047510e dcache clean range */
-#define FW_SETSRC  ((lv_set_src_fn)0x00498681U)     /* FUN_00498680 lv_image_set_src */
-#define FW_INVAL   ((lv_invalidate_fn)0x00440657U)  /* FUN_00440656 lv_obj_invalidate */
-#define FW_SIDE    ((lens_side_fn)0x0045a569U)       /* FUN_0045a568 -> 2=left, 1=right */
-#define FW_BUZZ_PRESET ((buzz_preset_fn)0x00502b5bU) /* FUN_00502b5a DRV_BuzzerPlayAfterQueue(type 0..8) */
-#define FW_BUZZ_NOTE   ((buzz_note_fn)0x00502bf9U)   /* FUN_00502bf8 DRV_BuzzerPlayNote(note,tone,beat) */
-#define FW_BUZZ_RESET  ((buzz_reset_fn)0x00502ac5U)  /* FUN_00502ac4 buzzer stop/reset */
-#define FW_BUZZ_RAW    ((buzz_raw_fn)0x00502c89U)     /* FUN_00502c88 reset+power+PWM(freq,duty) */
-#define FW_TIMER_START ((timer_start_fn)0x00449499U)  /* FUN_00449498 osTimerStart(handle,ms) */
-#define FW_TIMER_NEW   ((timer_new_fn)0x004493b1U)    /* FUN_004493b0 osTimerNew(cb,type,arg,attr) */
-#define FW_TIMER_STOP  ((timer_stop_fn)0x004494d9U)   /* FUN_004494d8 osTimerStop(handle) */
-#define FW_TIMER_DELETE ((timer_delete_fn)0x0044953fU) /* FUN_0044953e osTimerDelete(handle) */
-#define FW_APP_START ((app_start_fn)0x00464b2fU)       /* FUN_00464b2e REQUEST_DISPLAY_START_UP */
-#define FW_KEEPALIVE_RESET ((keepalive_reset_fn)0x004e0cbbU) /* FUN_004e0cba: EvenHub keepalive
-                                                     * counter (@0x200745ac) = 0. This is the exact
+#define FW_INIT2   ((inflateInit2_fn)0x005d6167U)   /* FUN_005d6166 inflateInit2_ */
+#define FW_INFLATE ((inflate_fn)0x005d6235U)        /* FUN_005d6234 inflate */
+#define FW_END     ((inflateEnd_fn)0x005d612bU)     /* FUN_005d612a inflateEnd */
+#define FW_LOADBMP ((loadbmp_fn)0x004ee3bbU)        /* FUN_004ee3ba set_image_data / BMP decoder */
+#define FW_FLUSH   ((cacheflush_fn)0x0047ce03U)     /* FUN_0047ce02 dcache clean range */
+#define FW_SETSRC  ((lv_set_src_fn)0x004a60c1U)     /* FUN_004a60c0 lv_image_set_src */
+#define FW_INVAL   ((lv_invalidate_fn)0x00440d9bU)  /* FUN_00440d9a lv_obj_invalidate */
+#define FW_SIDE    ((lens_side_fn)0x0045cfddU)       /* FUN_0045cfdc -> 2=left, 1=right */
+#define FW_BUZZ_PRESET ((buzz_preset_fn)0x00516f0bU) /* FUN_00516f0a DRV_BuzzerPlayAfterQueue(type 0..8) */
+#define FW_BUZZ_NOTE   ((buzz_note_fn)0x00516fa9U)   /* FUN_00516fa8 DRV_BuzzerPlayNote(note,tone,beat) */
+#define FW_BUZZ_RESET  ((buzz_reset_fn)0x00516e75U)  /* FUN_00516e74 buzzer stop/reset */
+#define FW_BUZZ_RAW    ((buzz_raw_fn)0x00517039U)     /* FUN_00517038 reset+power+PWM(freq,duty) */
+#define FW_TIMER_START ((timer_start_fn)0x00442c4dU)  /* FUN_00442c4c osTimerStart(handle,ms) */
+#define FW_TIMER_NEW   ((timer_new_fn)0x00442b65U)    /* FUN_00442b64 osTimerNew(cb,type,arg,attr) */
+#define FW_TIMER_STOP  ((timer_stop_fn)0x00442c8dU)   /* FUN_00442c8c osTimerStop(handle) */
+#define FW_TIMER_DELETE ((timer_delete_fn)0x00442cf3U) /* FUN_00442cf2 osTimerDelete(handle) */
+#define FW_APP_START ((app_start_fn)0x0046a39fU)       /* FUN_0046a39e REQUEST_DISPLAY_START_UP */
+#define FW_KEEPALIVE_RESET ((keepalive_reset_fn)0x004f3d77U) /* FUN_004f3d76: EvenHub keepalive
+                                                     * counter (@0x20077364) = 0. This is the exact
                                                      * leaf the stock sid-0x0c heartbeat handler in
                                                      * the EvenHub UI event handler calls; it takes no args and reads
                                                      * the counter pointer from its own literal pool. */
-#define FW_LOOKUP        ((lookup_fn)0x004e0ccfU)    /* FUN_004e0cce(id) -> spec node; state=*(node+0x10) */
-#define FW_COMPLETE_EMIT ((complete_emit_fn)0x004da383U) /* FUN_004da382: stock image-complete emitter */
-#define FW_DISPLAY_WAIT   ((display_gate_fn)0x0047381fU)  /* FUN_0047381e: take display semaphore */
-#define FW_DISPLAY_SIGNAL ((display_gate_fn)0x0047386bU)  /* FUN_0047386a: give display semaphore */
-#define FW_DISPLAY_QUEUE  ((display_queue_fn)0x00474067U) /* FUN_00474066: queue type-3 refresh */
-#define FW_DISPLAY_COPY   ((display_copy_fn)0x0046ca15U)  /* FUN_0046ca14: stock packed-buffer copy */
-#define FW_COMPASS_START  ((compass_control_fn)0x005455e5U) /* FUN_005455e4 StartIMUCompassFunc */
-#define FW_COMPASS_STOP   ((compass_control_fn)0x0054566dU) /* FUN_0054566c StopIMUCompassFunc */
-#define FW_DISPLAY_EVENT_FORWARD ((display_event_forward_fn)0x0045f8fdU) /* FUN_0045f8fc */
-#define FW_COMPASS_NOTIFY ((compass_notify_fn)0x0058705dU) /* FUN_0058705c navigation_notify_compass_changed_cmd */
-#define FW_DISPLAY_FB     (*(uint8_t * volatile *)0x200007b8U) /* stock copier's 640x480 destination */
-#define BUZZ_TIMER_ADDR 0x20074504U                   /* RAM: buzzer osTimer handle (buzzer osTimer handle global) */
-#define ZLIB_VER   ((const char *)0x0078d654U)      /* "1.1.4" */
+#define FW_LOOKUP        ((lookup_fn)0x004f3d8bU)    /* FUN_004f3d8a(id) -> spec node; state=*(node+0x10) */
+#define FW_COMPLETE_EMIT ((complete_emit_fn)0x004ebd09U) /* FUN_004ebd08: stock image-complete emitter */
+#define FW_DISPLAY_WAIT   ((display_gate_fn)0x00479483U)  /* FUN_00479482: take display semaphore */
+#define FW_DISPLAY_SIGNAL ((display_gate_fn)0x004794cfU)  /* FUN_004794ce: give display semaphore */
+#define FW_DISPLAY_QUEUE  ((display_queue_fn)0x00479d83U) /* FUN_00479d82: queue type-3 refresh */
+#define FW_DISPLAY_COPY   ((display_copy_fn)0x004708d1U)  /* FUN_004708d0: stock packed-buffer copy */
+#define FW_COMPASS_START  ((compass_control_fn)0x0055d4d7U) /* FUN_0055d4d6 StartIMUCompassFunc */
+#define FW_COMPASS_STOP   ((compass_control_fn)0x0055d55fU) /* FUN_0055d55e StopIMUCompassFunc */
+#define FW_DISPLAY_EVENT_FORWARD ((display_event_forward_fn)0x004622edU) /* FUN_004622ec */
+#define FW_COMPASS_NOTIFY ((compass_notify_fn)0x0059f47dU) /* FUN_0059f47c navigation_notify_compass_changed_cmd */
+#define FW_DISPLAY_FB     (*(uint8_t * volatile *)0x200008b4U) /* stock copier's 640x480 destination */
+#define BUZZ_TIMER_ADDR 0x200767a0U                   /* RAM: buzzer osTimer handle global */
+#define ZLIB_VER   ((const char *)0x007b75f8U)      /* "1.1.4" */
 
 #define PANEL_W 640u
 #define PANEL_H 480u
@@ -306,10 +307,10 @@ static int is_shadow_message(const uint8_t *src, uint32_t srclen) {
 static int image_worker(void *state_, uint8_t *src, uint32_t srclen) {
     /* An inbound image message proves the phone is still connected, so kick the
      * EvenHub keepalive back to life exactly as the stock heartbeat handler does.
-     * Stock firmware resets the ticks-since-last-heartbeat counter (@0x200745ac)
+     * Stock firmware resets the ticks-since-last-heartbeat counter (@0x20077364)
      * ONLY on the sid-0x0c heartbeat message; the periodic evenhub_ui_event_handler
-     * (FUN_00506460, param_1==4) increments it every tick and, once it passes 899,
-     * fires FUN_004fee62(0,0) -> "DISPLAY_AUTO_REFLASH heartbeat timeout" -> the
+     * periodic EvenHub event handler increments it every tick and, once it passes 899,
+     * fires the display auto-reflash heartbeat-timeout path, which closes the
      * "Connection lost" context teardown. A client streaming image updates to
      * maximize throughput would otherwise have to interleave heartbeats to avoid
      * that teardown; resetting here lets a steady image stream keep the context
@@ -701,7 +702,7 @@ static int inflate_rle(uint8_t *strm, uint8_t *base, uint32_t stride,
     return ok;
 }
 
-/* Replicate FUN_0050164a's tail: clean the display buffer out of dcache, set the
+/* Replicate FUN_004ee3ba's tail: clean the display buffer out of dcache, set the
  * LVGL image descriptor for an 8bpp (cf=0x619) w*h image, rebind and invalidate.
  * (Defined after load_image_z so the entry offset, hence the bl target, is fixed.) */
 static void push_display(uint8_t *state, uint8_t *disp, uint32_t w, uint32_t h) {
@@ -741,7 +742,7 @@ static void unpack4bpp(uint8_t *dst, uint32_t dst_stride, const uint8_t *pix, ui
     }
 }
 
-/* Fast replacement for the stock BMP loader FUN_0050164a: decode a 4bpp indexed
+/* Fast replacement for the stock BMP loader FUN_004ee3ba: decode a 4bpp indexed
  * BMP straight into the 8bpp display buffer via unpack4bpp, ignoring the palette
  * (always the gray ramp) and skipping the per-pixel color calls + CRC pass. Only
  * width/height/bpp/pixel-offset are read from the header. Falls back to the stock
@@ -926,7 +927,7 @@ void display_copy_hook(void) {
  * deferred handler reads it -> old frame lost (skip), new one read twice (dup).
  *
  * Fix: snapshot the (small) compressed message at completion, on BOTH lenses, into a
- * per-state FIFO (snapshot_side, hooked at the both-lens `bl FUN_0045a8ec`). Snapshot
+ * per-state FIFO (snapshot_side, hooked at the shared `bl FUN_0045cfdc`). Snapshot
  * bytes are packed from the END of that state's oversized reconstruction allocation;
  * the beginning remains the stock receiver's live assembly area. The deferred handler
  * (image_deferred, both lenses) consumes the oldest tail range, never the overwritten
@@ -989,12 +990,12 @@ static uint8_t *cfw_snap_tail_alloc(customCfwContext *ctx, uint8_t *state,
 
 /* Snapshot a just-completed CompressMode=0 message (B = *(state+0xc), len =
  * *(state+0x20), capacity = *(state+0x44)) into B's tail FIFO, then return the
- * lens id (real FUN_0045a8ec) so the caller's RIGHT gate still works.
+ * lens id (real FUN_0045cfdc) so the caller's RIGHT gate still works.
  * Stock-compressed messages bypass this FIFO. Reached via snapshot_side, which
- * supplies r7/r8. */
+ * supplies r4/r6 on 2.2.9.22. */
 int cfw_snapshot(uint8_t *state, uint32_t container_id) {
     (void)container_id;
-    /* CompressMode is stock-owned on 2.2.6.10: mode 1/2 payloads are RLE/LZ4
+    /* CompressMode is stock-owned on 2.2.9.22: mode 1/2 payloads are RLE/LZ4
      * and are decompressed by evenhub_ui immediately before image_deferred.
      * Do not snapshot their still-compressed reconstruction buffer here; the
      * deferred hook must consume the stock decoder's temporary `src` instead. */
@@ -1061,22 +1062,22 @@ int cfw_snapshot(uint8_t *state, uint32_t container_id) {
             }
         }
     }
-    return (int)FW_SIDE();   /* real FUN_0045a8ec: 1=RIGHT/2=LEFT, drives the RIGHT gate */
+    return (int)FW_SIDE();   /* real FUN_0045cfdc: 1=RIGHT/2=LEFT, drives the RIGHT gate */
 }
 
-/* Naked shim reached by the redirected `bl FUN_0045a8ec` at the completion sites
- * (0x500a04 / 0x500df8, both lenses). r7 = state, r8 = containerId at that point, so
- * pass them to cfw_snapshot and tail-branch — cfw_snapshot returns the lens id, which
- * flows back to the caller for the RIGHT gate. It preserves r4-r11, so state/... survive. */
+/* Naked shim reached by the redirected `bl FUN_0045cfdc` in 2.2.9.22's shared
+ * image-completion helper (0x4ec0ee, both single- and multi-fragment paths).
+ * r4 = state and r6 = containerId there, so pass them to cfw_snapshot and tail-
+ * branch. cfw_snapshot returns the lens id to the helper's unchanged RIGHT gate. */
 __attribute__((naked)) int snapshot_side(void) {
     __asm volatile(
-        "mov r0, r7\n\t"       /* state */
-        "mov r1, r8\n\t"       /* containerId */
+        "mov r0, r4\n\t"       /* state */
+        "mov r1, r6\n\t"       /* containerId */
         "b   cfw_snapshot\n\t" /* tail-call; resolved intra-.text by build.py */
     );
 }
 
-/* Replaces the deferred consumer's worker call (bl at 0x496a0e, both lenses). Stock-
+/* Replaces the deferred consumer's worker call (bl at 0x4a4402, both lenses). Stock-
  * compressed updates use the stock-decoded call arguments directly. Otherwise DRAINS
  * all of this lens's pending snapshots for `state` in FIFO (seq) order, running the
  * worker on each (ignoring the live B, which may be overwritten), then releases their

@@ -27,7 +27,7 @@ __attribute__((noinline)) static void *cfw_malloc(uint32_t size) {
     return p;
 }
 
-/* Allocate from the independent 820 KiB TLSF arena at 0x2013be70. Go through
+/* Allocate from the independent 820 KiB TLSF arena at 0x201350a8. Go through
  * the stock generic heap coordinator rather than calling TLSF directly so the
  * descriptor's mutex, current-byte counter, and peak-byte counter stay valid. */
 __attribute__((noinline)) static void *cfw_heap13_malloc(uint32_t size) {
@@ -69,9 +69,10 @@ static uint32_t tlsf_arena_free(uint32_t arena, uint32_t arena_size) {
     return TLSF_FREE_INVALID;
 }
 
-/* Generic heap descriptors made by FUN_0048413c contain their TLSF pointer at
- * +4, arena size at +0x10, and arena base at +0x14. Check all three before
- * trusting the pool. The policy byte at +0x18 belongs to the higher selector. */
+/* Generic heap descriptors made by the stock heap constructor contain their
+ * TLSF pointer at +4, arena size at +0x10, and arena base at +0x14. Check all
+ * three before trusting the pool. The policy byte at +0x18 belongs to the
+ * higher selector. */
 static uint32_t heap_object_free(uint32_t descriptor, uint32_t arena,
                                  uint32_t arena_size) {
     volatile uint32_t *heap = (volatile uint32_t *)(uintptr_t)descriptor;

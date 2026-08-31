@@ -8,8 +8,8 @@
  * mode-6 keyframe after every rebuild. The bookkeeping that does
  * need to survive rebuilds is anchored by a pointer in 1 KiB of SRAM explicitly
  * removed from the top of the stock primary TLSF arena by patch_compress.py. The
- * stock arena is [0x20279670,0x202a6670); the patched size is 0x2cc00, reserving
- * [0x202a6270,0x202a6670) for CFW. Its first word holds the context pointer and
+ * stock arena is [0x202728a8,0x2029f8a8); the patched size is 0x2cc00, reserving
+ * [0x2029f4a8,0x2029f8a8) for CFW. Its first word holds the context pointer and
  * its second holds a magic-guarded sticky allocation-failure diagnostic. This is
  * deliberately carved out rather than
  * inferred padding: 0x20003ffc, used before EVENCFW/11, is actually the +0 callback
@@ -92,12 +92,12 @@ typedef struct {
     uint8_t *texture_cache;
 } customCfwContext;
 
-#define CFW_CTX_SLOT  0x202a6270U    /* first word of the CFW-reserved TLSF tail */
-#define CFW_ALLOC_DIAG_SLOT 0x202a6274U /* second word: magic | sticky failure bit */
+#define CFW_CTX_SLOT  0x2029f4a8U    /* first word of the CFW-reserved TLSF tail */
+#define CFW_ALLOC_DIAG_SLOT 0x2029f4acU /* second word: magic | sticky failure bit */
 #define CFW_ALLOC_DIAG_MAGIC 0xA110CA7EU
 #define CFW_CTX_MAGIC 0xC0FFEE67U    /* bumped for the context layout change */
 
-#define FW_MS_TICK  (*(volatile uint32_t *)0x20074a34U)  /* firmware 1 ms OS tick (SysTick chain) */
+#define FW_MS_TICK  (*(volatile uint32_t *)0x20076d80U)  /* firmware 1 ms OS tick (SysTick chain) */
 
 static customCfwContext *peekCustomCfwContext(void);
 static customCfwContext *getCustomCfwContext(void);

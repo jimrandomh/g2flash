@@ -18,7 +18,7 @@ Usage:
   python3 gen_patches.py <base.bin> <out.json>
 
 Regenerate the committed patch set after changing any of the injected C sources:
-  python3 patches/gen_patches.py g2_2.2.4.34.bin patches/cfw_patches.json
+  python3 patches/gen_patches.py g2_2.2.9.22.bin patches/cfw_patches.json
 (then update OUT_SHA256 in build_cfw.sh if the output hash changed, and commit).
 """
 import sys, os, json, hashlib

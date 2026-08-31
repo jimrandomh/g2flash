@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """
-Build a CFW image for g2_2.2.6.10 with:
+Build a CFW image for g2_2.2.9.22 with:
   (1) the 576x288 image-container size lift (the same 3 edits that
-      patches/patch_img_container_576.py makes, though that standalone script still
-      targets the old 2.2.4.34 base and is not part of this build),
+      the earlier standalone image-container patch used),
   (2) the zlib image glue (multi-mode load_image_z, incl. keepalive kick + buzzer),
       entered at image_deferred,
   (3) a CFW capability-advertisement field (protobuf field 100) plus a private,
@@ -19,9 +18,11 @@ Build a CFW image for g2_2.2.6.10 with:
   (9) a lease-scoped 64 KiB texture cache plus cached-image/cached-string drawing
       through image-handler modes 12, 13, and 14, and built-in-font mode 15.
 
-REBASED 2.2.4.34 -> 2.2.6.10 (2026-07-16). Every address below was re-derived and
-cross-checked; see notes/fw-2.2.6.10-cfw-rebase.md for the full table and the evidence
-for each. Two things bit us and are worth remembering if this is ever rebased again:
+REBASED 2.2.6.10 -> 2.2.9.22 (2026-08-22). Every address below was re-derived with
+normalized function/site matching and checked against the 2.2.9.22 disassembly. Two
+changed hosts needed semantic rebases: image completion moved into a shared helper, and
+plain long-press no longer calls the old force-quit dialog. Two things are worth
+remembering if this is ever rebased again:
   * a patch site's offset within its host function is NOT stable -- Even inserts code, so
     each site was located by instruction-window match (firmware/find_site.py) and then
     confirmed by decoding its `bl` target, not by extrapolating from the function entry;
@@ -35,7 +36,7 @@ the tail of the main-app component (ota/s200_firmware_ota.bin) rather than being
 squeezed into a reclaimed dead function. The bootloader XIP-programs the whole
 main-app payload to 0x00438000, so a byte at payload offset K lands at MRAM
 0x438000 + K - 0x20; appended blobs therefore load into MRAM immediately after the
-current app image (~0x00794324 on 2.2.6.10), with hundreds of KB of headroom before the
+current app image (~0x007bea64 on 2.2.9.22), with hundreds of KB of headroom before the
 OTA flag at 0x007fe000. This removes the old ~2 KB dead-region ceiling.
 
 Appending changes the image size, so this script fixes up every size/offset field
@@ -53,7 +54,7 @@ check_mainapp_fits_mram) refuses an oversized image.
 """
 import sys, os, struct, zlib, json, subprocess
 
-DELTA = 0x37A179  # file_off = ghidra_addr - DELTA  (OTA mainApp component, 2.2.6.10)
+DELTA = 0x379BFE  # file_off = ghidra_addr - DELTA  (OTA mainApp component, 2.2.9.22)
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def g2f(addr):
@@ -69,18 +70,33 @@ APP_MAX_END   = 0x007F0000   # conservative ceiling: leave the top ~56 KB for NV
 BLOB_ALIGN    = 4            # 4-byte-align each appended blob (Thumb literal pools)
 
 # Reserve the final 1 KiB of the stock primary TLSF arena for CFW-owned fixed
-# state. Stock initializes [0x20279670,0x202a6670) with size 0x2d000 at
-# 0x004842e8. 0x2cc00 is the closest smaller value encodable by the existing
+# state. Stock initializes [0x202728a8,0x2029f8a8) with size 0x2d000 at
+# 0x0048c350. 0x2cc00 is the closest smaller value encodable by the existing
 # four-byte Thumb modified-immediate instruction, leaving
-# [0x202a6270,0x202a6670) outside the allocator. The next stock object starts at
-# exactly 0x202a6670. CFW_CTX_SLOT in zlib_glue.c uses the first reserved word.
-PRIMARY_TLSF_SIZE_SITE = (0x4842e8, "5f f4 34 32")  # movs.w r2,#0x2d000
+# [0x2029f4a8,0x2029f8a8) outside the allocator. The next stock object starts at
+# exactly 0x2029f8a8. CFW_CTX_SLOT in cfw_context.h uses the first reserved word.
+PRIMARY_TLSF_SIZE_SITE = (0x48c350, "5f f4 34 32")  # movs.w r2,#0x2d000
 PRIMARY_TLSF_CFW_SIZE  = "5f f4 33 32"              # movs.w r2,#0x2cc00
-PRIMARY_TLSF_ARENA     = 0x20279670
+PRIMARY_TLSF_ARENA     = 0x202728a8
 PRIMARY_TLSF_STOCK_LEN = 0x2d000
 PRIMARY_TLSF_CFW_LEN   = 0x2cc00
 CFW_RESERVED_BASE      = PRIMARY_TLSF_ARENA + PRIMARY_TLSF_CFW_LEN
 CFW_RESERVED_END       = PRIMARY_TLSF_ARENA + PRIMARY_TLSF_STOCK_LEN
+
+# A bytewise scan for absolute pointers into the reserved tail also interprets every
+# four-byte Thumb instruction as a little-endian integer. In 2.2.9.22 these reviewed
+# instruction sites happen to spell values in [CFW_RESERVED_BASE, CFW_RESERVED_END):
+# mostly `ldr/str ..., [rN, r9, lsl #2]` or `[rN,#0x29]`. Keep the conservative
+# every-alignment scan, but exempt only these exact decoded instruction bytes/sites.
+TAIL_REF_FALSE_POSITIVES = {
+    0x5200bc: "81 f8 29 20", 0x5201e4: "81 f8 29 20", 0x52037a: "81 f8 29 20",
+    0x547cc2: "94 f8 29 20", 0x547d0e: "94 f8 29 20", 0x562b44: "40 f6 29 20",
+    0x580c98: "80 f8 29 20", 0x58199a: "90 f8 29 20", 0x5c2f04: "56 f8 29 20",
+    0x5dd848: "50 f8 29 20", 0x60ccda: "58 f8 29 20", 0x60ccfc: "56 f8 29 20",
+    0x60cd04: "56 f8 29 20", 0x60cd42: "56 f8 29 20", 0x60cd68: "52 f8 29 20",
+    0x60cd82: "52 f8 29 20", 0x60cd8a: "56 f8 29 20", 0x60cda4: "57 f8 29 20",
+    0x60cdb2: "52 f8 29 20", 0x612e1c: "51 f8 29 20", 0x612e22: "41 f8 29 20",
+}
 
 def mram_addr(payload_off):
     """MRAM XIP address of the byte at this main-app payload offset, once flashed."""
@@ -90,69 +106,68 @@ def align_up(x, a):
     return (x + a - 1) & ~(a - 1)
 
 # ---- call-site redirects (ghidra addr -> stock bytes we expect there) --------
-# All 2.2.6.10 addresses. Each was found with firmware/find_site.py (normalized
+# All 2.2.9.22 addresses. Unchanged hosts/sites were found with normalized
 # instruction-window match, unique across the image) and then confirmed by decoding the
 # `bl` at the new address and checking it lands on the expected callee -- the bytes below
 # are the stock encodings read straight out of the image, so apply_patches' old-byte
 # check is a third, independent guard.
 #
-# bl FUN_004dc5ae (set_image_data) in evenhub_ui_reflash_event_handler -> image_deferred.
-# NOTE: in 2.2.6.10 this same function is where Even's own RLE/LZ4 decompression was
+# bl FUN_004ee3ba (set_image_data) in evenhub_ui_reflash_event_handler -> image_deferred.
+# NOTE: this same function is where Even's own RLE/LZ4 decompression runs
 # inserted, immediately BEFORE this call. That is why the site moved by a different delta
 # than the rest of the function. image_deferred dispatches CompressMode=0 through the CFW
 # snapshot FIFO, but sends every nonzero CompressMode through the decompressed `r1,r2`
 # buffer and exact stock loader. The ABI here is unchanged
 # (r0=obj, r1=data, r2=len; obj+0xc = compressed data, obj+0x20 = compressed len).
-LOADBMP_BL_SITE        = (0x496a0e, "45 f0 ce fd")
-# The two both-lens `bl FUN_0045a568` (lens-identity check) sites at image-
-# reconstruction-complete in the EvenHub data parser (single- and multi-fragment).
-# Redirected to snapshot_side, which copies the fresh message into a per-state FIFO
-# packed into the recon-buffer tail (both lenses), then tail-calls the real lens-side fn
-# so the RIGHT gate still works. This + image_deferred consuming the FIFO fixes the
-# producer/consumer race on the live recon-buffer prefix. See zlib_glue.c.
-SNAPSHOT_BL_SITES      = {   # both decode to `bl 0x45a568` (verified)
-    0x4db968: "7e f7 fe fd",   # single-fragment complete
-    0x4dbd5c: "7e f7 04 fc",   # multi-fragment last-fragment complete
-}
-SETTINGS_BL_SITE       = (0x49bb68, "d9 f7 d4 ff")  # bl FUN_00475b14 (aa21 send) -> wrapper
+LOADBMP_BL_SITE        = (0x4a4402, "49 f0 da ff")
+# 2.2.9.22 funnels single- and multi-fragment image completion through one shared helper
+# (FUN_004ec088). Redirect its `bl FUN_0045cfdc` lens-identity check to snapshot_side;
+# r4 is the reconstruction state and r6 the container id at this site. The wrapper copies
+# the fresh message into a per-state FIFO, then tail-calls the real lens-side function so
+# the RIGHT gate still works. This + image_deferred consuming the FIFO fixes the live-
+# recon-buffer producer/consumer race for both completion paths with one patch.
+SNAPSHOT_BL_SITE       = (0x4ec0ee, "70 f7 75 ff")
+SETTINGS_BL_SITE       = (0x4a90e4, "d4 f7 90 fb")  # bl FUN_0047d808 (aa21 send) -> wrapper
 # nanopb decode in pb_service_setting's inbound parser. The wrapper scans raw
 # unknown field 101 before the stock decoder discards it, then tail-calls decode.
-SETTINGS_DECODE_BL_SITE = (0x49b268, "f4 f7 5a ff") # bl FUN_00490120 -> settings_decode_wrapper
+SETTINGS_DECODE_BL_SITE = (0x4a87e4, "f5 f7 10 f9") # bl FUN_0049da08 -> settings_decode_wrapper
 # The two REQUEST_DISPLAY_START_UP(1) sites reached by the local and mirrored
 # idle double-tap paths. Both must defer or the peer lens can still flash.
 DISPLAY_START_BL_SITES = {
-    0x45c65a: "08 f0 68 fa",
-    0x45c71a: "08 f0 08 fa",
+    0x45f146: "0b f0 2a f9",
+    0x45f206: "0b f0 ca f8",
 }
-# The call site has just loaded r0=1, r1=0xe0; the wrapper must preserve both for
-# FUN_0046ae9c when the Faceclaw lease is absent, because the dialog serializes them.
-GESTURE_LONGPRESS_SITE = (0x442e92, "28 f0 03 f8")  # bl FUN_0046ae9c -> evenhub_longpress
-GESTURE_RELEASE_SITE   = (0x4431c2, "1c f0 9b fb")  # bl FUN_0045f8fc -> ring_release
+# 2.2.9.22 changed the Menu interaction to tap-then-long-press and plain subtype 3 now
+# posts UI event 8 rather than directly opening the force-quit dialog. Wrap that stock
+# post, passing all non-Faceclaw/non-ring cases through unchanged. Subtype 0xe release
+# still posts UI event 0x4a. r6 holds the current input record at both call sites.
+GESTURE_PRESS_SITE     = (0x444a3a, "1d f0 57 fc")  # bl FUN_004622ec -> ring_press
+GESTURE_RELEASE_SITE   = (0x444d36, "1d f0 d9 fa")  # bl FUN_004622ec -> ring_release
 # Wakeword ("Hey Even") capture. The old patch unconditionally changed the
 # op==START branch in even_ai_display_ctrl, which also broke the official Even
 # app. Replace the first four bytes with a B.W trampoline: the injected entry
 # reproduces the overwritten push/mov and suppresses START only under Faceclaw's
-# volatile lease; with no lease it resumes at 0x4e1fd6 byte-for-byte stock.
-EVENAI_ENTRY_SITE      = (0x4e1fd2, "7f b5 06 00")
+# volatile lease; with no lease it resumes at 0x4f515a byte-for-byte stock.
+EVENAI_ENTRY_SITE      = (0x4f5156, "7f b5 06 00")
 # The display task copies the composed 576x288 A4 buffer into the physical
 # 640x480 framebuffer at two switch cases. Redirect both calls through
 # display_copy_hook: ordinary refreshes pass through, while a pending Faceclaw
 # shadow replaces the stock compositor copy immediately before panel refresh.
 DISPLAY_COPY_BL_SITES = {
-    0x473c8e: "f8 f7 c1 fe",   # queue message type 3 -> bl FUN_0046ca14
-    0x473d68: "f8 f7 54 fe",   # queue message type 6 -> bl FUN_0046ca14
+    0x4798f2: "f6 f7 ed ff",   # queue message type 3 -> bl FUN_004708d0
+    0x479a2e: "f6 f7 4f ff",   # queue message type 6 -> bl FUN_004708d0
 }
 # The stock wear handler calls its onboarding-only transmitter in both branches.
 # Redirect those calls to our lifecycle-independent sender instead.
 WEAR_NOTIFY_BL_SITES = {
-    0x49ec3c: "df f7 70 fb",  # ON_HEAD:  bl 0x47e320
-    0x49ec9a: "df f7 41 fb",  # OFF_HEAD: bl 0x47e320
+    0x4ac3ea: "d9 f7 58 ff",  # ON_HEAD:  bl 0x48629e
+    0x4ac44e: "d9 f7 26 ff",  # OFF_HEAD: bl 0x48629e
 }
 # Global display-thread routing of IMU sensor event 9 as UI event 0x41. Navigation's
 # UI handler normally receives this and calls the BLE compass notifier; Faceclaw has
 # EvenHub active instead, so redirect through a wrapper that preserves the stock call
 # and additionally invokes that notifier while mode 10 owns the compass.
-COMPASS_EVENT_BL_SITE = (0x443288, "1c f0 38 fb")  # bl FUN_0045f8fc(display,0x41,&heading)
+COMPASS_EVENT_BL_SITE = (0x444dfc, "1d f0 76 fa")  # bl FUN_004622ec(display,0x41,&heading)
 
 def enc_bl(pc, target):
     """Encode a Thumb-2 BL (T1) from instruction address `pc` to `target`."""
@@ -225,12 +240,23 @@ def layout(img):
     # This reservation is safe only if the stock image has no absolute pointer
     # into the removed tail. Scan every byte alignment because the OTA container's
     # file-to-MRAM bias is not word-aligned. The allocator's original exclusive
-    # end (0x202a6670) is intentionally outside the rejected interval and is the
+    # end (0x2029f8a8) is intentionally outside the rejected interval and is the
     # base of the next stock object.
-    tail_refs = [
-        off for off in range(len(img) - 3)
-        if CFW_RESERVED_BASE <= struct.unpack_from('<I', img, off)[0] < CFW_RESERVED_END
-    ]
+    tail_refs = []
+    false_hits = set()
+    for off in range(len(img) - 3):
+        if not CFW_RESERVED_BASE <= struct.unpack_from('<I', img, off)[0] < CFW_RESERVED_END:
+            continue
+        site = off + DELTA
+        expected = TAIL_REF_FALSE_POSITIVES.get(site)
+        if expected is not None and bytes(img[off:off + 4]) == bytes.fromhex(expected):
+            false_hits.add(site)
+        else:
+            tail_refs.append(off)
+    assert false_hits == set(TAIL_REF_FALSE_POSITIVES), (
+        "reviewed TLSF-tail false-positive instruction set changed: "
+        f"missing {[hex(x) for x in set(TAIL_REF_FALSE_POSITIVES) - false_hits]}"
+    )
     assert not tail_refs, (
         "stock image contains absolute references into the proposed CFW-reserved "
         f"TLSF tail: {[hex(off) for off in tail_refs]}"
@@ -257,7 +283,7 @@ def layout(img):
     settings_decode_addr = base + _fn(built, "settings_decode_wrapper")["offset"]
     display_start_addr = base + _fn(built, "faceclaw_display_start")["offset"]
     evenai_entry_addr = base + _fn(built, "faceclaw_evenai_display_entry")["offset"]
-    longpress_addr = base + _fn(built, "evenhub_longpress")["offset"]
+    press_addr     = base + _fn(built, "ring_press")["offset"]
     release_addr   = base + _fn(built, "ring_release")["offset"]
     display_copy_addr = base + _fn(built, "display_copy_hook")["offset"]
     wear_notify_addr = base + _fn(built, "faceclaw_send_wear_event")["offset"]
@@ -292,19 +318,20 @@ def layout(img):
          PRIMARY_TLSF_CFW_SIZE,
          "reserve final 1 KiB of primary TLSF arena for CFW context anchor"),
         # 576x288 image-container size lift, in common_image_create. Even did NOT raise
-        # this cap in 2.2.6.10 (its clamp strings are byte-identical and the limit is
+        # this cap in 2.2.9.22 (its clamp strings are byte-identical and the limit is
         # still parameterized), so the lift is still needed. These three sites are
         # byte-for-byte the same instructions as on 2.2.4.34, just relocated.
-        (g2f(0x4dbfc6), "bd f8 2c 10", "40 f2 41 20", "container width  <= 576"),
-        (g2f(0x4dc08e), "bd f8 2e 00", "40 f2 21 11", "container height movw #0x121"),
-        (g2f(0x4dc092), "91 28",       "88 42",       "container height cmp r0,r1"),
+        (g2f(0x4eddd2), "bd f8 2c 10", "40 f2 41 20", "container width  <= 576"),
+        (g2f(0x4ede9a), "bd f8 2e 00", "40 f2 21 11", "container height movw #0x121"),
+        (g2f(0x4ede9e), "91 28",       "88 42",       "container height cmp r0,r1"),
         # Snapshot/restore (fixes the shared-recon-buffer producer/consumer race): at the
-        # both-lens completion, redirect `bl FUN_0045a8ec` -> snapshot_side (copies the
+        # both-lens completion, redirect `bl FUN_0045cfdc` -> snapshot_side (copies the
         # fresh message into a FIFO in the recon-buffer tail, then returns the lens id);
-        # the deferred consumer `bl FUN_0050164a` -> image_deferred (pops the FIFO and
+        # the deferred consumer `bl FUN_004ee3ba` -> image_deferred (pops the FIFO and
         # runs the worker on the snapshot, ignoring the possibly-overwritten live buffer).
-        *[(g2f(site), orig, enc_bl(site, snapshot_addr), f"bl snapshot_side @ {site:#x}")
-          for site, orig in SNAPSHOT_BL_SITES.items()],
+        (g2f(SNAPSHOT_BL_SITE[0]), SNAPSHOT_BL_SITE[1],
+         enc_bl(SNAPSHOT_BL_SITE[0], snapshot_addr),
+         f"bl snapshot_side @ {SNAPSHOT_BL_SITE[0]:#x} (shared image-complete helper)"),
         (g2f(LOADBMP_BL_SITE[0]), LOADBMP_BL_SITE[1], enc_bl(LOADBMP_BL_SITE[0], deferred_addr),
          "bl image_deferred (deferred consumer -> FIFO restore + worker, both lenses)"),
         # redirect the settings responder send -> settings_send_wrapper (caps field 100)
@@ -316,10 +343,10 @@ def layout(img):
         *[(g2f(site), orig, enc_bl(site, display_start_addr),
            f"bl faceclaw_display_start @ {site:#x} (fail-open double-tap takeover)")
           for site, orig in DISPLAY_START_BL_SITES.items()],
-        # EvenHub long-press + ring release-long-press forwarding
-        (g2f(GESTURE_LONGPRESS_SITE[0]), GESTURE_LONGPRESS_SITE[1],
-         enc_bl(GESTURE_LONGPRESS_SITE[0], longpress_addr),
-         "bl evenhub_longpress (Faceclaw lease gates custom event vs stock dialog)"),
+        # R1 long-press + release-long-press forwarding
+        (g2f(GESTURE_PRESS_SITE[0]), GESTURE_PRESS_SITE[1],
+         enc_bl(GESTURE_PRESS_SITE[0], press_addr),
+         "bl ring_press (Faceclaw lease gates custom event vs stock UI event 8)"),
         (g2f(GESTURE_RELEASE_SITE[0]), GESTURE_RELEASE_SITE[1],
          enc_bl(GESTURE_RELEASE_SITE[0], release_addr), "bl ring_release (forward ring release-long-press)"),
         (g2f(EVENAI_ENTRY_SITE[0]), EVENAI_ENTRY_SITE[1],
@@ -432,8 +459,8 @@ def build_patch_ops(img):
     return bytes(data), ops
 
 def main():
-    src = sys.argv[1] if len(sys.argv) > 1 else "g2_2.2.4.34.bin"
-    dst = sys.argv[2] if len(sys.argv) > 2 else "g2_2.2.4.34_cfw.bin"
+    src = sys.argv[1] if len(sys.argv) > 1 else "g2_2.2.9.22.bin"
+    dst = sys.argv[2] if len(sys.argv) > 2 else "g2_2.2.9.22_cfw.bin"
     print("compiling injected blobs (build.py):")
     img = open(src, "rb").read()
     data, ops = build_patch_ops(img)

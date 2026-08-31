@@ -21,7 +21,7 @@ typedef struct {
 #define CFW_TEXTURE_OPT_TRANSPARENT 0x10u
 #define CFW_TEXTURE_OPT_INVERSE     0x20u
 
-/* Stock LVGL font ABI (firmware 2.2.6.10, Thumb entry points). After building
+/* Stock LVGL font ABI (firmware 2.2.9.22, Thumb entry points). After building
  * the background chain, the font manager dereferences its private 12-byte
  * wrapper and publishes the live 20 px lv_font_t root in this SRAM slot.
  * Using lv_font_get_glyph_dsc with letter_next preserves each font's stock
@@ -31,10 +31,10 @@ typedef int (*cfw_font_dsc_fn)(const void *font, void *dsc,
 typedef const uint8_t *(*cfw_font_bitmap_fn)(void *dsc, void *draw_buf);
 typedef void (*cfw_font_release_fn)(void *dsc);
 
-#define CFW_FONT_GET_DSC ((cfw_font_dsc_fn)0x004d56c1U)
-#define CFW_FONT_GET_BITMAP ((cfw_font_bitmap_fn)0x004d5613U)
-#define CFW_FONT_RELEASE ((cfw_font_release_fn)0x004d5665U)
-#define CFW_FONT20_ROOT (*(const uint8_t * volatile *)0x200746dcU)
+#define CFW_FONT_GET_DSC ((cfw_font_dsc_fn)0x004e64fdU)
+#define CFW_FONT_GET_BITMAP ((cfw_font_bitmap_fn)0x004e644fU)
+#define CFW_FONT_RELEASE ((cfw_font_release_fn)0x004e64a1U)
+#define CFW_FONT20_ROOT (*(const uint8_t * volatile *)0x200769acU)
 
 /* The stock build uses the embedded ARM short-enum ABI. Keep this opaque so
  * our compiler's enum-size flags cannot silently change the layout.

@@ -7,10 +7,10 @@
  * then (2) set DEMCR.TRCENA and DWT->CTRL.CYCCNTENA. We re-assert all three cheaply per
  * measurement (only the idle SWO-trace block touches DEMCR).
  *
- * To convert cycles->us we need the core clock. The guessed global 0x20074254 reads 0
+ * To convert cycles->us we need the core clock. The guessed global 0x2007646c reads 0
  * on hardware (it's only written on a DVFS event, if ever), so instead we CALIBRATE:
  * measure how many CYCCNT cycles elapse across one edge of the firmware's 1 ms OS tick
- * (RAM 0x20074a34, SysTick chain) — that IS cycles-per-ms. Cached in the ctx; a bounded
+ * (RAM 0x20076d80, SysTick chain) — that IS cycles-per-ms. Cached in the ctx; a bounded
  * spin falls back to 250 MHz if the tick never advances. All divides are 32-bit
  * (hardware UDIV) — a 64-bit divide would emit an external __aeabi_uldivmod build.py
  * rejects. (Limitation: cached across DVFS; a clock switch makes the figure ~stale.) */
@@ -18,7 +18,7 @@
 #define DWT_LAR     (*(volatile uint32_t *)0xE0001FB0U)  /* DWT CoreSight Lock Access Reg */
 #define DWT_CTRL    (*(volatile uint32_t *)0xE0001000U)  /* DWT->CTRL (CYCCNTENA bit0) */
 #define DWT_CYCCNT  (*(volatile uint32_t *)0xE0001004U)  /* DWT->CYCCNT (core cycles) */
-#define FW_CORE_HZ  (*(volatile uint32_t *)0x20074254U)  /* guessed core-clock global (reads 0 on hw) */
+#define FW_CORE_HZ  (*(volatile uint32_t *)0x2007646cU)  /* guessed core-clock global (reads 0 on hw) */
 #define DWT_UNLOCK_KEY 0xC5ACCE55U
 
 
@@ -119,7 +119,7 @@ static void append_free_kib(char *out, uint32_t free_bytes, uint32_t maxlen) {
  * are microseconds: `w` = the whole image_worker, `p` = the present_shadow step within
  * it (packed framebuffer copy + cache clean), e.g. "OK w834us p210us". The trailing
  * `f13/20/27=A/B/Ck` values are free KiB (rounded down) in the TLSF arenas beginning at
- * 0x2013be70, 0x20208e70, and 0x20279670 respectively. Suppressed when diag_hide is set
+ * 0x201350a8, 0x202020a8, and 0x202728a8 respectively. Suppressed when diag_hide is set
  * (mode 7). Drawn into the physical packed-4bpp framebuffer. */
 static void cfw_draw_flags(uint8_t *disp, uint32_t w, uint32_t h) {
     customCfwContext *ctx = getCustomCfwContext();
@@ -148,14 +148,14 @@ static void cfw_draw_flags(uint8_t *disp, uint32_t w, uint32_t h) {
     u_to_dec(line, ctx->last_present_us, sizeof(line));
     strlcat(line, "us", sizeof(line));
 
-    uint32_t free_13 = heap_object_free(0x20000354u, 0x2013be70u, 0x000cd000u);
+    uint32_t free_13 = heap_object_free(0x20000358u, 0x201350a8u, 0x000cd000u);
     uint32_t free_20 =
-        *(volatile uint32_t *)0x20074abcu == 0x20208e70u
-            ? tlsf_arena_free(0x20208e70u, 0x00070800u)
+        *(volatile uint32_t *)0x20076e08u == 0x202020a8u
+            ? tlsf_arena_free(0x202020a8u, 0x00070800u)
             : TLSF_FREE_INVALID;
-    /* The stock 0x20000338 descriptor is initialized with 0x2d000 bytes. The
+    /* The stock 0x2000033c descriptor is initialized with 0x2d000 bytes. The
      * CFW patch reduces it to 0x2cc00, reserving the final 1 KiB for CFW state. */
-    uint32_t free_27 = heap_object_free(0x20000338u, 0x20279670u, 0x0002cc00u);
+    uint32_t free_27 = heap_object_free(0x2000033cu, 0x202728a8u, 0x0002cc00u);
     strlcat(line, " f13/20/27=", sizeof(line));
     append_free_kib(line, free_13, sizeof(line));
     strlcat(line, "/", sizeof(line));

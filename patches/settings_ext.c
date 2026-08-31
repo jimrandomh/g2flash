@@ -13,11 +13,11 @@
 // Tag 100 is far above the stock message's fields (1..19), so stock decoders and
 // the phone bridge skip it as an unknown field -- fully backward compatible.
 //
-// HOOK: the settings responder FUN_004b42b4 ends with
-//     r0=type(1) r1=sid(9) r2=buf r3=len ; bl FUN_00475b14   ; aa21 send
+// HOOK: the 2.2.9.22 settings responder ends with
+//     r0=type(1) r1=sid(9) r2=buf r3=len ; bl FUN_0047d808   ; aa21 send
 // We retarget that one `bl` to settings_send_wrapper. The 4 send args are already
 // in r0..r3, so the wrapper appends to `buf` (a 256-byte static response buffer
-// at 0x200706ec that only uses ~40 B) and tail-calls the real sender with the
+// at 0x20072080 that only uses ~40 B) and tail-calls the real sender with the
 // grown length. Only this call site is redirected, but we still guard on sid==9.
 
 // The same sid remains subscribed while EvenHub is shut down, so field 101 is
@@ -43,13 +43,13 @@ typedef int  (*send_fn)(int type, int sid, unsigned char *buf, unsigned len);
 typedef int  (*pb_decode_fn)(void *stream, const void *fields, void *dest);
 typedef void (*display_start_fn)(unsigned app_id, void *arg, unsigned arg_len, void *cb);
 
-#define FW_SEND 0x00475b15 /* FUN_00475b14 | thumb bit */
-#define FW_NOTIFY_SEND 0x00475c1bu /* FUN_00475c1a | thumb bit */
-#define FW_PB_DECODE ((pb_decode_fn)0x00490121u)       /* FUN_00490120 */
-#define FW_DISPLAY_START ((display_start_fn)0x00464b2fu) /* FUN_00464b2e */
-#define FW_SIDE_ID ((lens_side_fn)0x0045a569u)         /* 1=right, 2=left */
+#define FW_SEND 0x0047d809 /* FUN_0047d808 | thumb bit */
+#define FW_NOTIFY_SEND 0x0047d90fu /* FUN_0047d90e | thumb bit */
+#define FW_PB_DECODE ((pb_decode_fn)0x0049da09u)       /* FUN_0049da08 */
+#define FW_DISPLAY_START ((display_start_fn)0x0046a39fu) /* FUN_0046a39e */
+#define FW_SIDE_ID ((lens_side_fn)0x0045cfddu)         /* 1=right, 2=left */
 typedef unsigned (*wear_status_fn)(void);
-#define FW_WEAR_STATUS ((wear_status_fn)0x0049eb8fu)   /* cached WearDetect status: 1=off, 2=on */
+#define FW_WEAR_STATUS ((wear_status_fn)0x004ac333u)   /* cached WearDetect status: 1=off, 2=on */
 
 #define FACECLAW_PROTO_VERSION 1u
 #define FACECLAW_CONTROL_FIELD 101u
@@ -301,7 +301,7 @@ int settings_decode_wrapper(void *stream, const void *fields, void *dest) {
 /* Entry trampoline for even_ai_display_ctrl. The first four stock bytes
  * (`push {r0-r6,lr}; mov r6,r0`) are replaced by a B.W here. Reproduce them,
  * suppress only START while a valid Faceclaw lease exists, and otherwise
- * resume the stock function at 0x004e1fd6 with every argument restored. */
+ * resume the stock function at 0x004f515a with every argument restored. */
 __attribute__((naked)) void faceclaw_evenai_display_entry(void) {
     __asm volatile(
         "push {r0-r6, lr}\n"
@@ -314,8 +314,8 @@ __attribute__((naked)) void faceclaw_evenai_display_entry(void) {
         "ldmia sp, {r0-r3}\n"
         "mov r6, r0\n"
         "1:\n"
-        "movw r12, #0x1fd7\n"   /* 0x004e1fd6 | Thumb bit; BX needs bit 0 set */
-        "movt r12, #0x004e\n"
+        "movw r12, #0x515b\n"   /* 0x004f515a | Thumb bit; BX needs bit 0 set */
+        "movt r12, #0x004f\n"
         "bx r12\n"
         "2:\n"
         "pop {r0-r6, pc}\n"
