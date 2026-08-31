@@ -16,18 +16,19 @@
  * and does array processing (beamforming / noise isolation / direction detection,
  * fused with the compass + IMU heading it already receives) itself.
  *
- * STOCK PIPELINE (openCFW recovery of the base g2_2.2.6.10 image; addresses and
- * behavior pinned by the manifests in
+ * STOCK PIPELINE (openCFW recovery of the original g2_2.2.6.10 image; every
+ * callable entry below was re-matched against g2_2.2.9.22 by its complete
+ * normalized function body). The behavior is pinned by the manifests in
  * evenRealities-openCFW/g2/tools/manifests/g2-service-audio-*.tsv,
  * g2-service-algo-*.tsv, and g2-production-mic-*.tsv, with the narrative in
  * g2/docs/research/g2-service-audio-recovery.md, g2-service-algo-recovery.md,
  * and g2-production-mic-recovery.md):
- *   service_audio.c          [0x0057A900,0x0057B444)  two PCM app slots + LC3
- *   service_algo.c           [0x005915DC,0x00591D14)  per-frame SSR + TDOA angle
- *   production_mic_func.c    [0x0058F4E4,0x0058F8CC)  codec/PDM, single/stereo init
- *   drv_pdm_production.c      0x0057B444...           Ambiq PDM capture driver
+ *   service_audio.c          0x005930F8...             two PCM app slots + LC3
+ *   service_algo_process     0x005AB2F0                per-frame SSR + TDOA angle
+ *   production mic init      0x005A8CA2...0x005A8E6E codec/PDM, mono/stereo
+ *   drv_pdm_production.c      follows service_audio    Ambiq PDM capture driver
  * The stock two-channel capture already exists (codec front end, stereo callback,
- * source slot 0), and service_algo_process (0x00591BFC) already returns a signed
+ * source slot 0), and service_algo_process already returns a signed
  * TDOA angle + SSR per frame -- the bearing a beamformer wants. What stock lacks,
  * and this file adds, is (a) a control plane so the phone can choose front end /
  * channels / rate / codec / bitrate, and (b) a routing path that forwards BOTH
@@ -95,7 +96,7 @@
  * reconfiguration seams are recovered; stream frames carry the EFFECTIVE rate,
  * which is the one the host DSP must trust. Likewise a requested codec=LC3 keeps
  * streaming raw PCM (frame byte 14 says so) until the on-device per-channel
- * LC3 encode path (SVC_Lc3EncodeMono @ 0x0057A940) has a validated ABI: raw
+ * LC3 encode path (SVC_Lc3EncodeMono) has a validated ABI: raw
  * frames always carry the true multi-channel samples the beamformer needs, so
  * "best quality" is the default rather than a failure mode.
  *
@@ -133,23 +134,23 @@ typedef int  (*pcm_unregister_fn)(uint32_t slot, uint32_t app_id);
 /* service_algo_process(interleaved2ch16, &ssr, &angle) — recovery: "preprocesses
  * one frame and returns SSR and angle results through two shorts". */
 typedef void (*algo_process_fn)(const void *pcm, int16_t *ssr, int16_t *angle);
-/* Thread_MsgStreamingNotifyByBle @ 0x00475D78 — the facade the stock fallback
+/* Thread_MsgStreamingNotifyByBle @ 0x0047DA6C — the facade the stock fallback
  * path forwards its completed LC3 packet through ("transport-one subtype-one
  * wrapper"). ABI inferred as (buf, len). */
 typedef int  (*audio_notify_fn)(const void *buf, uint32_t len);
 typedef uint32_t (*lens_side_fn2)(void);
 
-#define FW_CODEC_MIC_INIT    ((mic_sel_fn)0x0058F69BU)      /* production_codec_mic_func_init  */
-#define FW_CODEC_MIC_DEINIT  ((mic_void_fn)0x0058F74BU)     /* production_codec_mic_func_deinit */
-#define FW_PDM_MIC_INIT      ((mic_sel_fn)0x0058F7B1U)      /* production_pdm_mic_func_init    */
-#define FW_PDM_MIC_DEINIT    ((mic_void_fn)0x0058F807U)     /* production_pdm_mic_func_deinit  */
-#define FW_PCM_REGISTER      ((pcm_register_fn)0x0057AB79U) /* SVC_PcmAppRegister   (ABI inferred) */
-#define FW_PCM_UNREGISTER    ((pcm_unregister_fn)0x0057ACD1U)/* SVC_PcmAppUnregister (ABI inferred) */
-#define FW_ALGO_PROCESS      ((algo_process_fn)0x00591BFDU) /* service_algo_process (ABI inferred) */
-#define FW_AUDIO_NOTIFY      ((audio_notify_fn)0x00475D79U) /* streaming notify     (ABI inferred) */
-#define FW_MIC_SIDE          ((lens_side_fn2)0x0045a569U)   /* 1 = right temple, 2 = left temple */
+#define FW_CODEC_MIC_INIT    ((mic_sel_fn)0x005A8CA3U)      /* production_codec_mic_func_init  */
+#define FW_CODEC_MIC_DEINIT  ((mic_void_fn)0x005A8D53U)     /* production_codec_mic_func_deinit */
+#define FW_PDM_MIC_INIT      ((mic_sel_fn)0x005A8DB9U)      /* production_pdm_mic_func_init    */
+#define FW_PDM_MIC_DEINIT    ((mic_void_fn)0x005A8E0FU)     /* production_pdm_mic_func_deinit  */
+#define FW_PCM_REGISTER      ((pcm_register_fn)0x00593371U) /* SVC_PcmAppRegister   (ABI inferred) */
+#define FW_PCM_UNREGISTER    ((pcm_unregister_fn)0x005934C9U)/* SVC_PcmAppUnregister (ABI inferred) */
+#define FW_ALGO_PROCESS      ((algo_process_fn)0x005AB2F1U) /* service_algo_process (ABI inferred) */
+#define FW_AUDIO_NOTIFY      ((audio_notify_fn)0x0047DA6DU) /* streaming notify     (ABI inferred) */
+#define FW_MIC_SIDE          ((lens_side_fn2)0x0045CFDDU)   /* 1 = right temple, 2 = left temple */
 /* Future validation-gate seam, unused until its ABI is confirmed: on-device LC3
- * (SVC_Lc3EncodeMono @ 0x0057A940, "encodes one or more mono or interleaved PCM
+ * (SVC_Lc3EncodeMono, "encodes one or more mono or interleaved PCM
  * frames through liblc3") would let codec=LC3 honor mic_bitrate_100. */
 
 /* wire contract */

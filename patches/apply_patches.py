@@ -15,7 +15,7 @@ Usage:
 
 JSON schema (see gen_patches.py):
   {
-    "base":          "g2_2.2.4.34.bin",
+    "base":          "g2_2.2.9.22.bin",
     "base_sha256":   "<hex>",              # verified against <base.bin> up front
     "output_sha256": "<hex>",              # verified against <out.bin> at the end
     "patches": [

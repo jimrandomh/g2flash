@@ -1,85 +1,124 @@
-/* gesture_fwd.c — while a Faceclaw framebuffer lease owns the EvenHub session,
- * forward long-press + release-long-press to the phone as SysEvents instead
- * of opening the built-in "End this feature?" force-quit dialog. Without that
- * lease, preserve the stock dialog and release handling.
+/* gesture_fwd.c — forward source-qualified gestures while Faceclaw owns the
+ * EvenHub framebuffer lease, preserving stock behavior at every other time.
  *
- * Background (all confirmed on 2.2.4.34, see the g2-evenhub-input-event-map note):
- *   - Input dispatcher FUN_004424a2 turns each gesture into a UI event code and
- *     posts it via FUN_0045fc80(ctx, code, data).
- *   - Long-press = subtype 3. In EvenHub the branch calls FUN_0046a644 (dialog).
- *   - Release-long-press = subtype 0xe -> FUN_0045fc80(ctx, 0x4a, coords),
- *     which the EvenHub UI handler drops (no 0x4a case). The recovered touch
- *     processor confirms subtype 0xe is the RELEASE mask for both temple
- *     touchpads and the ring, paired with subtype 3's LONG mask.
- *   - The UI-event dispatch (FUN_0045fc80 -> FUN_004505a4 -> FUN_004509a0 ->
- *     FUN_0045062c -> (*handler)()) is SYNCHRONOUS on the display thread, and the
- *     stock EvenHub SysEvent sender FUN_004ff232 is called from that same handler
- *     on that same thread. So we can build+send the SysEvent DIRECTLY here, from
- *     FUN_004424a2, with no cross-thread race and no change to the UI handler.
+ * The 2.2.9.22 input dispatcher (FUN_00444902) keeps the current raw input
+ * record in r6. Byte 0 is the source (0/1 = temple touchpads, 4 = R1 ring) and
+ * bytes 2..5 form the gesture subtype:
  *
- * Wire: FUN_004ff232(0,0,0, EventType, 0, 0) emits a g2.evenhub SysEvent
- * (Cmd=OS_NOITY_EVENT_TO_APP_PACKET, DevEvent.SysEvent) with EventType = the 4th
- * arg. Its sixth argument is the raw input source; the stock sender maps
- * 0/1/4 to the protobuf EventSource values glasses-left/glasses-right/ring.
- * We use the OsEventTypeList values Faceclaw already reserves:
- * 9 = RING_LONG_PRESS_EVENT, 10 = RING_LONG_PRESS_RELEASE_EVENT (8 is IMU report).
- * Despite those enum names, Faceclaw treats them as source-qualified generic
- * long-press events, so temples and ring can share the same event types.
+ *   0x03  plain long press       -> stock UI event 0x08
+ *   0x0e  long-press release     -> stock UI event 0x4a
+ *   0x11  tap then long press    -> new stock Menu path
+ *
+ * The subtype-3 and subtype-0xe hooks replace calls to the normal UI-event
+ * poster. Their naked shims preserve its r0-r2 ABI and pass r6 as a fourth C
+ * argument. The subtype-0x11 hook replaces the first no-argument call in the
+ * new Menu branch. If Faceclaw handles it, the shim restores its own stack and
+ * branches to the dispatcher's common epilogue at 0x00444fe8, suppressing the
+ * complete stock Menu path. Otherwise it calls the overwritten stock function
+ * and returns to 0x00444a44 exactly as the original BL did.
+ *
+ * Wire: FUN_004ebad2(0,0,0,EventType,0,RawSource) emits a g2.evenhub SysEvent.
+ * The stock sender maps raw sources 0/1/4 to the protobuf left/right/ring source
+ * values. Event types 9 and 10 are the existing Faceclaw long-press pair; 11 is
+ * a private extension for the newly distinct tap-then-long gesture. A subtype-
+ * 0x0e event can follow either press kind and remains the generic release.
  */
 
-typedef int  (*fc80_t)(void *ctx, int code, void *data);
-typedef int *(*modelookup_t)(void *g);
-typedef int  (*sysevt_t)(int, int, int, int, int, int);
-typedef void (*longpress_fn)(unsigned command, unsigned app_id);
+typedef int  (*gesture_fc80_t)(void *ctx, int code, void *data);
+typedef int *(*gesture_modelookup_t)(void *g);
+typedef int  (*gesture_sysevt_t)(int, int, int, int, int, int);
 
-#define FW_FC80   ((fc80_t)0x0045f8fdu)        /* FUN_0045f8fc  post UI event (Thumb) */
-#define FW_MODE   ((modelookup_t)0x0045f8e7u)  /* FUN_0045f8e6  foreground mode ctx (Thumb) */
-#define FW_SYSEVT ((sysevt_t)0x004da16bu)      /* FUN_004da16a  send EvenHub SysEvent (Thumb) */
-#define FW_LONGPRESS ((longpress_fn)0x0046ae9du) /* FUN_0046ae9c stock force-quit dialog */
+#define GESTURE_FW_FC80   ((gesture_fc80_t)0x004622edu)
+#define GESTURE_FW_MODE   ((gesture_modelookup_t)0x004622d7u)
+#define GESTURE_FW_SYSEVT ((gesture_sysevt_t)0x004ebad3u)
 
-/* Foreground UI ctx pointer: FUN_00442d86 loads r5 = *(0x00443750) = 0x200744d0,
- * then passes r5[0] as the ctx to FUN_0045f8fc / FUN_0045f8e6. */
-#define UI_CTX   (*(void *volatile *)0x200744d0u)
-/* Current input event record (sourced from the literal at 0x004444a4); byte 0 is the source:
- * 0/1 = left/right temple touchpad, 4 = R1 ring. */
-#define EVT_SRC  (*(volatile unsigned char *)0x2034dc30u)
+/* Foreground UI owner pointer. The dispatcher passes UI_CTX[0] to FW_FC80,
+ * while FW_MODE consumes UI_CTX itself. Re-derived from four loader witnesses. */
+#define GESTURE_UI_CTX (*(void *volatile *)0x20076768u)
 
-#define APP_EVENHUB 0xe0
-#define ET_LONG     9    /* OsEventTypeList: RING_LONG_PRESS_EVENT */
-#define ET_REL      10   /* OsEventTypeList: RING_LONG_PRESS_RELEASE_EVENT */
+#define GESTURE_APP_EVENHUB   0xe0
+#define GESTURE_ET_LONG       9
+#define GESTURE_ET_RELEASE    10
+#define GESTURE_ET_TAP_LONG   11
 
-void evenhub_longpress(unsigned command, unsigned app_id);
-int ring_release(void *ctx, int code, void *data);
+int gesture_press(void *ctx, int code, void *data);
+int gesture_release(void *ctx, int code, void *data);
+int gesture_press_impl(void *ctx, int code, void *data,
+                       const unsigned char *event);
+int gesture_release_impl(void *ctx, int code, void *data,
+                         const unsigned char *event);
+int gesture_short_long(void);
+int gesture_short_long_impl(const unsigned char *event);
 
-/* Replaces the subtype-3 EvenHub force-quit dialog call. Preserve that exact
- * stock behavior unless Faceclaw owns the active EvenHub display session. Under
- * Faceclaw, forward the gesture with its raw source so the phone can distinguish
- * the left temple, right temple, and ring. */
-void evenhub_longpress(unsigned command, unsigned app_id)
+static int faceclaw_gesture_event(const unsigned char *event, int event_type)
 {
-    if (!cfw_fb_lease_active()) {
-        /* The patched stock call site supplies r0=1 and r1=APP_EVENHUB. The
-         * dialog function serializes both values into its display command, so
-         * preserve them across the lease check and forward them verbatim. */
-        FW_LONGPRESS(command, app_id);
-    } else {
-        FW_SYSEVT(0, 0, 0, ET_LONG, 0, EVT_SRC);
-    }
-}
-
-/* Wraps the subtype-0xe post (bl FUN_0045fc80(ctx, 0x4a, coords)). For any
- * release-long-press while Faceclaw owns a foreground EvenHub session, emit the
- * paired release SysEvent with its raw source and skip the (dropped-anyway) 0x4a
- * post. Outside that lease/foreground combination, preserve stock behavior.
- * The return value is ignored by the caller. */
-int ring_release(void *ctx, int code, void *data)
-{
-    if (cfw_fb_lease_active()) {
-        int *mode = FW_MODE(UI_CTX);
-        if (mode && *mode == APP_EVENHUB) {      /* EvenHub foreground */
-            FW_SYSEVT(0, 0, 0, ET_REL, 0, EVT_SRC);
+    if (cfw_fb_lease_active() && event) {
+        int *mode = GESTURE_FW_MODE(GESTURE_UI_CTX);
+        if (mode && *mode == GESTURE_APP_EVENHUB) {
+            GESTURE_FW_SYSEVT(0, 0, 0, event_type, 0, event[0]);
             return 1;
         }
     }
-    return FW_FC80(ctx, code, data);
+    return 0;
+}
+
+/* r6 is live at both patched UI-event call sites but is outside the stock
+ * r0-r2 ABI. Pass it as the fourth argument to the source-qualified helpers. */
+__attribute__((naked)) int gesture_press(
+    void *ctx __attribute__((unused)),
+    int code __attribute__((unused)),
+    void *data __attribute__((unused)))
+{
+    __asm volatile("mov r3, r6\n\tb gesture_press_impl");
+}
+
+__attribute__((naked)) int gesture_release(
+    void *ctx __attribute__((unused)),
+    int code __attribute__((unused)),
+    void *data __attribute__((unused)))
+{
+    __asm volatile("mov r3, r6\n\tb gesture_release_impl");
+}
+
+int gesture_press_impl(void *ctx, int code, void *data,
+                       const unsigned char *event)
+{
+    if (faceclaw_gesture_event(event, GESTURE_ET_LONG)) return 1;
+    return GESTURE_FW_FC80(ctx, code, data);
+}
+
+int gesture_release_impl(void *ctx, int code, void *data,
+                         const unsigned char *event)
+{
+    if (faceclaw_gesture_event(event, GESTURE_ET_RELEASE)) return 1;
+    return GESTURE_FW_FC80(ctx, code, data);
+}
+
+int gesture_short_long_impl(const unsigned char *event)
+{
+    return faceclaw_gesture_event(event, GESTURE_ET_TAP_LONG);
+}
+
+/* The patched instruction is still a BL. Keep an aligned eight-byte shim frame
+ * across the C helper. On pass-through, reproduce the overwritten call and pop
+ * directly back to 0x00444a44 with its r0 result intact. On takeover, discard
+ * the shim frame and leave the entire subtype-0x11 branch through its epilogue. */
+__attribute__((naked)) int gesture_short_long(void)
+{
+    __asm volatile(
+        "push {r3, lr}\n\t"
+        "mov r0, r6\n\t"
+        "bl gesture_short_long_impl\n\t"
+        "cmp r0, #0\n\t"
+        "beq 1f\n\t"
+        "add sp, #8\n\t"
+        "movw r0, #0x4fe9\n\t"
+        "movt r0, #0x0044\n\t" /* 0x00444fe9: dispatcher epilogue | Thumb */
+        "bx r0\n"
+        "1:\n\t"
+        "movw r3, #0x8c8b\n\t"
+        "movt r3, #0x0046\n\t" /* 0x00468c8b: overwritten state getter | Thumb */
+        "blx r3\n\t"
+        "pop {r3, pc}"
+        ::: "memory");
 }

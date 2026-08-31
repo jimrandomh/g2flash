@@ -68,6 +68,8 @@ fully documented):
 
  * Receive ring and temple-touchpad long-press and long-press-release as regular
    source-qualified gestures, rather than opening a modal offering to quit
+ * Receive 2.2.9's tap-then-long gesture as distinct private event type 11 and,
+   while the framebuffer lease is held, suppress its incompatible stock Menu path
  * Play sound effects with the piezo buzzer
  * Receive on-head detection wear/unwear events, to trigger a lock-screen
  * Use the magnetometer as a compass
@@ -126,11 +128,11 @@ push custom firmware (a patched `*_cfw.bin` image) onto the device.
 ```bash
 cd g2flash
 ./build_cfw.sh                       # set up venv, download stock fw, patch, verify
-./venv/bin/python g2flash.py -c g2://local -f g2_2.2.6.10_cfw.bin
+./venv/bin/python g2flash.py -c g2://local -f g2_2.2.9.22_cfw.bin
 ```
 
 `build_cfw.sh` does the whole build: it creates `./venv` with the flasher's
-dependencies, downloads the stock **G2 2.2.6.10** firmware from Even's CDN,
+dependencies, downloads the stock **G2 2.2.9.22** firmware from Even's CDN,
 applies the patches in `patches/`, and verifies that both the download and the
 patched result match pinned SHA-256 hashes (so a clean run proves you got
 exactly the reviewed image). Run `./build_cfw.sh --help` for options
@@ -150,19 +152,19 @@ exactly the reviewed image). Run `./build_cfw.sh --help` for options
     This is what `build_cfw.sh` uses to produce the image.
   - `gen_patches.py` — compiles the injected code with **clang** and (re)generates
     `cfw_patches.json`. Run it after editing the patch sources:
-    `python3 patches/gen_patches.py g2_2.2.6.10.bin patches/cfw_patches.json`
+    `python3 patches/gen_patches.py g2_2.2.9.22.bin patches/cfw_patches.json`
     (or `./build_cfw.sh --update-patches`), then commit the JSON.
   - `patch_compress.py` — the all-in-one patcher (576 carrier lift + image
     compression + direct framebuffer presentation + capability field);
     `gen_patches.py` calls it to build the ops.
     Holds every stock-firmware address the patches depend on; see
-    `notes/fw-2.2.6.10-cfw-rebase.md` for how they were derived.
+    `../notes/fw-2.2.9.22-cfw-rebase.md` for how they were derived.
   - `build.py`, `*.c` — the C→position-independent-Thumb pipeline and sources
     for the injected firmware code (compiled by `gen_patches.py`; the resulting
     machine code lands in `cfw_patches.json`).
 - `requirements.txt` — the flasher's Python dependencies.
 
-Firmware images (`g2_2.2.6.10*.bin`) are **not** checked in — they are Even's
+Firmware images (`g2_2.2.9.22*.bin`) are **not** checked in — they are Even's
 firmware, so you build them locally with `build_cfw.sh`.
 
 ## Requirements
@@ -237,6 +239,8 @@ Common options:
   halts before the named stage; use it to test connectivity without writing.
 - `--my-warranty-is-void` — skip the interactive warranty confirmation.
 - `--component-retries N` / `--block-nak-retries N` — transfer retry tuning.
+- `--reconnect-attempts N` / `--reconnect-delay SECONDS` — recovery tuning when
+  an ACK timeout indicates that the arm dropped its GATT connection.
 - `--debug` — print received BLE frames.
 
 `--recompute-checksums IMAGE` rewrites an image's stored checksums in place
@@ -250,26 +254,33 @@ otherwise the glasses reject the component on END with status 7 (CHECK_FAIL).
 # dry run: connect to both arms over the local radio and stop before any write
 python g2flash.py \
   -c 'g2://local?left=AA:BB:CC:11:22:33&right=AA:BB:CC:44:55:66&addressType=public' \
-  -f g2_2.2.6.10.bin --stop-before flash
+  -f g2_2.2.9.22.bin --stop-before flash
 
 # fix checksums after patching, no device needed
-python g2flash.py --recompute-checksums g2_2.2.6.10_cfw.bin
+python g2flash.py --recompute-checksums g2_2.2.9.22_cfw.bin
 
 # flash the custom firmware to both arms via DroidBridge
 python g2flash.py \
   -c 'g2://droidbridge?phone=192.168.1.50&port=8080&token=secret&left=AA:BB:CC:11:22:33&right=AA:BB:CC:44:55:66' \
-  -f g2_2.2.6.10_cfw.bin
+  -f g2_2.2.9.22_cfw.bin
 ```
 
 ## How it works (brief)
 
 The flasher speaks the same `aa21`-framed envelope protocol as the official
 app, validated byte-for-byte against a real flash capture. The firmware image
-is an EVENOTA container of five components; each is streamed over the firmware
+is an EVENOTA container of five or six components; each is streamed over the firmware
 data service (`...e1001`) as a FILE_CHECK subheader followed by 4 KB blocks,
-then an END check the glasses verify against a per-component CRC32C. A heartbeat
-on the EvenHub control service (`...e5450`) keeps the session alive during the
-transfer. Arms are flashed one at a time. See the module docstring and comments
+then an END check the glasses verify against a per-component CRC32C. Before
+BEGIN, it performs the stock control-channel authentication handshake; omitting
+that handshake appears to cause firmware 2.2.9 to close an otherwise busy GATT
+connection after about 30 seconds. OTA data fragments refresh the transfer watchdog. The
+official OTA capture sends no EvenHub-control heartbeats between BEGIN and the
+final END, so neither does this flasher. DroidBridge flashes also reuse one HTTP connection
+instead of opening one per BLE fragment. If an ACK is lost, the flasher never
+risks replaying that ambiguous block in place: it reconnects, restores
+notifications, sends a fresh BEGIN, and restarts the entire component from
+FILE_CHECK. Arms are flashed one at a time. See the module docstring and comments
 in `g2flash.py` for the wire-level details and the retry/recovery rationale.
 
 
