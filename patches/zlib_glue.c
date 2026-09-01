@@ -62,8 +62,11 @@
  *                              Pairs with a delta (usually via mode 8) to scroll.
  *   10          -> [10][enabled] compass control (no display change): invokes the
  *                              firmware's own compass start/stop routines on the
- *                              right arm. Stock navigation notifications carry the
- *                              resulting heading/calibration events back to the phone.
+ *                              right arm. enabled=2 adds [interval16][min-change16],
+ *                              both little-endian; interval is clamped to 50..2000 ms
+ *                              before configuring the stock compass event filter.
+ *                              Stock navigation notifications carry the resulting
+ *                              heading/calibration events back to the phone.
  *   11          -> [11] cleanup the custom-app session before disconnect: release
  *                              leases/direct-framebuffer ownership, stop and delete
  *                              CFW timers, stop custom buzzer/compass activity, release
@@ -171,6 +174,7 @@ typedef void (*display_gate_fn)(void);               /* display semaphore take/g
 typedef int  (*display_queue_fn)(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t);
 typedef void (*display_copy_fn)(void);               /* stock 576x288 -> 640x480 packed copy */
 typedef int (*compass_control_fn)(void);              /* stock Start/StopIMUCompassFunc */
+typedef int (*compass_config_fn)(uint32_t, const uint32_t *); /* sensor-hub FuncConfig */
 typedef int (*display_event_forward_fn)(uint32_t, uint32_t, void *); /* display event -> active UI */
 typedef int (*compass_notify_fn)(uint32_t);           /* stock sid-0x08 compass notifier */
 
@@ -205,6 +209,7 @@ typedef int (*compass_notify_fn)(uint32_t);           /* stock sid-0x08 compass 
 #define FW_DISPLAY_COPY   ((display_copy_fn)0x004708d1U)  /* FUN_004708d0: stock packed-buffer copy */
 #define FW_COMPASS_START  ((compass_control_fn)0x0055d4d7U) /* FUN_0055d4d6 StartIMUCompassFunc */
 #define FW_COMPASS_STOP   ((compass_control_fn)0x0055d55fU) /* FUN_0055d55e StopIMUCompassFunc */
+#define FW_COMPASS_CONFIG ((compass_config_fn)0x004b81d3U) /* FUN_004b81d2: FuncConfig(type,config) */
 #define FW_DISPLAY_EVENT_FORWARD ((display_event_forward_fn)0x004622edU) /* FUN_004622ec */
 #define FW_COMPASS_NOTIFY ((compass_notify_fn)0x0059f47dU) /* FUN_0059f47c navigation_notify_compass_changed_cmd */
 #define FW_DISPLAY_FB     (*(uint8_t * volatile *)0x200008b4U) /* stock copier's 640x480 destination */
@@ -449,7 +454,12 @@ static int image_dispatch(uint8_t *state, const uint8_t *src, uint32_t srclen, i
     }
 
     if (mode == 10) {
-        /* Compass control (no display change): [10][0] stops, [10][1] starts.
+        /* Compass control (no display change):
+         *   [10][0] stops
+         *   [10][1] starts with the stock 1000 ms / 5 degree configuration
+         *   [10][2][interval16][min-change16] starts, then applies the supplied
+         *       little-endian configuration through the stock sensor-hub API.
+         *       interval is clamped to 50..2000 ms; min-change is passed through.
          * The stock compass implementation owns the sensor setup, calibration,
          * sampling, and heading computation. Heading events normally reach the
          * sid-0x08 notifier only through Navigation's UI handler; mode 10 also
@@ -464,10 +474,23 @@ static int image_dispatch(uint8_t *state, const uint8_t *src, uint32_t srclen, i
             ctx->compass_forward = 0;
             return FW_SIDE() == 1 ? FW_COMPASS_STOP() : 0;
         }
-        if (src[1] == 1) {
+        uint8_t enabled = src[1];
+        if (enabled == 1 || enabled == 2) {
+            uint32_t config[2];
+            if (enabled == 2) {
+                if (srclen < 6) return -1;
+                config[0] = (uint32_t)src[2] | ((uint32_t)src[3] << 8);
+                config[1] = (uint32_t)src[4] | ((uint32_t)src[5] << 8);
+                if (config[0] < 50u) config[0] = 50u;
+                if (config[0] > 2000u) config[0] = 2000u;
+            }
             ctx->compass_forward = 1;
             if (FW_SIDE() == 1) {
                 int r = FW_COMPASS_START();
+                if (r == 0 && enabled == 2) {
+                    r = FW_COMPASS_CONFIG(2, config);
+                    if (r != 0) FW_COMPASS_STOP();
+                }
                 if (r != 0) ctx->compass_forward = 0;
                 return r;
             }
