@@ -112,12 +112,27 @@ typedef struct {
     uint32_t mic_lease_deadline;            /* FW_MS_TICK streaming-lease deadline; 0 = none */
     uint32_t mic_watchdog_timer;            /* one-shot osTimer tearing down a lapsed session */
     uint8_t  mic_notify_buf[32];            /* stable storage for the field-104 sid-0x09 notify */
+    /* --- Ambient light sensor (mode 16, als_sensor.c). Passive mode redirects
+     * the sensor-hub's ALS timer message to als_hub_handler through the RAM
+     * dispatch table and polls the OPT3001 itself, so the stock adjuster never
+     * steps the panel brightness. Appended at the tail. --- */
+    uint8_t  als_hooked;                    /* hub message-8 entry currently points at als_hub_handler */
+    uint8_t  als_opened_by_cfw;             /* the CFW opened the ALS (close it again on stop) */
+    uint8_t  als_flags;                     /* ALS_START_FLAG_* from the start command */
+    uint8_t  als_read_ok;                   /* last passive read succeeded */
+    uint16_t als_interval_ms;               /* passive poll period (100..5000) */
+    uint16_t als_min_delta;                 /* report when |value - last reported| >= this */
+    uint16_t als_heartbeat_ms;              /* also report after this many ms (0 = never) */
+    uint16_t als_reserved;
+    uint32_t als_orig_handler;              /* stock hub handler for message 8 (Thumb address) */
+    uint32_t als_last_reported;             /* value carried by the last report */
+    uint32_t als_last_report_tick;          /* FW_MS_TICK of the last report (0 = none yet) */
 } customCfwContext;
 
 #define CFW_CTX_SLOT  0x2029f4a8U    /* first word of the CFW-reserved TLSF tail */
 #define CFW_ALLOC_DIAG_SLOT 0x2029f4acU /* second word: magic | sticky failure bit */
 #define CFW_ALLOC_DIAG_MAGIC 0xA110CA7EU
-#define CFW_CTX_MAGIC 0xC0FFEE68U    /* bumped for the context layout change (mic fields) */
+#define CFW_CTX_MAGIC 0xC0FFEE69U    /* bumped for the context layout change (als fields) */
 
 #define FW_MS_TICK  (*(volatile uint32_t *)0x20076d80U)  /* firmware 1 ms OS tick (SysTick chain) */
 

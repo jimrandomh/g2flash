@@ -73,6 +73,12 @@ fully documented):
  * Play sound effects with the piezo buzzer
  * Receive on-head detection wear/unwear events, to trigger a lock-screen
  * Use the magnetometer as a compass
+ * Read the ambient light sensor (a TI OPT3001 on the master temple) and,
+   optionally, run it in a "passive" mode where the firmware polls the sensor
+   for the phone but the stock auto-brightness adjuster never steps the panel,
+   so the phone can implement its own brightness policy (image-handler mode 16;
+   readings arrive as settings-channel field 105). See the contract comment in
+   `patches/als_sensor.c`.
  * Take over the wakeword ("hey Even") and replace what it opens with a
    different phone-side transcription and AI agent pipeline
  * Take over the screen-wake even on the dashboard, so that you can end the

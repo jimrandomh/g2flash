@@ -30,5 +30,6 @@
 #include "zlib_glue.c"
 #include "settings_ext.c"
 #include "mic_control.c"
+#include "als_sensor.c"
 #include "gesture_fwd.c"
 #include "debug.c"

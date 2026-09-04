@@ -88,6 +88,12 @@
  *                              stock background 20 px font chain and its default
  *                              pair kerning. Bytes 1..31 adjust x by -10..20 as in
  *                              mode 14; options and clipping also match mode 14.
+ *   16          -> [16][op]... ambient light sensor (no display change; master lens
+ *                              only, see als_sensor.c). op 0 = QUERY one report; op 1
+ *                              [flags][interval16][min-delta16][heartbeat16] = PASSIVE
+ *                              START: the CFW polls the OPT3001 itself and the stock
+ *                              auto-brightness adjuster never steps the panel; op 2 =
+ *                              PASSIVE STOP. Reports arrive as sid-0x09 field 105.
  *   anything else / too short  -> load_bmp_fast (rejects cleanly if not a BMP).
  *
  * The HIGH BIT of the mode byte is a "lenses differ" flag; most modes ignore it. For
@@ -288,6 +294,8 @@ static void cfw_snap_clear(cfw_snap *snap);
 static int is_shadow_message(const uint8_t *src, uint32_t srclen);
 static int cfw_cleanup_session(void);
 static void mic_cleanup_session(void);   /* mic_control.c (same TU): mic hw + lease teardown */
+static void als_cleanup_session(void);   /* als_sensor.c (same TU): passive ALS teardown */
+int als_control(const uint8_t *src, uint32_t srclen); /* als_sensor.c: mode 16 */
 
 static int inflate_rle(uint8_t *strm, uint8_t *base, uint32_t stride, uint32_t rowbytes, uint32_t rows);
 static void present_shadow(uint8_t *state, uint32_t w, uint32_t h, cfw_rectlist *rl);
@@ -497,6 +505,12 @@ static int image_dispatch(uint8_t *state, const uint8_t *src, uint32_t srclen, i
             return 0;
         }
         return -1;
+    }
+
+    if (mode == 16) {
+        /* Ambient light sensor query / passive polling control (no display change).
+         * Runs on both lenses; als_control itself acts only on the master lens. */
+        return als_control(src, srclen);
     }
 
     if (mode == 11) {
@@ -865,6 +879,9 @@ static int cfw_cleanup_session(void) {
     /* Stop any CFW microphone session (capture hardware, streaming lease, and
      * its watchdog timer) so a departing custom app cannot leave the mics on. */
     mic_cleanup_session();
+
+    /* Give the ambient light sensor back to the stock auto-brightness machine. */
+    als_cleanup_session();
 
     int compass_was_forwarding = ctx->compass_forward != 0;
     ctx->compass_forward = 0;
