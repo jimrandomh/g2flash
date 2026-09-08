@@ -335,7 +335,7 @@ __attribute__((naked)) void faceclaw_evenai_display_entry(void) {
 }
 
 // Capability string "EVENCFW/<ver> <space-separated feature tokens>":
-//   EVENCFW/18 -> magic prefix + contract version (detect: starts-with "EVENCFW/")
+//   EVENCFW/21 -> magic prefix + contract version (detect: starts-with "EVENCFW/")
 //   imgz       -> zlib (DEFLATE) compressed image payloads
 //   rle        -> compact run-length encoded delta rows
 //   wakelease  -> fail-open Faceclaw ownership of idle wakes / local Even AI
@@ -350,6 +350,7 @@ __attribute__((naked)) void faceclaw_evenai_display_entry(void) {
 //   font15     -> mode 15 draws UTF-8 with the built-in 20 px font and kerning
 //   micctl     -> private mic-control channel (field 103 / read-back field 104)
 //   taplong11  -> source-qualified tap-then-long gesture as private event type 11
+//   compassdiag -> sid-8 heading notifications include field-100 sample diagnostics
 //
 // The string is a normal rodata literal now that build.py emits/relocates .rodata
 // (earlier this had to be spelled out byte-by-byte to avoid a rodata section).
@@ -357,7 +358,7 @@ __attribute__((naked)) void faceclaw_evenai_display_entry(void) {
 
 int settings_send_wrapper(int type, int sid, unsigned char *buf, unsigned len) {
     if (sid == 9) {
-        static const char caps[] = "EVENCFW/18 img640 imgz rle wakelease directfb fbguard wearnotify cleanup11 texcache12 teximg13 texstr14 font15 micctl taplong11";
+        static const char caps[] = "EVENCFW/21 img640 imgz rle wakelease directfb fbguard wearnotify cleanup11 texcache12 teximg13 texstr14 font15 micctl taplong11";
         len = pb_append_bytes_field(buf, len, SETTINGS_RESPONSE_CAPACITY,
                                     100u, (const unsigned char *)caps,
                                     (unsigned)sizeof(caps) - 1u);

@@ -28,6 +28,7 @@
 #include "rle.c"
 #include "texture_cache.c"
 #include "zlib_glue.c"
+#include "compass.c"
 #include "settings_ext.c"
 #include "mic_control.c"
 #include "als_sensor.c"

@@ -14,8 +14,8 @@ Build a CFW image for g2_2.2.9.22 with:
   (6) a full-panel 640x480 packed-4bpp shadow copied directly into the physical
       framebuffer, and
   (7) stock wear-state notifications outside onboarding plus a current-state query, and
-  (8) Faceclaw compass forwarding from the global sensor display event to the stock
-      navigation BLE notifier while image-handler mode 10 is enabled, and
+  (8) Faceclaw compass heading + sample diagnostics from the sensor hub while
+      image-handler mode 10 is enabled, and
   (9) a lease-scoped 64 KiB texture cache plus cached-image/cached-string drawing
       through image-handler modes 12, 13, and 14, and built-in-font mode 15, and
   (10) a phone-controlled microphone configuration + multi-channel audio streaming
@@ -179,11 +179,10 @@ WEAR_NOTIFY_BL_SITES = {
     0x4ac3ea: "d9 f7 58 ff",  # ON_HEAD:  bl 0x48629e
     0x4ac44e: "d9 f7 26 ff",  # OFF_HEAD: bl 0x48629e
 }
-# Global display-thread routing of IMU sensor event 9 as UI event 0x41. Navigation's
-# UI handler normally receives this and calls the BLE compass notifier; Faceclaw has
-# EvenHub active instead, so redirect through a wrapper that preserves the stock call
-# and additionally invokes that notifier while mode 10 owns the compass.
-COMPASS_EVENT_BL_SITE = (0x444dfc, "1d f0 76 fa")  # bl FUN_004622ec(display,0x41,&heading)
+# Capture the selected GAF source before the parser clears it, then attach the
+# matching record diagnostics at the sensor-hub heading report call.
+COMPASS_DECODE_BL_SITE = (0x4b6922, "65 f0 af fd")  # bl GAF decode, before output is cleared
+COMPASS_REPORT_BL_SITE = (0x4b632e, "ff f7 59 fc")  # bl DRV_IMUSendUIEvent(9,heading)
 
 def enc_bl(pc, target):
     """Encode a Thumb-2 BL (T1) from instruction address `pc` to `target`."""
@@ -304,7 +303,8 @@ def layout(img):
     release_addr   = base + _fn(built, "gesture_release")["offset"]
     display_copy_addr = base + _fn(built, "display_copy_hook")["offset"]
     wear_notify_addr = base + _fn(built, "faceclaw_send_wear_event")["offset"]
-    compass_event_addr = base + _fn(built, "compass_event_forward")["offset"]
+    compass_decode_addr = base + _fn(built, "compass_decode_capture")["offset"]
+    compass_report_addr = base + _fn(built, "compass_report_event")["offset"]
 
     # --- assemble the appended payload bytes (old_ps .. end) ---
     pad = blob_off - old_ps                     # alignment gap before the blob
@@ -382,9 +382,12 @@ def layout(img):
         *[(g2f(site), orig, enc_bl(site, wear_notify_addr),
            f"bl faceclaw_send_wear_event @ {site:#x} (outside onboarding)")
           for site, orig in WEAR_NOTIFY_BL_SITES.items()],
-        (g2f(COMPASS_EVENT_BL_SITE[0]), COMPASS_EVENT_BL_SITE[1],
-         enc_bl(COMPASS_EVENT_BL_SITE[0], compass_event_addr),
-         "bl compass_event_forward (global IMU heading -> stock nav BLE notifier)"),
+        (g2f(COMPASS_DECODE_BL_SITE[0]), COMPASS_DECODE_BL_SITE[1],
+         enc_bl(COMPASS_DECODE_BL_SITE[0], compass_decode_addr),
+         "bl compass_decode_capture (sample-matched GAF diagnostics)"),
+        (g2f(COMPASS_REPORT_BL_SITE[0]), COMPASS_REPORT_BL_SITE[1],
+         enc_bl(COMPASS_REPORT_BL_SITE[0], compass_report_addr),
+         "bl compass_report_event (stock UI + heading with diagnostics over BLE)"),
     ]
     return bytes(append), in_place, (idx, comp_off, old_ps)
 

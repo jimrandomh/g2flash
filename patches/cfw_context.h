@@ -32,6 +32,12 @@ typedef struct {
     volatile uint32_t seq; /* push order, or CFW_SNAP_BUSY_SEQ while being consumed */
 } cfw_snap;
 
+/* Sidecar for a stock IMU ring record; written/read on the sensor-hub task. */
+typedef struct {
+    uint32_t timestamp;
+    uint8_t accuracy, anomalies, source, flags;
+} cfw_compass_sample;
+
 typedef struct {
     uint32_t magic;      /* CFW_CTX_MAGIC when valid */
     /* --- snapshot FIFO: fixes the producer/consumer race on the shared recon buffer.
@@ -75,7 +81,7 @@ typedef struct {
     uint32_t wake_fallback_timer;          /* one-shot stock-dashboard fallback */
     uint16_t wake_nonce;                   /* current pending wake, 0 = none */
     uint8_t  wake_dashboard_pending;       /* dashboard request held for Faceclaw */
-    volatile uint8_t compass_forward;      /* mode 10: forward global heading events to BLE */
+    volatile uint8_t compass_forward;      /* mode 10: forward sensor-hub heading reports to BLE */
     uint8_t  wake_notify_buf[16];          /* stable storage for sid-0x09 notify */
     uint8_t  wear_notify_buf[12];          /* stable storage for sid-0x10 wear notify */
     /* Direct-framebuffer job. The EvenHub worker holds the stock display gate
@@ -127,12 +133,16 @@ typedef struct {
     uint32_t als_orig_handler;              /* stock hub handler for message 8 (Thumb address) */
     uint32_t als_last_reported;             /* value carried by the last report */
     uint32_t als_last_report_tick;          /* FW_MS_TICK of the last report (0 = none yet) */
+    cfw_compass_sample compass_samples[20];
 } customCfwContext;
 
 #define CFW_CTX_SLOT  0x2029f4a8U    /* first word of the CFW-reserved TLSF tail */
 #define CFW_ALLOC_DIAG_SLOT 0x2029f4acU /* second word: magic | sticky failure bit */
 #define CFW_ALLOC_DIAG_MAGIC 0xA110CA7EU
-#define CFW_CTX_MAGIC 0xC0FFEE69U    /* bumped for the context layout change (als fields) */
+
+// Marker used to validate that the CFW context pointer hasn't been clobbered.
+// Does not need updating.
+#define CFW_CTX_MAGIC 0xC0FFEE6AU
 
 #define FW_MS_TICK  (*(volatile uint32_t *)0x20076d80U)  /* firmware 1 ms OS tick (SysTick chain) */
 
