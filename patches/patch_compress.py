@@ -245,11 +245,26 @@ def find_mainapp(img):
             return i, off, ps
     raise SystemExit("main-app component (ota/s200_firmware_ota.bin) not found")
 
+def validate_ring_battery_stock(img):
+    """Pin the read-only stock ABI used by ring_battery.c (2.2.9.22 only)."""
+    for address, expected, description in (
+        (0x00512d84, "0200d2b2652a00db6420384a1070c9b2002901d0012000e0002050707047334890f90000c0b27047304840787047", "cache setter and accessors"),
+        (0x00512e70, "a6720720", "cache address literal"),
+        (0x0047efa8, "80b534f01ff8002808d0fff77eff002801d0012000e00020c0b207e0fff77bff002801d0012000e00020c0b202bd", "dashboard connection predicate"),
+        (0x0047eeb2, "1a480078c0f30010c0b2704717480078c0f34010c0b27047", "connection-bit getters"),
+        (0x0047ef1c, "06740720", "connection-bit address literal"),
+        (0x004a9be2, "80b569f0ddf802bd", "dashboard battery getter"),
+    ):
+        expected = bytes.fromhex(expected)
+        if bytes(img[g2f(address):g2f(address) + len(expected)]) != expected:
+            raise ValueError(f"ring battery stock ABI mismatch: {description} at {address:#x}")
+
 def layout(img):
     """Compile the single injected code blob (patches_main.c, which #includes every
     patch source) and append it at the tail of the main-app payload. Returns
     (append_bytes, in_place_patches, mainapp=(idx,off,old_ps)). Enforces the MRAM
     ceiling (duplicate of g2flash.check_mainapp_fits_mram)."""
+    validate_ring_battery_stock(img)
     idx, comp_off, old_ps = find_mainapp(img)
 
     # This reservation is safe only if the stock image has no absolute pointer

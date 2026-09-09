@@ -300,3 +300,9 @@ a real device.
 # Acknowledgements
 
 Thanks to kalanihelekunihi for [evenRealities-openCFW](https://github.com/kalanihelekunihi/evenRealities-openCFW/) and Commute773 for [g2-kit-unofficial](https://github.com/Commute773/g2-kit-unofficial/), which were immensely helpful while creating this.
+
+### R1 battery reporting
+
+CFW `ringbat17` exposes the stock R1 battery cache in settings field 106 and
+read-only image-handler mode 17. Faceclaw shows it as `R1` in the top bar.
+See [the wire contract and stock-firmware evidence](docs/ring-battery.md).

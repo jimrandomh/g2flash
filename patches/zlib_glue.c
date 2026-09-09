@@ -94,6 +94,8 @@
  *                              START: the CFW polls the OPT3001 itself and the stock
  *                              auto-brightness adjuster never steps the panel; op 2 =
  *                              PASSIVE STOP. Reports arrive as sid-0x09 field 105.
+ *   17          -> [17][0] query cached R1 battery (no display change).
+ *                              Master replies on sid-0x09 field 106; see ring_battery.c.
  *   anything else / too short  -> load_bmp_fast (rejects cleanly if not a BMP).
  *
  * The HIGH BIT of the mode byte is a "lenses differ" flag; most modes ignore it. For
@@ -291,6 +293,7 @@ static int is_shadow_message(const uint8_t *src, uint32_t srclen);
 static int cfw_cleanup_session(void);
 static void mic_cleanup_session(void);   /* mic_control.c (same TU): mic hw + lease teardown */
 static void als_cleanup_session(void);   /* als_sensor.c (same TU): passive ALS teardown */
+int ring_battery_control(const uint8_t *src, uint32_t srclen); /* mode 17 */
 int als_control(const uint8_t *src, uint32_t srclen); /* als_sensor.c: mode 16 */
 
 static int inflate_rle(uint8_t *strm, uint8_t *base, uint32_t stride, uint32_t rowbytes, uint32_t rows);
@@ -501,6 +504,10 @@ static int image_dispatch(uint8_t *state, const uint8_t *src, uint32_t srclen, i
             return 0;
         }
         return -1;
+    }
+
+    if (mode == 17) {
+        return ring_battery_control(src, srclen);
     }
 
     if (mode == 16) {
