@@ -21,7 +21,10 @@ Build a CFW image for g2_2.2.9.22 with:
   (10) a phone-controlled microphone configuration + multi-channel audio streaming
       channel (settings fields 103/104 + the 'SM' stream frame) riding the
       already-hooked sid-0x09 settings seams -- no new patch sites; see
-      mic_control.c for the contract and its hardware validation gate.
+      mic_control.c for the contract and its hardware validation gate, and
+  (11) LE 2M support, a 7.5 ms / latency-0 fast connection profile, and persistent
+      fast-mode requests so the stock 60-second slow-mode timer cannot throttle
+      custom image traffic.
 
 REBASED 2.2.6.10 -> 2.2.9.22 (2026-08-22). Every address below was re-derived with
 normalized function/site matching and checked against the 2.2.9.22 disassembly. Two
@@ -73,6 +76,19 @@ OTA_FLAG_ADDR = 0x007FE000   # OTA magic word (last 8 KB of MRAM)
 MRAM_END      = 0x00800000
 APP_MAX_END   = 0x007F0000   # conservative ceiling: leave the top ~56 KB for NV + flag
 BLOB_ALIGN    = 4            # 4-byte-align each appended blob (Thumb literal pools)
+
+# BLE policy validated with sustained 2,000-byte/window-3 transfers (~41 KiB/s)
+# and a day of battery use. These are Apollo host changes, not EM9305 ROM edits.
+# Startup Set Local Feature (vendor opcode 0xfff2): byte 1 bit 0 is LE 2M.
+BLE_2M_SITE = (0x4c6b30, "7c 20 50 70")  # movs r0,#0x7c; strb r0,[r2,#1]
+# Fast profile min/max intervals (1.25 ms units), then latency/timeout/retries.
+BLE_FAST_INTERVAL_SITE = (0x7ae7b8, "0c 00 18 00 00 00 58 02 05 00 00 00")
+# _connectParamReq_impl saves its mode argument: movs r5,r0; bl 0x4745bc.
+# Force 0xa3 (fast), including when the delayed 0xa4 (slow) request arrives.
+# Keep the normal connection validation, already-fast check and deferral logic.
+# This intentionally applies while idle too; Android can still negotiate another
+# interval, and the phone must request 2M PHY to use the newly exposed feature.
+BLE_FORCE_FAST_SITE = (0x47ae50, "05 00 f9 f7 b3 fb")
 
 # Reserve the final 1 KiB of the stock primary TLSF arena for CFW-owned fixed
 # state. Stock initializes [0x202728a8,0x2029f8a8) with size 0x2d000 at
@@ -346,6 +362,12 @@ def layout(img):
 
     # --- in-place live-code edits + bl retargets (targets are the appended addrs) ---
     in_place = [
+        (g2f(BLE_2M_SITE[0]), BLE_2M_SITE[1], "7d 20",
+         "Set Local Feature: enable LE 2M bit 8"),
+        (g2f(BLE_FAST_INTERVAL_SITE[0]), BLE_FAST_INTERVAL_SITE[1], "06 00 06 00",
+         "fast connection interval min=max=7.5 ms; latency remains 0"),
+        (g2f(BLE_FORCE_FAST_SITE[0]), BLE_FORCE_FAST_SITE[1], "a3 25",
+         "_connectParamReq_impl: force requested mode to fast (0xa3); disables idle slow requests"),
         (g2f(PRIMARY_TLSF_SIZE_SITE[0]), PRIMARY_TLSF_SIZE_SITE[1],
          PRIMARY_TLSF_CFW_SIZE,
          "reserve final 1 KiB of primary TLSF arena for CFW context anchor"),

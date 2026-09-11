@@ -63,6 +63,12 @@ gated behind an explicit arm flag because several of the recovered stock audio
 entry points are ABI-inferred and must be validated on hardware first; see the
 contract comment in `patches/mic_control.c`.
 
+The firmware also reconfigures the bluetooth stack for 2M PHY support and
+requests a 7.5 ms connection interval with latency 0. This prevents the stock
+one-minute slow-mode timer from throttling screen transfers. Connection
+parameters still depend on the phone; it must request  2M PHY and must agree to
+the short connection interval.
+
 Some other features this has (used by Faceclaw, but the exact API may not be
 fully documented):
 
