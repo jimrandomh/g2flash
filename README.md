@@ -90,6 +90,13 @@ fully documented):
  * Take over the screen-wake even on the dashboard, so that you can end the
    EvenHub session (putting the glasses in a low-power mode) and return to
    Faceclaw with a double-tap
+ * While the glasses are in that low-power mode (no app on screen), also
+   report the single tap, long press and long-press release that the stock
+   display thread drops, so the phone can show a lightweight sleep-time
+   display (Faceclaw's Glanceboard) without a full wake
+ * Report the head-up (IMU head-tilt) wake distinctly from the double-tap
+   wake, and forward the head-up while an EvenHub page is on screen, so the
+   phone can route it to that lightweight display too
 
 Glasses with a custom firmware identify themselves with the version number of
 the stock firmware that the modded version is based on, with an extra field in

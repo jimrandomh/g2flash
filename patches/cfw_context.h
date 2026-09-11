@@ -134,6 +134,10 @@ typedef struct {
     uint32_t als_last_reported;             /* value carried by the last report */
     uint32_t als_last_report_tick;          /* FW_MS_TICK of the last report (0 = none yet) */
     cfw_compass_sample compass_samples[20];
+    /* Idle-input forwarding (settings_ext.c faceclaw_idle_input_gate): a
+     * field-102 notify of its own, since wake_notify_buf may still be queued
+     * for a deferred double-tap wake when a tap or release follows it. */
+    uint8_t  gesture_notify_buf[16];
 } customCfwContext;
 
 #define CFW_CTX_SLOT  0x2029f4a8U    /* first word of the CFW-reserved TLSF tail */

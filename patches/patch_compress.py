@@ -161,12 +161,24 @@ SETTINGS_BL_SITE       = (0x4a90e4, "d4 f7 90 fb")  # bl FUN_0047d808 (aa21 send
 # nanopb decode in pb_service_setting's inbound parser. The wrapper scans raw
 # unknown field 101 before the stock decoder discards it, then tail-calls decode.
 SETTINGS_DECODE_BL_SITE = (0x4a87e4, "f5 f7 10 f9") # bl FUN_0049da08 -> settings_decode_wrapper
-# The two REQUEST_DISPLAY_START_UP(1) sites reached by the local and mirrored
-# idle double-tap paths. Both must defer or the peer lens can still flash.
+# The two REQUEST_DISPLAY_START_UP(1) sites in the display thread's idle touch
+# policy: sub-event 1 (double tap) and sub-event 6 (IMU head-up). Both must defer
+# or the peer lens can still flash; each reports its own field-102 event code.
 DISPLAY_START_BL_SITES = {
-    0x45f146: "0b f0 2a f9",
-    0x45f206: "0b f0 ca f8",
+    0x45f146: ("0b f0 2a f9", "faceclaw_display_start"),
+    0x45f206: ("0b f0 ca f8", "faceclaw_display_start_headup"),
 }
+# The stock idle gate call in that same touch branch. The dispatcher frees the
+# message when the gate fails -- which it does while an EvenHub page is on
+# screen, so a soft-sleeping phone never hears about a head-up. Wrap the gate
+# call: the stock result is passed through unchanged and a head-up is also
+# forwarded as EvenHub sys event 12 under the Faceclaw framebuffer lease.
+HEADUP_GATE_BL_SITE = (0x45f006, "10 f0 96 f8")  # bl FUN_0046f136 -> headup_gate
+# Idle-input forwarding: in the display thread's touch branch, the mode check that
+# follows the idle gate (FUN_0046f136 == 1). r4 = the input record. The wrapper
+# reports tap / long-press / release as field-102 events while Faceclaw holds the
+# wake lease and returns the stock mode result unchanged (settings_ext.c).
+IDLE_INPUT_GATE_SITE   = (0x45f01a, "ff f7 65 fb") # bl FUN_0045e6e8 -> faceclaw_idle_input_gate
 # 2.2.9.22 changed Menu to tap-then-long-press. Plain subtype 3 posts UI event 8;
 # subtype 0xe posts release event 0x4a; the new subtype 0x11 starts at 0x444a40.
 # r6 holds the raw input record at all three sites. The first two sites wrap the
@@ -327,7 +339,10 @@ def layout(img):
     deferred_addr  = base + _fn(built, "image_deferred")["offset"]
     settings_addr  = base + _fn(built, "settings_send_wrapper")["offset"]
     settings_decode_addr = base + _fn(built, "settings_decode_wrapper")["offset"]
-    display_start_addr = base + _fn(built, "faceclaw_display_start")["offset"]
+    display_start_addrs = {name: base + _fn(built, name)["offset"]
+                           for _, name in DISPLAY_START_BL_SITES.values()}
+    headup_gate_addr = base + _fn(built, "headup_gate")["offset"]
+    idle_gate_addr = base + _fn(built, "faceclaw_idle_input_gate")["offset"]
     evenai_entry_addr = base + _fn(built, "faceclaw_evenai_display_entry")["offset"]
     press_addr     = base + _fn(built, "gesture_press")["offset"]
     short_long_addr = base + _fn(built, "gesture_short_long")["offset"]
@@ -397,9 +412,15 @@ def layout(img):
         (g2f(SETTINGS_DECODE_BL_SITE[0]), SETTINGS_DECODE_BL_SITE[1],
          enc_bl(SETTINGS_DECODE_BL_SITE[0], settings_decode_addr),
          "bl settings_decode_wrapper (Faceclaw lease field 101)"),
-        *[(g2f(site), orig, enc_bl(site, display_start_addr),
-           f"bl faceclaw_display_start @ {site:#x} (fail-open double-tap takeover)")
-          for site, orig in DISPLAY_START_BL_SITES.items()],
+        *[(g2f(site), orig, enc_bl(site, display_start_addrs[name]),
+           f"bl {name} @ {site:#x} (fail-open wake takeover)")
+          for site, (orig, name) in DISPLAY_START_BL_SITES.items()],
+        (g2f(HEADUP_GATE_BL_SITE[0]), HEADUP_GATE_BL_SITE[1],
+         enc_bl(HEADUP_GATE_BL_SITE[0], headup_gate_addr),
+         "bl headup_gate (head-up sensor event -> EvenHub sys event 12 under lease)"),
+        (g2f(IDLE_INPUT_GATE_SITE[0]), IDLE_INPUT_GATE_SITE[1],
+         enc_bl(IDLE_INPUT_GATE_SITE[0], idle_gate_addr),
+         "bl faceclaw_idle_input_gate (idle tap/long/release -> field-102 events 2/3/4)"),
         # Source-qualified long-press, tap-then-long-press, and release forwarding.
         (g2f(GESTURE_PRESS_SITE[0]), GESTURE_PRESS_SITE[1],
          enc_bl(GESTURE_PRESS_SITE[0], press_addr),

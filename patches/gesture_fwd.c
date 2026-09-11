@@ -122,3 +122,61 @@ __attribute__((naked)) int gesture_short_long(void)
         "pop {r3, pc}"
         ::: "memory");
 }
+
+/* Head-up (IMU head-tilt) forwarding while an EvenHub page is on screen.
+ *
+ * The IMU driver posts sensor sub-event 6 (head up) to the display thread's
+ * dispatcher as a type-7 message. That dispatcher first calls the stock gate
+ * FUN_0046f136 (`bl` at 0x45f006) and frees the message when the gate fails,
+ * which it does while an EvenHub page is on screen: a phone that blanked the
+ * page but kept the session (soft sleep) never hears about the head-up. With
+ * no page on screen the stock idle path launches the dashboard instead, which
+ * faceclaw_display_start_headup (settings_ext.c) already defers to the phone.
+ *
+ * headup_gate wraps the gate call: the stock result is passed through
+ * unchanged, and a head-up is additionally forwarded as EvenHub sys event 12
+ * under the framebuffer lease with EvenHub foreground (faceclaw_gesture_event),
+ * when the stock head-up switch is on and the stock idle path would itself
+ * have acted on it (FUN_004448e0 == 0: not mid-OTA/onboarding). */
+#define GESTURE_ET_HEAD_UP    12
+#define HEADUP_SUBEVENT_UP    6
+
+typedef unsigned (*headup_switch_t)(void);
+typedef int (*headup_busy_t)(void);
+#define HEADUP_FW_SWITCH ((headup_switch_t)0x0045e521u) /* FUN_0045e520: settings->head_up_switch */
+#define HEADUP_FW_BUSY   ((headup_busy_t)0x004448e1u)   /* FUN_004448e0: 1 while the stock idle path ignores head-up */
+
+int headup_gate_impl(int stock_result, const unsigned char *message);
+
+int headup_gate_impl(int stock_result, const unsigned char *message)
+{
+    static const unsigned char headup_source[1] = { 0 };
+    if (stock_result != 1 && message) {
+        const unsigned char *payload = *(const unsigned char *const *)(message + 8);
+        if (payload) {
+            uint32_t subtype = (uint32_t)payload[4] | ((uint32_t)payload[5] << 8) |
+                               ((uint32_t)payload[6] << 16) | ((uint32_t)payload[7] << 24);
+            if (subtype == HEADUP_SUBEVENT_UP && HEADUP_FW_SWITCH() != 0 && HEADUP_FW_BUSY() == 0) {
+                faceclaw_gesture_event(headup_source, GESTURE_ET_HEAD_UP);
+            }
+        }
+    }
+    return stock_result;
+}
+
+/* Replaces `bl FUN_0046f136` at 0x45f006. r4 is dead at the site but is
+ * preserved anyway; after our two-word push the caller's message slot
+ * ([sp, #0xc] at the BL) sits at [sp, #0x14]. */
+__attribute__((naked)) int headup_gate(void)
+{
+    __asm volatile(
+        "push {r4, lr}\n\t"
+        "ldr r4, [sp, #0x14]\n\t"
+        "movw r0, #0xf137\n\t"
+        "movt r0, #0x0046\n\t" /* 0x0046f136: stock idle gate | Thumb */
+        "blx r0\n\t"
+        "mov r1, r4\n\t"
+        "bl headup_gate_impl\n\t"
+        "pop {r4, pc}"
+        ::: "memory");
+}
