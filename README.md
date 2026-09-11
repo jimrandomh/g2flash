@@ -93,11 +93,15 @@ fully documented):
 
 Glasses with a custom firmware identify themselves with the version number of
 the stock firmware that the modded version is based on, with an extra field in
-the settings-response message describing the capabilities added. See
-`settings_send_wrapper` in `patches/settings_ext.c`. The format of this
-capability string is not yet standardized and is in flux; if writing your own
-firmware and your own phone software to go with it, assume that firmware is
-probably only compatible if you recognize the exast string.
+the settings-response message (protobuf field 100) carrying a firmware revision
+string of the form `Faceclaw/<n>`. See `settings_send_wrapper` in
+`patches/settings_ext.c`. `<n>` goes up each time the firmware contract changes
+and is not kept in sync with Faceclaw phone-app versions; the phone app requires
+a specific revision and offers to reflash when the installed one is older. Older
+builds advertised `EVENCFW/<ver>` followed by feature tokens instead. If writing
+your own firmware and your own phone software to go with it, use a different
+prefix, and assume that firmware is only compatible if you recognize the exact
+string.
 
 Custom firmwares in this repository are intended to be backwards-compatible
 with the official Even Realities app; ie, if the phone doesn't send any
