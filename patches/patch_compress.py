@@ -127,6 +127,9 @@ def align_up(x, a):
     return (x + a - 1) & ~(a - 1)
 
 # ---- call-site redirects (ghidra addr -> stock bytes we expect there) --------
+# fff2 ATT write callback, before any TPL reconstruction or SID dispatch.
+# r0=pipe(0), r1=borrowed ATT value, r2=uint16 length; r0 returns status.
+MESSAGE_RX_BL_SITE = (0x4d335a, "fc f7 45 f8")  # bl TPL_ReceivePacket
 # All 2.2.9.22 addresses. Unchanged hosts/sites were found with normalized
 # instruction-window match, unique across the image) and then confirmed by decoding the
 # `bl` at the new address and checking it lands on the expected callee -- the bytes below
@@ -287,12 +290,32 @@ def validate_ring_battery_stock(img):
         if bytes(img[g2f(address):g2f(address) + len(expected)]) != expected:
             raise ValueError(f"ring battery stock ABI mismatch: {description} at {address:#x}")
 
+def validate_message_transport_stock(img):
+    """Pin ingress/bridge call sites, fallback entries and copying TX APIs."""
+    for address, expected in (
+        (0x4d3350, "1fb5069a079992b20020fcf745f80400002c"),
+        (0x4cf3e8, "2de9f04385b007000d00002d"),
+        (0x45d190, "9bb22100e6f7ceff2000fbf714f9"),
+        (0x444134, "7fb50400002500e06d1cdff8"),
+        (0x46a58c, "2de9f84388b005000e0090461f00dff800452068002823d1"),
+        (0x46a73c, "039988681ffa88f810f10805424631002800cff749fa0120"),
+        (0x47d72c, "feb504000d0016001f00cdf7adfa002821d0"),
+        (0x47d782, "bfb2019700962b00dbb22200d2b200210020fff7d5fd"),
+        (0x47d4e0, "04980772049880f80980049880f80a90049810f10b071ffa8bfb5a4621003800bcf770fb"),
+        (0x45cfdc, "dff8100c00787047"),
+    ):
+        expected = bytes.fromhex(expected)
+        if bytes(img[g2f(address):g2f(address) + len(expected)]) != expected:
+            raise ValueError(f"message transport stock ABI mismatch at {address:#x}")
+
+
 def layout(img):
     """Compile the single injected code blob (patches_main.c, which #includes every
     patch source) and append it at the tail of the main-app payload. Returns
     (append_bytes, in_place_patches, mainapp=(idx,off,old_ps)). Enforces the MRAM
     ceiling (duplicate of g2flash.check_mainapp_fits_mram)."""
     validate_ring_battery_stock(img)
+    validate_message_transport_stock(img)
     idx, comp_off, old_ps = find_mainapp(img)
 
     # This reservation is safe only if the stock image has no absolute pointer
@@ -337,6 +360,8 @@ def layout(img):
     # Thumb bit (unlike a fn-ptr consumed by blx, which the C code forms via `&fn`).
     snapshot_addr  = base + _fn(built, "snapshot_side")["offset"]
     deferred_addr  = base + _fn(built, "image_deferred")["offset"]
+    message_rx_addr = base + _fn(built, "cfw_receive_packet")["offset"]
+    message_bridge_addr = base + _fn(built, "cfw_message_bridge_received")["offset"]
     settings_addr  = base + _fn(built, "settings_send_wrapper")["offset"]
     settings_decode_addr = base + _fn(built, "settings_decode_wrapper")["offset"]
     display_start_addrs = {name: base + _fn(built, name)["offset"]
@@ -377,6 +402,11 @@ def layout(img):
 
     # --- in-place live-code edits + bl retargets (targets are the appended addrs) ---
     in_place = [
+        (g2f(0x45d194), "e6 f7 ce ff", enc_bl(0x45d194, message_bridge_addr),
+         "bl cfw_message_bridge_received (private SID-f0 bridge requests and ACKs)"),
+        (g2f(MESSAGE_RX_BL_SITE[0]), MESSAGE_RX_BL_SITE[1],
+         enc_bl(MESSAGE_RX_BL_SITE[0], message_rx_addr),
+         "bl cfw_receive_packet (private SID-f0 probe before TPL reassembly)"),
         (g2f(BLE_2M_SITE[0]), BLE_2M_SITE[1], "7d 20",
          "Set Local Feature: enable LE 2M bit 8"),
         (g2f(BLE_FAST_INTERVAL_SITE[0]), BLE_FAST_INTERVAL_SITE[1], "06 00 06 00",

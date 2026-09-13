@@ -36,6 +36,11 @@ missing any.
 
 ## Modifications
 
+For a one-packet test of the new private message transport, use
+`python3 send_message_probe.py --dry-run`, then run it with your usual connection
+URL. See [the message probe instructions](docs/message-transport.md#sending-a-test-packet)
+for lens selection, ACK verification, and the debug overlay.
+
 This firmware reworks how images and screen updates work in EvenHub. The
 intended usage is that you create a layout with a single 576x288 image
 container, which is used as a message target (but the EvenHub layout system is
@@ -112,6 +117,13 @@ fully documented):
  * Report the head-up (IMU head-tilt) wake distinctly from the double-tap
    wake, and forward the head-up while an EvenHub page is on screen, so the
    phone can route it to that lightweight display too
+
+For the experimental custom-message entry point before stock reconstruction,
+see [Custom-message transport](docs/message-transport.md). SID `0xf0` uses an
+options byte to select either or both lenses, forwards over the frame bridge,
+and returns a processing ACK from each selected lens through the BLE ingress
+lens. The probe records payload size and checksum without requiring an EvenHub
+layout for receipt. This wire contract requires `Faceclaw/5` on both lenses.
 
 Glasses with a custom firmware identify themselves with the version number of
 the stock firmware that the modded version is based on, with an extra field in

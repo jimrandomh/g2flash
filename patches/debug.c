@@ -165,4 +165,19 @@ static void cfw_draw_flags(uint8_t *disp, uint32_t w, uint32_t h) {
     strlcat(line, "k", sizeof(line));
 
     draw_string(disp, w, h, IMAGE_X + 2, IMAGE_Y + 2, line, 15, 0);
+
+    /* The BLE task publishes both fields with one aligned 32-bit store. Keep
+     * the probe on its own line so sticky flags cannot truncate it. */
+    uint32_t probe = ctx->message_probe.snapshot;
+    strlcpy(line, "rx ", sizeof(line));
+    u_to_dec(line, probe & 0xffffu, sizeof(line));
+    strlcat(line, " crc ", sizeof(line));
+    char hex[5];
+    for (unsigned i = 0; i < 4; ++i) {
+        unsigned digit = (probe >> (28 - 4 * i)) & 15u;
+        hex[i] = (char)(digit < 10 ? '0' + digit : 'A' + digit - 10);
+    }
+    hex[4] = 0;
+    strlcat(line, hex, sizeof(line));
+    draw_string(disp, w, h, IMAGE_X + 2, IMAGE_Y + 14, line, 15, 0);
 }

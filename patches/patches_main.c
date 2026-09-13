@@ -28,6 +28,7 @@
 #include "rle.c"
 #include "texture_cache.c"
 #include "zlib_glue.c"
+#include "message_transport.c"
 #include "compass.c"
 #include "ring_battery.c"
 #include "settings_ext.c"

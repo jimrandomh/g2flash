@@ -2,6 +2,18 @@
 #include "cfw_context.h"
 #include "rle.h"
 #include "debug.h"
+#include "message_transport.h"
+
+/* Early transport plumbing only. The payload is borrowed from the ATT write
+ * callback, so a future deferred worker must take ownership before returning.
+ * Do not dispatch image modes, allocate image buffers, or request a repaint. */
+int cfw_message_received(const uint8_t *data, uint16_t size, uint16_t checksum) {
+    (void)data;
+    customCfwContext *ctx = getCustomCfwContext();
+    if (!ctx) return -1;
+    ctx->message_probe.snapshot = (uint32_t)size | ((uint32_t)checksum << 16);
+    return 0;
+}
 
 /*
  * zlib (DEFLATE) image support for the G2 CFW — multi-mode load wrapper.

@@ -38,6 +38,13 @@ typedef struct {
     uint8_t accuracy, anomalies, source, flags;
 } cfw_compass_sample;
 
+/* One aligned word publishes a consistent size/CRC pair across the BLE and
+ * display tasks. The firmware target is little-endian. */
+typedef union {
+    struct { uint16_t size, checksum; } fields;
+    uint32_t snapshot;
+} cfw_message_probe;
+
 typedef struct {
     uint32_t magic;      /* CFW_CTX_MAGIC when valid */
     /* --- snapshot FIFO: fixes the producer/consumer race on the shared recon buffer.
@@ -138,6 +145,7 @@ typedef struct {
      * field-102 notify of its own, since wake_notify_buf may still be queued
      * for a deferred double-tap wake when a tap or release follows it. */
     uint8_t  gesture_notify_buf[16];
+    volatile cfw_message_probe message_probe; /* latest valid SID-f0 payload */
 } customCfwContext;
 
 #define CFW_CTX_SLOT  0x2029f4a8U    /* first word of the CFW-reserved TLSF tail */
