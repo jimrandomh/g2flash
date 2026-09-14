@@ -16,5 +16,5 @@ typedef struct {
 static void cfw_time_start(uint32_t *t);
 static uint32_t cfw_time_end(const uint32_t *t);
 static void rl_add(cfw_rectlist *rl, uint32_t l, uint32_t t, uint32_t w, uint32_t h);
-static int cfw_diag(int has_fid, uint16_t fid);
+static void cfw_diag(int has_fid, uint16_t fid);
 static void cfw_draw_flags(uint8_t *disp, uint32_t w, uint32_t h);

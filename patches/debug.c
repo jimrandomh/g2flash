@@ -70,18 +70,18 @@ static uint32_t cfw_time_end(const uint32_t *t) {
 
 /* Diagnostic: record whether the frames the worker processes arrive in order /
  * skipped / DUPLICATED (mode-3 frame ids). Sticky flags shown by cfw_draw_flags;
- * with the snapshot-FIFO fix these should stay clear. `has_fid`=0 for a mode-6
+ * these flags describe the private sender's frame IDs. `has_fid`=0 for a mode-6
  * keyframe (no id; it rebaselines the next delta so keyframe gaps aren't "skips").
- * Returns 1 if this fid is a DUPLICATE of a recently-seen one (caller skips). */
-static int cfw_diag(int has_fid, uint16_t fid) {
+ * Duplicate IDs are diagnostic only; every accepted message is executed. */
+static void cfw_diag(int has_fid, uint16_t fid) {
     customCfwContext *ctx = getCustomCfwContext();
-    if (ctx == 0) return 0;
+    if (ctx == 0) return;
     ctx->diag_seen = 1;
-    if (!has_fid) { ctx->fid_resync = 1; return 0; }  /* keyframe rebaselines next delta */
+    if (!has_fid) { ctx->fid_resync = 1; return; }  /* keyframe rebaselines next delta */
 
-    /* duplicate: this fid is still in the recent ring -> flag and tell caller to skip */
+    /* duplicate: this fid is still in the recent ring -> flag */
     for (uint32_t i = 0; i < CFW_FID_RING; i++)
-        if (ctx->recent_fids[i] == fid) { ctx->f_dup = 1; return 1; }
+        if (ctx->recent_fids[i] == fid) { ctx->f_dup = 1; return; }
 
     if (!ctx->fid_resync) {
         uint16_t d = (uint16_t)(fid - ctx->last_fid);
@@ -93,7 +93,6 @@ static int cfw_diag(int has_fid, uint16_t fid) {
     if (fid > ctx->high_fid) ctx->high_fid = fid;
     ctx->recent_fids[ctx->recent_pos] = fid;
     ctx->recent_pos = (uint8_t)((ctx->recent_pos + 1) % CFW_FID_RING);
-    return 0;
 }
 
 /* Append (l,t,w,h) to the per-frame updated-rect list, if there's room. */
@@ -136,7 +135,6 @@ static void cfw_draw_flags(uint8_t *disp, uint32_t w, uint32_t h) {
     ADD_FLAG(ctx->f_reorder, "REORDER ");
     ADD_FLAG(ctx->f_skip,    "SKIP ");
     ADD_FLAG(ctx->f_dup,     "DUP ");
-    ADD_FLAG(ctx->f_snap_of, "SNAPOF ");
     ADD_FLAG(cfw_alloc_diag() & 1u, "ALLOC ");
     #undef ADD_FLAG
     if (num_flags == 0) strlcat(line, "OK ", sizeof(line));

@@ -43,20 +43,24 @@ for MTU-based packet splitting, lens selection, ACK verification, and the debug 
 
 Custom messages use private SID `0xf0` and execute without an EvenHub context.
 Screen handlers allocate a persistent 153,600-byte packed framebuffer shadow
-from the CFW heap; the legacy image-container path snapshots incoming messages
-into separately owned allocations. Mode 11 cleanup releases those buffers once
-workers and display refreshes no longer need them. Faceclaw still creates and
-destroys its EvenHub layout at the existing session boundaries, but sends all
-custom image and control commands through the private message stream. Legacy
-clients can continue sending custom messages through an image container.
+from the CFW heap. Mode 11 cleanup releases it once pending display refreshes
+have finished. Faceclaw retains a blank text container for input forwarding at
+the existing session boundaries; it allocates no EvenHub image container.
+Custom image and control commands use only the private message stream.
+
+Starting with `Faceclaw/8`, the stock EvenHub image path is unmodified: its
+original size limits, reconstruction, BMP loader, and ACK timing are restored.
+Custom mode-prefixed payloads sent through that path are no longer supported.
+The private transport and direct framebuffer display-copy hooks remain active.
+
 Image traffic is compressed with
 zlib+RLE. Screen contents can be up to 640x480 (larger than the screen area
 supported by the stock firmware), you can update dirty rects rather than
 updating the whole screen at once, and you can send messages which perform
 rect-to-rect copies for low-bandwidth scroll animations. Because this mode
 writes directly to the framebuffer without going through EvenHub's
-screen-update functions, you cannot mix this mode with EvenHub list or text or
-list containers. A lease-scoped 64 KiB texture cache lets the phone upload RLE
+screen-update functions, stock containers do not contribute visible content
+while the direct framebuffer lease is held. A lease-scoped 64 KiB texture cache lets the phone upload RLE
 icons and glyphs once, then draw cached images and strings with small update
 messages. The cache is allocated and zeroed on its first write and released
 when the Faceclaw framebuffer lease ends. Cached draw commands carry an options

@@ -3,25 +3,13 @@
 #include "message_transport.h"
 
 /* Persistent CFW-owned state, independent of EvenHub image containers. The
- * full-panel shadow and legacy deferred-message snapshots are separately owned
- * heap allocations. This context is anchored in the 1 KiB SRAM region explicitly
+ * full-panel shadow is an owned heap allocation. This context is anchored in
+ * the 1 KiB SRAM region explicitly
  * removed from the stock primary TLSF arena: [0x2029f4a8,0x2029f8a8). The first
  * word holds the pointer; the second holds a sticky allocation diagnostic. */
 
-#define CFW_FID_RING  16     /* recent mode-3 frame ids kept for duplicate detection */
-#define CFW_SNAP_RING 12     /* in-flight compressed-message snapshots (per producer race depth) */
-#define CFW_SNAP_BUSY_SEQ 0xffffffffU /* range is reserved by the deferred worker */
+#define CFW_FID_RING  16     /* recent mode-3 frame ids kept for diagnostics */
 #define CFW_SEQ_MAX   48     /* max steps in a buzzer tone sequence (mode-5 kind 4) */
-
-/* One snapshotted compressed image message. Taken at reconstruction-complete (both
- * lenses), consumed FIFO in the deferred handler. Keyed by the owning image-state
- * pointer so multiple containers (e.g. faceclaw's 4 tiles) don't cross-feed. */
-typedef struct {
-    uint8_t *state;      /* owning image-state (key); 0 = empty slot */
-    uint8_t *buf;        /* owned heap copy, freed after consumption or discard */
-    uint32_t len;
-    volatile uint32_t seq; /* push order, or CFW_SNAP_BUSY_SEQ while being consumed */
-} cfw_snap;
 
 /* Sidecar for a stock IMU ring record; written/read on the sensor-hub task. */
 typedef struct {
@@ -38,10 +26,6 @@ typedef union {
 
 typedef struct {
     uint32_t magic;      /* CFW_CTX_MAGIC when valid */
-    /* Legacy image transport copies completed messages into this owned FIFO;
-     * private SID-f0 messages already own their reconstructed input buffer. */
-    cfw_snap snaps[CFW_SNAP_RING];
-    uint32_t snap_seq;   /* next push sequence number */
     /* --- diagnostics, overlaid as a text line (verify the fix; should stay clear). Mode
      * 7 clears the flags / toggles the overlay visibility (diag_hide). --- */
     uint16_t last_fid;   /* last frame id seen (mode-3 messages) */
@@ -55,7 +39,6 @@ typedef struct {
     uint8_t  f_reorder;  /* FLAG: ever saw a frame id go backward */
     uint8_t  f_skip;     /* FLAG: ever saw a frame id gap (skipped) */
     uint8_t  f_dup;      /* FLAG: ever saw a duplicate frame id (in the recent ring) */
-    uint8_t  f_snap_of;  /* FLAG: snapshot ring overflowed (dropped an in-flight frame) */
     uint16_t recent_fids[CFW_FID_RING]; /* ring of the last N mode-3 frame ids seen */
     uint8_t  recent_pos; /* next write index into recent_fids */
     /* --- buzzer tone sequencer (mode-5 kind 4). Plays a list of (freq,duty,ms)
@@ -133,7 +116,7 @@ typedef struct {
      * for a deferred double-tap wake when a tap or release follows it. */
     uint8_t  gesture_notify_buf[16];
     volatile cfw_message_probe message_probe; /* latest valid SID-f0 payload */
-    uint32_t image_mutex; /* serializes commands from BLE, bridge, and legacy workers */
+    uint32_t image_mutex; /* serializes commands from BLE and bridge */
     uint8_t *framebuffer_shadow; /* owned 640x480 packed 4bpp; released by mode 11 */
     cfw_message_stream message_streams[2]; /* index = BLE ingress lens bit - 1 */
 } customCfwContext;
@@ -144,7 +127,8 @@ typedef struct {
 
 // Marker used to validate that the CFW context pointer hasn't been clobbered.
 // Does not need updating.
-#define CFW_CTX_MAGIC 0xC0FFEE6AU
+// Layout revision: reject stale contexts with the removed snapshot FIFO.
+#define CFW_CTX_MAGIC 0xC0FFEE6BU
 
 #define FW_MS_TICK  (*(volatile uint32_t *)0x20076d80U)  /* firmware 1 ms OS tick (SysTick chain) */
 
