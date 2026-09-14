@@ -9,6 +9,7 @@ typedef struct { uint16_t l, t, w, h; } cfw_rect;
 typedef struct {
     uint32_t n;
     uint8_t direct_submitted;
+    uint8_t direct_failed;
     cfw_rect r[CFW_RECT_MAX];
 } cfw_rectlist;
 

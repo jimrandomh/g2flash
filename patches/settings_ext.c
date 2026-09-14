@@ -451,6 +451,10 @@ __attribute__((naked)) void faceclaw_evenai_display_entry(void) {
 //        size and CRC-16 are shown in the debug overlay.
 //   5 -> SID-f0 options byte selects lenses; bridge forwarding and per-lens
 //        processing ACKs return through the BLE ingress lens.
+//   6 -> length-prefixed message streams spanning arbitrary packet boundaries;
+//        stream reset/end flags and per-message ACK ordinals.
+//   7 -> private messages dispatch image modes with NULL EvenHub state;
+//        framebuffer shadow and legacy snapshots use owned heap allocations.
 //
 // The string is a normal rodata literal now that build.py emits/relocates .rodata
 // (earlier this had to be spelled out byte-by-byte to avoid a rodata section).
@@ -458,7 +462,7 @@ __attribute__((naked)) void faceclaw_evenai_display_entry(void) {
 
 int settings_send_wrapper(int type, int sid, unsigned char *buf, unsigned len) {
     if (sid == 9) {
-        static const char caps[] = "Faceclaw/5";
+        static const char caps[] = "Faceclaw/7";
         len = pb_append_bytes_field(buf, len, SETTINGS_RESPONSE_CAPACITY,
                                     100u, (const unsigned char *)caps,
                                     (unsigned)sizeof(caps) - 1u);

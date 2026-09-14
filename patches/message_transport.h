@@ -6,6 +6,16 @@
 #define CFW_MESSAGE_RIGHT 2u
 #define CFW_MESSAGE_BOTH (CFW_MESSAGE_LEFT | CFW_MESSAGE_RIGHT)
 #define CFW_MESSAGE_ACK 1u
+#define CFW_MESSAGE_RESET 0x80u
+#define CFW_MESSAGE_END 0x40u
+
+/* One ordered byte stream per BLE ingress lens. Payload is owned until the
+ * handler returns, or a reset/error discards it. Length excludes its own tag. */
+typedef struct {
+    uint8_t *buffer;
+    uint16_t size, used, message_id;
+    uint8_t length_bytes, active, next_sequence, stream_id, options;
+} cfw_message_stream;
 int cfw_message_received(const uint8_t *data, uint16_t size, uint16_t checksum);
 uint32_t cfw_receive_packet(uint8_t pipe, const uint8_t *packet, uint16_t length);
 uint32_t cfw_message_bridge_received(uint32_t app_id, const uint8_t *data,

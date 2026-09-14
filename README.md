@@ -36,16 +36,20 @@ missing any.
 
 ## Modifications
 
-For a one-packet test of the new private message transport, use
+For a test of the private message stream transport, use
 `python3 send_message_probe.py --dry-run`, then run it with your usual connection
-URL. See [the message probe instructions](docs/message-transport.md#sending-a-test-packet)
-for lens selection, ACK verification, and the debug overlay.
+URL. See [the message probe instructions](docs/message-transport.md#sending-test-messages)
+for MTU-based packet splitting, lens selection, ACK verification, and the debug overlay.
 
-This firmware reworks how images and screen updates work in EvenHub. The
-intended usage is that you create a layout with a single 576x288 image
-container, which is used as a message target (but the EvenHub layout system is
-otherwise entirely ignored). Image updates sent to this container are
-interpreted as custom messages of new types. Image traffic is compressed with
+Custom messages use private SID `0xf0` and execute without an EvenHub context.
+Screen handlers allocate a persistent 153,600-byte packed framebuffer shadow
+from the CFW heap; the legacy image-container path snapshots incoming messages
+into separately owned allocations. Mode 11 cleanup releases those buffers once
+workers and display refreshes no longer need them. Faceclaw still creates and
+destroys its EvenHub layout at the existing session boundaries, but sends all
+custom image and control commands through the private message stream. Legacy
+clients can continue sending custom messages through an image container.
+Image traffic is compressed with
 zlib+RLE. Screen contents can be up to 640x480 (larger than the screen area
 supported by the stock firmware), you can update dirty rects rather than
 updating the whole screen at once, and you can send messages which perform
@@ -120,10 +124,12 @@ fully documented):
 
 For the experimental custom-message entry point before stock reconstruction,
 see [Custom-message transport](docs/message-transport.md). SID `0xf0` uses an
-options byte to select either or both lenses, forwards over the frame bridge,
-and returns a processing ACK from each selected lens through the BLE ingress
-lens. The probe records payload size and checksum without requiring an EvenHub
-layout for receipt. This wire contract requires `Faceclaw/5` on both lenses.
+options byte to select either or both lenses and forwards over the frame bridge.
+A stream of two-byte-length-prefixed messages is reconstructed across arbitrary
+packet boundaries, with per-message processing ACKs returning through the BLE
+ingress lens. Messages can be up to 65,535 bytes. The probe defaults to a mode-7
+no-op and records payload size and checksum without requiring an EvenHub layout.
+Handler dispatch through this transport requires `Faceclaw/7` on both lenses.
 
 Glasses with a custom firmware identify themselves with the version number of
 the stock firmware that the modded version is based on, with an extra field in

@@ -1,21 +1,12 @@
 #pragma once
 #include <stdint.h>
+#include "message_transport.h"
 
-/* Persistent CFW-owned state that must survive image-container teardown/rebuild.
- * The image container (its display buffer A @ state+0x8 and recon buffer B @
- * state+0xc) is freed and reallocated on rebuild. The packed shadow lives in A
- * only for the lifetime of the current streaming layout and must be seeded by a
- * mode-6 keyframe after every rebuild. The bookkeeping that does
- * need to survive rebuilds is anchored by a pointer in 1 KiB of SRAM explicitly
- * removed from the top of the stock primary TLSF arena by patch_compress.py. The
- * stock arena is [0x202728a8,0x2029f8a8); the patched size is 0x2cc00, reserving
- * [0x2029f4a8,0x2029f8a8) for CFW. Its first word holds the context pointer and
- * its second holds a magic-guarded sticky allocation-failure diagnostic. This is
- * deliberately carved out rather than
- * inferred padding: 0x20003ffc, used before EVENCFW/11, is actually the +0 callback
- * of the BLE-RX lifecycle object and stock code can BLX through it. The struct's
- * `magic` guards against warm-reset garbage; the slot ptr is range-checked before
- * dereference. */
+/* Persistent CFW-owned state, independent of EvenHub image containers. The
+ * full-panel shadow and legacy deferred-message snapshots are separately owned
+ * heap allocations. This context is anchored in the 1 KiB SRAM region explicitly
+ * removed from the stock primary TLSF arena: [0x2029f4a8,0x2029f8a8). The first
+ * word holds the pointer; the second holds a sticky allocation diagnostic. */
 
 #define CFW_FID_RING  16     /* recent mode-3 frame ids kept for duplicate detection */
 #define CFW_SNAP_RING 12     /* in-flight compressed-message snapshots (per producer race depth) */
@@ -27,7 +18,7 @@
  * pointer so multiple containers (e.g. faceclaw's 4 tiles) don't cross-feed. */
 typedef struct {
     uint8_t *state;      /* owning image-state (key); 0 = empty slot */
-    uint8_t *buf;        /* copy packed into this state's reconstruction-buffer tail */
+    uint8_t *buf;        /* owned heap copy, freed after consumption or discard */
     uint32_t len;
     volatile uint32_t seq; /* push order, or CFW_SNAP_BUSY_SEQ while being consumed */
 } cfw_snap;
@@ -47,12 +38,8 @@ typedef union {
 
 typedef struct {
     uint32_t magic;      /* CFW_CTX_MAGIC when valid */
-    /* --- snapshot FIFO: fixes the producer/consumer race on the shared recon buffer.
-     * snapshot_side() copies each completed message here (both lenses); image_deferred
-     * drains this lens's pending snapshots and runs the worker on each, ignoring the
-     * live (possibly-overwritten) recon buffer B. (The 4bpp shadow of the last frame,
-     * needed by mode-3 deltas, reuses each container's display buffer A — see
-     * cfw_shadow_buffer — so it's per-container and costs no extra RAM.) */
+    /* Legacy image transport copies completed messages into this owned FIFO;
+     * private SID-f0 messages already own their reconstructed input buffer. */
     cfw_snap snaps[CFW_SNAP_RING];
     uint32_t snap_seq;   /* next push sequence number */
     /* --- diagnostics, overlaid as a text line (verify the fix; should stay clear). Mode
@@ -91,7 +78,7 @@ typedef struct {
     volatile uint8_t compass_forward;      /* mode 10: forward sensor-hub heading reports to BLE */
     uint8_t  wake_notify_buf[16];          /* stable storage for sid-0x09 notify */
     uint8_t  wear_notify_buf[12];          /* stable storage for sid-0x10 wear notify */
-    /* Direct-framebuffer job. The EvenHub worker holds the stock display gate
+    /* Direct-framebuffer job. The custom worker holds the stock display gate
      * before it mutates the shadow and until the display task consumes this
      * pointer, so no second snapshot or full-size display buffer is required. */
     const uint8_t *direct_shadow;
@@ -146,6 +133,9 @@ typedef struct {
      * for a deferred double-tap wake when a tap or release follows it. */
     uint8_t  gesture_notify_buf[16];
     volatile cfw_message_probe message_probe; /* latest valid SID-f0 payload */
+    uint32_t image_mutex; /* serializes commands from BLE, bridge, and legacy workers */
+    uint8_t *framebuffer_shadow; /* owned 640x480 packed 4bpp; released by mode 11 */
+    cfw_message_stream message_streams[2]; /* index = BLE ingress lens bit - 1 */
 } customCfwContext;
 
 #define CFW_CTX_SLOT  0x2029f4a8U    /* first word of the CFW-reserved TLSF tail */
