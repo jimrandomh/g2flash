@@ -5,10 +5,10 @@ typedef void (*free_fn)(void *);
 typedef void *(*heap_malloc_fn)(uint32_t descriptor, uint32_t size);
 typedef void (*heap_free_fn)(uint32_t descriptor, void *ptr);
 
-#define FW_MALLOC  ((malloc_fn)0x00458383U)         /* FUN_00458382 malloc(size) */
-#define FW_FREE    ((free_fn)0x004583c7U)           /* FUN_004583c6 free(ptr) */
-#define FW_HEAP_MALLOC ((heap_malloc_fn)0x0048c1e9U) /* FUN_0048c1e8 generic heap malloc */
-#define FW_HEAP_FREE   ((heap_free_fn)0x0048c307U)   /* FUN_0048c306 generic heap free */
+#define FW_MALLOC  ((malloc_fn)0x00458703U)         /* FUN_00458382 malloc(size) */
+#define FW_FREE    ((free_fn)0x00458747U)           /* FUN_004583c6 free(ptr) */
+#define FW_HEAP_MALLOC ((heap_malloc_fn)0x0048d519U) /* FUN_0048c1e8 generic heap malloc */
+#define FW_HEAP_FREE   ((heap_free_fn)0x0048d637U)   /* FUN_0048c306 generic heap free */
 #define FW_HEAP_13_DESCRIPTOR 0x20000358U            /* TLSF arena @ 0x201350a8, 0xcd000 B */
 
 static void *cfw_malloc(uint32_t size);

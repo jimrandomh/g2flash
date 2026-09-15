@@ -1,0 +1,9263 @@
+{
+ "schemaVersion": 1,
+ "oldVersion": "2.2.9.22",
+ "baseVersion": "2.2.10.10",
+ "candidateVersion": "2.2.10.12",
+ "oldBundleSha256": "a03fbea9f68a9de6bc271daabb9f3a41c59053d1086622c76a4e990f829cc561",
+ "baseBundleSha256": "927879057685a4147c6ba1fe33e5f3740d3cc48f87141a9039204d94516e65b8",
+ "g2flashCommit": "d968c2ccbafb85a91d1dc4683eee77accfad3142",
+ "method": "Unique normalized Thumb instruction windows followed by call-target, literal-pool, register, and stack review. RAM entries use matched PC-relative loads, not address deltas. Two gesture sites require semantic review because the stock dispatcher added gating and expanded branches. Extended for g2flash d968c2c (BLE 2M/fast-connection byte patches, head-up gate, idle-input gate, sensor-hub compass diagnostics, R1 battery cache): the same window matcher plus side-by-side disassembly of every new site and callee.",
+ "hardwareValidation": "pending-manual-test",
+ "addresses": {
+  "0x2029f4a8": {
+   "new": "0x2029f4a8",
+   "kind": "reserved-heap-tail",
+   "sources": [
+    "cfw_context.h"
+   ],
+   "derivation": "Verified arena base 0x202728a8 and size 0x2d000 at new init 0x48d67e. Reserve final 0x400 bytes by reducing size to 0x2cc00."
+  },
+  "0x2029f4ac": {
+   "new": "0x2029f4ac",
+   "kind": "reserved-heap-tail",
+   "sources": [
+    "cfw_context.h"
+   ],
+   "derivation": "Verified arena base 0x202728a8 and size 0x2d000 at new init 0x48d67e. Reserve final 0x400 bytes by reducing size to 0x2cc00."
+  },
+  "0x20076d80": {
+   "new": "0x20076de0",
+   "kind": "ram",
+   "sources": [
+    "cfw_context.h"
+   ],
+   "loadEvidence": [
+    {
+     "new": "0x20076de0",
+     "oldLoad": "0x44c010",
+     "newLoad": "0x44c334",
+     "oldLiteral": "0x44c728",
+     "newLiteral": "0x44ca4c",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff81417",
+     "newLoadBytes": "dff81417"
+    },
+    {
+     "new": "0x20076de0",
+     "oldLoad": "0x44c07e",
+     "newLoad": "0x44c3a2",
+     "oldLiteral": "0x44c728",
+     "newLiteral": "0x44ca4c",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8a816",
+     "newLoadBytes": "dff8a816"
+    },
+    {
+     "new": "0x20076de0",
+     "oldLoad": "0x44c1ba",
+     "newLoad": "0x44c4de",
+     "oldLiteral": "0x44ca68",
+     "newLiteral": "0x44cd8c",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8ac08",
+     "newLoadBytes": "dff8ac08"
+    },
+    {
+     "new": "0x20076de0",
+     "oldLoad": "0x44c1c4",
+     "newLoad": "0x44c4e8",
+     "oldLiteral": "0x44ca68",
+     "newLiteral": "0x44cd8c",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8a008",
+     "newLoadBytes": "dff8a008"
+    },
+    {
+     "new": "0x20076de0",
+     "oldLoad": "0x44c29e",
+     "newLoad": "0x44c5c2",
+     "oldLiteral": "0x44c728",
+     "newLiteral": "0x44ca4c",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff88854",
+     "newLoadBytes": "dff88854"
+    },
+    {
+     "new": "0x20076de0",
+     "oldLoad": "0x44c318",
+     "newLoad": "0x44c63c",
+     "oldLiteral": "0x44c728",
+     "newLiteral": "0x44ca4c",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff80c04",
+     "newLoadBytes": "dff80c04"
+    },
+    {
+     "new": "0x20076de0",
+     "oldLoad": "0x44c81a",
+     "newLoad": "0x44cb3e",
+     "oldLiteral": "0x44ca68",
+     "newLiteral": "0x44cd8c",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "93490968",
+     "newLoadBytes": "93490968"
+    },
+    {
+     "new": "0x20076de0",
+     "oldLoad": "0x44c850",
+     "newLoad": "0x44cb74",
+     "oldLiteral": "0x44ca68",
+     "newLiteral": "0x44cd8c",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "85480068",
+     "newLoadBytes": "85480068"
+    },
+    {
+     "new": "0x20076de0",
+     "oldLoad": "0x44c8e6",
+     "newLoad": "0x44cc0a",
+     "oldLiteral": "0x44d2f4",
+     "newLiteral": "0x44d618",
+     "window": [
+      16,
+      12
+     ],
+     "oldLoadBytes": "dff80c1a",
+     "newLoadBytes": "dff80c1a"
+    },
+    {
+     "new": "0x20076de0",
+     "oldLoad": "0x44cfbc",
+     "newLoad": "0x44d2e0",
+     "oldLiteral": "0x44d2f4",
+     "newLiteral": "0x44d618",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff83403",
+     "newLoadBytes": "dff83403"
+    },
+    {
+     "new": "0x20076de0",
+     "oldLoad": "0x44d134",
+     "newLoad": "0x44d458",
+     "oldLiteral": "0x44d2f4",
+     "newLiteral": "0x44d618",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "6f490968",
+     "newLoadBytes": "6f490968"
+    },
+    {
+     "new": "0x20076de0",
+     "oldLoad": "0x44d26a",
+     "newLoad": "0x44d58e",
+     "oldLiteral": "0x44d2f4",
+     "newLiteral": "0x44d618",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "22480768",
+     "newLoadBytes": "22480768"
+    }
+   ]
+  },
+  "0x5a8ca3": {
+   "new": "0x5ab8cb",
+   "sources": [
+    "mic_control.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r5, r6, r7, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r5, r6, r7, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "e0b500217c4a11600100c9b2002922d194f64cfd800709d5784801906d200090774b6c4a6d49042094f6e7ff94f63efd",
+   "newBytes": "e0b500217c4a11600100c9b2002922d191f638ff800709d5784801906d200090774b6c4a6d49042092f6d3f991f62aff"
+  },
+  "0x5a8d53": {
+   "new": "0x5ab97b",
+   "sources": [
+    "mic_control.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r2, r3, r4, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r2, r3, r4, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "1cb50020aaf7efff002140f20b10eaf7b2fb0400002c24d194f6f0fc800709d55148019082200090504b3e4a3f490320",
+   "newBytes": "1cb50020aaf72ffe002140f20b10eaf7a0fb0400002c24d191f6dcfe800709d55148019082200090504b3e4a3f490320"
+  },
+  "0x5a8db9": {
+   "new": "0x5ab9e1",
+   "sources": [
+    "mic_control.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r5, r6, r7, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r5, r6, r7, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "e0b594f6c8fc800709d540480190922000903f4b2a4a2b49042094f663ff94f6bafcc00703d494f6b6fc400705d53949",
+   "newBytes": "e0b591f6b4fe800709d540480190922000903f4b2a4a2b49042092f64ff991f6a6fec00703d491f6a2fe400705d53949"
+  },
+  "0x5a8e0f": {
+   "new": "0x5aba37",
+   "sources": [
+    "mic_control.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r2, r3, r4, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r2, r3, r4, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "1cb50020aaf7a2ff012140f20b10eaf754fb0400002c21d194f692fc800709d522480190a0200090264b0f4a10490320",
+   "newBytes": "1cb50020aaf7e2fd012140f20b10eaf742fb0400002c21d191f67efe800709d522480190a0200090264b0f4a10490320"
+  },
+  "0x593371": {
+   "new": "0x595f75",
+   "sources": [
+    "mic_control.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push.w",
+    "{r3, r4, r5, r6, r7, r8, sb, lr}"
+   ],
+   "newInstruction": [
+    "push.w",
+    "{r3, r4, r5, r6, r7, r8, sb, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "2de9f84384b004000d0090462800c0b2022802da4046002823d1aaf6e0f980070dd5dff80c080190bf200090dff80438",
+   "newBytes": "2de9f84384b004000d0090462800c0b2022802da4046002823d1a7f6defb80070dd5dff80c080190bf200090dff80438"
+  },
+  "0x5934c9": {
+   "new": "0x5960cd",
+   "sources": [
+    "mic_control.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r3, r4, r5, r6, r7, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r3, r4, r5, r6, r7, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "f8b584b007000c000c25dff8d8662000c0b2684330448068002822d1aaf633f980070dd5dff8d0060190d8200090dff8",
+   "newBytes": "f8b584b007000c000c25dff8d8662000c0b2684330448068002822d1a7f631fb80070dd5dff8d0060190d8200090dff8"
+  },
+  "0x5ab2f1": {
+   "new": "0x5adf19",
+   "sources": [
+    "mic_control.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r3, r4, r5, r6, r7, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r3, r4, r5, r6, r7, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "f8b504000d0016001f0029002000fff7e2fc29002000fff786fd308029002000fff7c2ff38800020f2bd70b503000a00",
+   "newBytes": "f8b504000d0016001f0029002000fff7e2fc29002000fff786fd308029002000fff7c2ff38800020f2bd70b503000a00"
+  },
+  "0x47da6d": {
+   "new": "0x47ed09",
+   "sources": [
+    "mic_control.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     10,
+     0
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r1, r2, r3, r4, r5, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r1, r2, r3, r4, r5, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "3eb504000d00cdf70ff900281ed0bff768fe80070ad58348019040f2e9100090814b7e4a7e490420c0f702f9bff759fe",
+   "newBytes": "3eb504000d00ccf753f900281ed0bef71afd80070ad58348019040f2e9100090814b7e4a7e490420bef7b4ffbef70bfd"
+  },
+  "0x45cfdd": {
+   "new": "0x45d35d",
+   "sources": [
+    "als_sensor.c",
+    "mic_control.c",
+    "settings_ext.c",
+    "zlib_glue.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "ldr.w",
+    "r0, [pc, #0xc10]"
+   ],
+   "newInstruction": [
+    "ldr.w",
+    "r0, [pc, #0xc10]"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "dff8100c00787047dff8080c0078704730b589b0dff8b80801689c202bf0bcff5ff0ff301421002204ac2000dff76cf8",
+   "newBytes": "dff8100c00787047dff8080c0078704730b589b0dff8b80801689c202cf094ff5ff0ff301421002204ac2000def7acfe"
+  },
+  "0x458383": {
+   "new": "0x458703",
+   "sources": [
+    "malloc.h"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r4, r5, r6, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r4, r5, r6, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "70b5040000256c4e4ff47a713068eaf7fefd002809d121006948006843f03af905003068eaf726fe0ae0654820f050fe",
+   "newBytes": "70b5040000256c4e4ff47a713068eaf73efc002809d121006948006844f012f905003068eaf766fc0ae0654821f0dafd"
+  },
+  "0x4583c7": {
+   "new": "0x458747",
+   "sources": [
+    "malloc.h"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r3, r4, r5, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r3, r4, r5, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "38b504005c4d4ff47a712868eaf7ddfd002808d121005848006843f08cf92868eaf706fe0ae0564820f030fe40f24642",
+   "newBytes": "38b504005c4d4ff47a712868eaf71dfc002808d121005848006844f064f92868eaf746fc0ae0564821f0bafd40f24642"
+  },
+  "0x48c1e9": {
+   "new": "0x48d519",
+   "sources": [
+    "malloc.h"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r4, r5, r6, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r4, r5, r6, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "70b506000d000024002d01d1002022e05ff0ff313068b6f7c3f801281ad1290070680ff004fa0400002c0dd020000ff0",
+   "newBytes": "70b506000d000024002d01d1002022e05ff0ff313068b4f72bff01281ad1290070680ff004fa0400002c0dd020000ff0"
+  },
+  "0x48c307": {
+   "new": "0x48d637",
+   "sources": [
+    "malloc.h"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r4, r5, r6, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r4, r5, r6, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "70b505000c00002c1dd05ff0ff312868b6f737f8012816d120000ff0daf80600210068680ff0e7f9a868864203d2a868",
+   "newBytes": "70b505000c00002c1dd05ff0ff312868b4f79ffe012816d120000ff0daf80600210068680ff0e7f9a868864203d2a868"
+  },
+  "0x20000358": {
+   "new": "0x20000358",
+   "kind": "ram",
+   "sources": [
+    "debug.c",
+    "malloc.h"
+   ],
+   "loadEvidence": [
+    {
+     "new": "0x20000358",
+     "oldLoad": "0x48c35c",
+     "newLoad": "0x48d68c",
+     "oldLiteral": "0x48c3d8",
+     "newLiteral": "0x48d708",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "1e4c5ff4",
+     "newLoadBytes": "1e4c5ff4"
+    },
+    {
+     "new": "0x20000358",
+     "oldLoad": "0x52a20c",
+     "newLoad": "0x52cab0",
+     "oldLiteral": "0x52a414",
+     "newLiteral": "0x52ccb8",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "814802e0",
+     "newLoadBytes": "814802e0"
+    },
+    {
+     "new": "0x20000358",
+     "oldLoad": "0x52a214",
+     "newLoad": "0x52cab8",
+     "oldLiteral": "0x52a414",
+     "newLiteral": "0x52ccb8",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "7f487047",
+     "newLoadBytes": "7f487047"
+    },
+    {
+     "new": "0x20000358",
+     "oldLoad": "0x57fae0",
+     "newLoad": "0x5826e4",
+     "oldLiteral": "0x57fbac",
+     "newLiteral": "0x5827b0",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "32480cf7",
+     "newLoadBytes": "32480af7"
+    },
+    {
+     "new": "0x20000358",
+     "oldLoad": "0x57fb34",
+     "newLoad": "0x582738",
+     "oldLiteral": "0x57fbac",
+     "newLiteral": "0x5827b0",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "1d480cf7",
+     "newLoadBytes": "1d480af7"
+    },
+    {
+     "new": "0x20000358",
+     "oldLoad": "0x57fb5a",
+     "newLoad": "0x58275e",
+     "oldLiteral": "0x57fbac",
+     "newLiteral": "0x5827b0",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "14480cf7",
+     "newLoadBytes": "14480af7"
+    },
+    {
+     "new": "0x20000358",
+     "oldLoad": "0x57fb66",
+     "newLoad": "0x58276a",
+     "oldLiteral": "0x57fbac",
+     "newLiteral": "0x5827b0",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "11480cf7",
+     "newLoadBytes": "11480af7"
+    },
+    {
+     "new": "0x20000358",
+     "oldLoad": "0x57fb74",
+     "newLoad": "0x582778",
+     "oldLiteral": "0x57fbac",
+     "newLiteral": "0x5827b0",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "0d480cf7",
+     "newLoadBytes": "0d480af7"
+    },
+    {
+     "new": "0x20000358",
+     "oldLoad": "0x57fb7e",
+     "newLoad": "0x582782",
+     "oldLiteral": "0x57fbac",
+     "newLiteral": "0x5827b0",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "0b480cf7",
+     "newLoadBytes": "0b480af7"
+    },
+    {
+     "new": "0x20000358",
+     "oldLoad": "0x57fb96",
+     "newLoad": "0x58279a",
+     "oldLiteral": "0x57fbac",
+     "newLiteral": "0x5827b0",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "05480cf7",
+     "newLoadBytes": "05480af7"
+    }
+   ]
+  },
+  "0x5d6167": {
+   "new": "0x5d8e57",
+   "sources": [
+    "zlib_glue.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r3, r4, r5, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r3, r4, r5, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "38b504000d00002a07d01078dff8c4150978884201d1382b02d07ff0050055e0002c02d17ff0010050e00020a061206a",
+   "newBytes": "38b504000d00002a07d01078dff8c4150978884201d1382b02d07ff0050055e0002c02d17ff0010050e00020a061206a"
+  },
+  "0x5d6235": {
+   "new": "0x5d8f25",
+   "sources": [
+    "zlib_glue.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r4, r5, r6, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r4, r5, r6, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "70b50500002d05d0e869002802d02868002802d17ff00100a3e1042902d17ff0040600e000267ff004041be034006868",
+   "newBytes": "70b50500002d05d0e869002802d02868002802d17ff00100a3e1042902d17ff0040600e000267ff004041be034006868"
+  },
+  "0x5d612b": {
+   "new": "0x5d8e1b",
+   "sources": [
+    "zlib_glue.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r4, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r4, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "10b50400002c05d0e069002802d0606a002802d17ff001000fe0e0694069002804d02100e0694069fff7b4ffe169a06a",
+   "newBytes": "10b50400002c05d0e069002802d0606a002802d17ff001000fe0e0694069002804d02100e0694069fff7b4ffe169a06a"
+  },
+  "0x4ee3bb": {
+   "new": "0x4f0c4f",
+   "sources": [
+    "zlib_glue.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push.w",
+    "{r3, r4, r5, r6, r7, r8, sb, sl, fp, lr}"
+   ],
+   "newInstruction": [
+    "push.w",
+    "{r3, r4, r5, r6, r7, r8, sb, sl, fp, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "2de9f84f86b0040089461500002c02d0b9f1000f29d14ff7bdf9800710d5cdf80c900294dff82c060190db200090dff8",
+   "newBytes": "2de9f84f86b0040089461500002c02d0b9f1000f29d14cf773fd800710d5cdf80c900294dff82c060190db200090dff8"
+  },
+  "0x47ce03": {
+   "new": "0x47e09f",
+   "sources": [
+    "zlib_glue.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r4}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r4}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "10b421490968c90305d4bff34f8fbff36f8f002035e000281fd100201f490860bff34f8f1e480168c1f34e32c1f3c903",
+   "newBytes": "10b421490968c90305d4bff34f8fbff36f8f002035e000281fd100201f490860bff34f8f1e480168c1f34e32c1f3c903"
+  },
+  "0x4a60c1": {
+   "new": "0x4a73f5",
+   "sources": [
+    "zlib_glue.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push.w",
+    "{r3, r4, r5, r6, r7, r8, sb, lr}"
+   ],
+   "newInstruction": [
+    "push.w",
+    "{r3, r4, r5, r6, r7, r8, sb, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "2de9f8438eb004000d00002c15d1dff8bc050290dff8b8050190dff8b8050090dff828359622dff80c180320a9f73cfd",
+   "newBytes": "2de9f8438eb004000d00002c15d1dff8bc050290dff8b8050190dff8b8050090dff828359622dff80c180320a8f734fd"
+  },
+  "0x440d9b": {
+   "new": "0x440d9b",
+   "sources": [
+    "zlib_glue.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r3, r4, r5, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r3, r4, r5, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "38b584b00400002c12d1794802907948019079480090dff8e0364ff455728b4903200ef0d4fe00205ff0ff310860fae7",
+   "newBytes": "38b584b00400002c12d1794802907948019079480090dff8e0364ff455728b4903200ff066f800205ff0ff310860fae7"
+  },
+  "0x516f0b": {
+   "new": "0x5197bb",
+   "sources": [
+    "zlib_glue.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r0, r1, r2, r3, r4, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r0, r1, r2, r3, r4, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "1fb50400092c1ddb26f71cfc80070ad56e48019040f23d1000906c4b554a5549012026f7b6fe26f70dfcc00703d426f7",
+   "newBytes": "1fb50400092c1ddb23f7c4ff80070ad56e48019040f23d1000906c4b554a5549012024f75efa23f7b5ffc00703d423f7"
+  },
+  "0x516fa9": {
+   "new": "0x519859",
+   "sources": [
+    "zlib_glue.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r4, r5, r6, r7, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r4, r5, r6, r7, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "f0b585b006000c00150026f7ccfb800713d52800c0b204902000c0b203903000c0b20290474801904ff4a6700090464b",
+   "newBytes": "f0b585b006000c00150023f774ff800713d52800c0b204902000c0b203903000c0b20290474801904ff4a6700090464b"
+  },
+  "0x516e75": {
+   "new": "0x519725",
+   "sources": [
+    "zlib_glue.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r7, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r7, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "80b5844800682bf707ff0120fff79bfe00207749086000207649087000207649087001bd1cb51e234ff47a7200210720",
+   "newBytes": "80b58448006829f7affa0120fff79bfe00207749086000207649087000207649087001bd1cb51e234ff47a7200210720"
+  },
+  "0x517039": {
+   "new": "0x5198e9",
+   "sources": [
+    "zlib_glue.c"
+   ],
+   "matches": [
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r3, r4, r5, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r3, r4, r5, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "38b504000d00fff719ff1e480168912071f794ff2900c9b22000fff7abfd31bd2063072000d8b80520917b009c670720",
+   "newBytes": "38b504000d00fff719ff1e480168912070f7d4fc2900c9b22000fff7abfd31bd5863072000d8b80520d27b00e8670720"
+  },
+  "0x442c4d": {
+   "new": "0x442c4d",
+   "sources": [
+    "zlib_glue.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r3, r4, r5, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r3, r4, r5, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "38b505000c00fff7b6fd002802d07ff0050014e0002d01d0002c02d17ff003000de000200090002322000421280014f0",
+   "newBytes": "38b505000c00fff7b6fd002802d07ff0050014e0002d01d0002c02d17ff003000de000200090002322000421280014f0"
+  },
+  "0x442b65": {
+   "new": "0x442b65",
+   "sources": [
+    "zlib_glue.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push.w",
+    "{r1, r2, r3, r4, r5, r6, r7, r8, sb, lr}"
+   ],
+   "newInstruction": [
+    "push.w",
+    "{r1, r2, r3, r4, r5, r6, r7, r8, sb, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "2de9fe4305000f0091461c000026fff726fe002865d12800002862d000205ff00008002c07d0a168002904d0e1683429",
+   "newBytes": "2de9fe4305000f0091461c000026fff726fe002865d12800002862d000205ff00008002c07d0a168002904d0e1683429"
+  },
+  "0x442c8d": {
+   "new": "0x442c8d",
+   "sources": [
+    "zlib_glue.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r2, r3, r4, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r2, r3, r4, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "1cb50400fff797fd002802d07ff005001ae0002c02d17ff0030015e0200014f0eefd002802d17ff002000de000200090",
+   "newBytes": "1cb50400fff797fd002802d07ff005001ae0002c02d17ff0030015e0200014f0aeff002802d17ff002000de000200090"
+  },
+  "0x442cf3": {
+   "new": "0x442cf3",
+   "sources": [
+    "zlib_glue.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r3, r4, r5, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r3, r4, r5, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "38b50400fff764fd002802d07ff005001ee0002c02d17ff0030019e0200014f0d3fd0500002000900023002205212000",
+   "newBytes": "38b50400fff764fd002802d07ff005001ee0002c02d17ff0030019e0200014f093ff0500002000900023002205212000"
+  },
+  "0x46a39f": {
+   "new": "0x46a983",
+   "sources": [
+    "settings_ext.c",
+    "zlib_glue.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r3, r4, r5, r6, r7, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r3, r4, r5, r6, r7, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "f8b584b004000d0016001f00d3f7d0f9800713d5300080b20390200080b20290dff8d409019076200090dff8cc39dff8",
+   "newBytes": "f8b584b004000d0016001f00d2f7defe800713d5300080b20390200080b20290dff8d409019076200090dff8cc39dff8"
+  },
+  "0x4f3d77": {
+   "new": "0x4f660b",
+   "sources": [
+    "zlib_glue.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "movs",
+    "r0, #0"
+   ],
+   "newInstruction": [
+    "movs",
+    "r0, #0"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "0020dff85018086070470120dff84c1808707047e0b5dff818281168002907d011684968002903d011680968002922d1",
+   "newBytes": "0020dff85018086070470120dff84c1808707047e0b5dff818281168002907d011684968002903d011680968002922d1"
+  },
+  "0x4f3d8b": {
+   "new": "0x4f661f",
+   "sources": [
+    "zlib_glue.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r5, r6, r7, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r5, r6, r7, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "e0b5dff818281168002907d011684968002903d011680968002922d149f7d2fc80070dd5dff8240801909e200090dff8",
+   "newBytes": "e0b5dff818281168002907d011684968002903d011680968002922d147f788f880070dd5dff8240801909e200090dff8"
+  },
+  "0x4ebd09": {
+   "new": "0x4ee59d",
+   "sources": [
+    "zlib_glue.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     10,
+     0
+    ]
+   ],
+   "oldInstruction": [
+    "push.w",
+    "{r4, r5, r6, r7, r8, sb, sl, fp, lr}"
+   ],
+   "newInstruction": [
+    "push.w",
+    "{r4, r5, r6, r7, r8, sb, sl, fp, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "2de9f04f8db004000d0016001f00fff7befa44f288010022dff80481c146484650f7dcf944f23e3949460022dff8f4a0",
+   "newBytes": "2de9f04f8db004000d0016001f00fff7befa44f288010022dff80481c14648464df792fd44f23e3949460022dff8f4a0"
+  },
+  "0x479483": {
+   "new": "0x47a717",
+   "sources": [
+    "zlib_glue.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r7, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r7, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "80b53a4a1068002809d139480090394b4ff492722f490320d6f765fb15e04ff47a711068c8f76fff002801d0012000e0",
+   "newBytes": "80b53a4a1068002809d139480090394b4ff492722f490320d5f7adfb15e04ff47a711068c7f725fe002801d0012000e0"
+  },
+  "0x4794cf": {
+   "new": "0x47a763",
+   "sources": [
+    "zlib_glue.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r2, r3, r4, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r2, r3, r4, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "1cb5274c2068002809d126480090284b40f231121c490320d6f73ffb0ee0caf7a4fc002804d000212068c8f745fe05e0",
+   "newBytes": "1cb5274c2068002809d126480090284b40f231121c490320d5f787fb0ee0c9f75afb002804d000212068c7f7fbfc05e0"
+  },
+  "0x479d83": {
+   "new": "0x47b017",
+   "sources": [
+    "zlib_glue.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push.w",
+    "{r4, r5, r6, r7, r8, sb, sl, lr}"
+   ],
+   "newInstruction": [
+    "push.w",
+    "{r4, r5, r6, r7, r8, sb, sl, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "2de9f0478cb004000d0016001f00ddf85080ddf85490242100220df10c0a5046c2f79ff9032003900494059506960797",
+   "newBytes": "2de9f0478cb004000d0016001f00ddf85080ddf85490242100220df10c0a5046c1f755f8032003900494059506960797"
+  },
+  "0x4708d1": {
+   "new": "0x470eb5",
+   "sources": [
+    "zlib_glue.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r0, r1, r2, r3, r4, r5, r6, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r0, r1, r2, r3, r4, r5, r6, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "7fb52848016828480068401824490a682649096889184ff420724ff4f0734ff410744ff49075412801d34020ffe7c607",
+   "newBytes": "7fb52848016828480068401824490a682649096889184ff420724ff4f0734ff410744ff49075412801d34020ffe7c607"
+  },
+  "0x55d4d7": {
+   "new": "0x55fd7f",
+   "sources": [
+    "zlib_glue.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r3, r4, r5, r6, r7, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r3, r4, r5, r6, r7, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "f8b50120dff8041708600020dff80017086002205af700fe002802d05ff0ff3030e04ff47a7002900520039002a90220",
+   "newBytes": "f8b50120dff8041708600020dff80017086002205af71ef9002802d05ff0ff3030e04ff47a7002900520039002a90220"
+  },
+  "0x55d55f": {
+   "new": "0x55fe07",
+   "sources": [
+    "zlib_glue.c"
+   ],
+   "matches": [
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r5, r6, r7, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r5, r6, r7, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "e0b50020dff87c1608600020dff87816086002205af7f5fd002824d0e0f6e8f880070ed5dff8700601904ff4a7700090",
+   "newBytes": "e0b50020dff87c1608600020dff87816086002205af713f9002824d0ddf694fc80070ed5dff87006019040f251100090"
+  },
+  "0x4b81d3": {
+   "new": "0x4ba0b7",
+   "sources": [
+    "zlib_glue.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r1, r2, r3, r4, r5, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r1, r2, r3, r4, r5, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "3eb504000d00fff785ff022822d185f7b5fa80070cd5dff8a805019040f29d100090dff8a0351e4a1f49012085f74dfd",
+   "newBytes": "3eb504000d00fff785ff022822d183f743fb80070cd5dff8a805019040f29d100090dff8a0351e4a1f49012083f7dbfd"
+  },
+  "0x4622ed": {
+   "new": "0x46266d",
+   "sources": [
+    "gesture_fwd.c",
+    "zlib_glue.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r7, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r7, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "80b5002801d1002003e08069f0f7eefa012002bd00000000feb50500002d00f0a9802800c068c0460400002c00f0a280",
+   "newBytes": "80b5002801d1002003e08069f0f7c6fa012002bd00000000feb50500002d00f0a9802800c068c0460400002c00f0a280"
+  },
+  "0x59f47d": {
+   "new": "0x5a2081",
+   "sources": [
+    "zlib_glue.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     16,
+     0
+    ]
+   ],
+   "oldInstruction": [
+    "push.w",
+    "{r3, r4, r5, r6, r7, r8, sb, lr}"
+   ],
+   "newInstruction": [
+    "push.w",
+    "{r3, r4, r5, r6, r7, r8, sb, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "2de9f8438ab0070042f224084046b8f67aff0400002c1fd19ef65bf980070ad59e48019040f2c3200090a64b9d4a9e49",
+   "newBytes": "2de9f8438ab0070042f224084046b6f638fb0400002c1fd19bf659fb80070ad59e48019040f2c3200090a64b9d4a9e49"
+  },
+  "0x200008b4": {
+   "new": "0x200008b4",
+   "kind": "ram",
+   "sources": [
+    "zlib_glue.c"
+   ],
+   "loadEvidence": [
+    {
+     "new": "0x200008b4",
+     "oldLoad": "0x47091c",
+     "newLoad": "0x470f00",
+     "oldLiteral": "0x470984",
+     "newLiteral": "0x470f68",
+     "window": [
+      16,
+      12
+     ],
+     "oldLoadBytes": "19480068",
+     "newLoadBytes": "19480068"
+    },
+    {
+     "new": "0x200008b4",
+     "oldLoad": "0x4dfc7a",
+     "newLoad": "0x4e2506",
+     "oldLiteral": "0x4e0388",
+     "newLiteral": "0x4e2c14",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff80c07",
+     "newLoadBytes": "dff80c07"
+    },
+    {
+     "new": "0x200008b4",
+     "oldLoad": "0x4e002a",
+     "newLoad": "0x4e28b6",
+     "oldLiteral": "0x4e0388",
+     "newLiteral": "0x4e2c14",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "d74b1b68",
+     "newLoadBytes": "d74b1b68"
+    },
+    {
+     "new": "0x200008b4",
+     "oldLoad": "0x4e0074",
+     "newLoad": "0x4e2900",
+     "oldLiteral": "0x4e0388",
+     "newLiteral": "0x4e2c14",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff810a3",
+     "newLoadBytes": "dff810a3"
+    },
+    {
+     "new": "0x200008b4",
+     "oldLoad": "0x4e011e",
+     "newLoad": "0x4e29aa",
+     "oldLiteral": "0x4e0388",
+     "newLiteral": "0x4e2c14",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff868a2",
+     "newLoadBytes": "dff868a2"
+    },
+    {
+     "new": "0x200008b4",
+     "oldLoad": "0x4e0198",
+     "newLoad": "0x4e2a24",
+     "oldLiteral": "0x4e0388",
+     "newLiteral": "0x4e2c14",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8eca1",
+     "newLoadBytes": "dff8eca1"
+    }
+   ]
+  },
+  "0x200767a0": {
+   "new": "0x200767ec",
+   "kind": "ram",
+   "sources": [
+    "zlib_glue.c"
+   ],
+   "loadEvidence": [
+    {
+     "new": "0x200767ec",
+     "oldLoad": "0x516c74",
+     "newLoad": "0x519524",
+     "oldLiteral": "0x517088",
+     "newLiteral": "0x519938",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff81004",
+     "newLoadBytes": "dff81004"
+    },
+    {
+     "new": "0x200767ec",
+     "oldLoad": "0x516d9c",
+     "newLoad": "0x51964c",
+     "oldLiteral": "0x517088",
+     "newLiteral": "0x519938",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "ba480068",
+     "newLoadBytes": "ba480068"
+    },
+    {
+     "new": "0x200767ec",
+     "oldLoad": "0x516e6a",
+     "newLoad": "0x51971a",
+     "oldLiteral": "0x517088",
+     "newLiteral": "0x519938",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "87480068",
+     "newLoadBytes": "87480068"
+    },
+    {
+     "new": "0x200767ec",
+     "oldLoad": "0x516e76",
+     "newLoad": "0x519726",
+     "oldLiteral": "0x517088",
+     "newLiteral": "0x519938",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "84480068",
+     "newLoadBytes": "84480068"
+    },
+    {
+     "new": "0x200767ec",
+     "oldLoad": "0x516ea8",
+     "newLoad": "0x519758",
+     "oldLiteral": "0x517088",
+     "newLiteral": "0x519938",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "774c854b",
+     "newLoadBytes": "774c854b"
+    }
+   ]
+  },
+  "0x7b75f8": {
+   "new": "0x7bb6f8",
+   "sources": [
+    "zlib_glue.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "cmp",
+    "r6, #0x31"
+   ],
+   "newInstruction": [
+    "cmp",
+    "r6, #0x31"
+   ],
+   "kind": "rom-data",
+   "oldBytes": "312e312e34000000",
+   "newBytes": "312e312e34000000"
+  },
+  "0x4622d7": {
+   "new": "0x462657",
+   "sources": [
+    "gesture_fwd.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "cmp",
+    "r0, #0"
+   ],
+   "newInstruction": [
+    "cmp",
+    "r0, #0"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "002801d1002005e00168002901d0006800e04068704780b5002801d1002003e08069f0f7eefa012002bd00000000feb5",
+   "newBytes": "002801d1002005e00168002901d0006800e04068704780b5002801d1002003e08069f0f7c6fa012002bd00000000feb5"
+  },
+  "0x4ebad3": {
+   "new": "0x4ee367",
+   "sources": [
+    "gesture_fwd.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push.w",
+    "{r4, r5, r6, r7, r8, sb, sl, fp, lr}"
+   ],
+   "newInstruction": [
+    "push.w",
+    "{r4, r5, r6, r7, r8, sb, sl, fp, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "2de9f04f8db00400894692461d00fff7d9fb44f288010022cf4e3700380050f7f8fa44f23e3739000022dff82c83c346",
+   "newBytes": "2de9f04f8db00400894692461d00fff7d9fb44f288010022cf4e370038004df7aefe44f23e3739000022dff82c83c346"
+  },
+  "0x20076768": {
+   "new": "0x200767b4",
+   "kind": "ram",
+   "sources": [
+    "gesture_fwd.c"
+   ],
+   "loadEvidence": [
+    {
+     "new": "0x200767b4",
+     "oldLoad": "0x443ee2",
+     "newLoad": "0x443ee2",
+     "oldLiteral": "0x444848",
+     "newLiteral": "0x444848",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff86499",
+     "newLoadBytes": "dff86499"
+    },
+    {
+     "new": "0x200767b4",
+     "oldLoad": "0x443f24",
+     "newLoad": "0x443f24",
+     "oldLiteral": "0x444848",
+     "newLiteral": "0x444848",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff82099",
+     "newLoadBytes": "dff82099"
+    },
+    {
+     "new": "0x200767b4",
+     "oldLoad": "0x443f6e",
+     "newLoad": "0x443f6e",
+     "oldLiteral": "0x444848",
+     "newLiteral": "0x444848",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8d898",
+     "newLoadBytes": "dff8d898"
+    },
+    {
+     "new": "0x200767b4",
+     "oldLoad": "0x4440f6",
+     "newLoad": "0x4440f6",
+     "oldLiteral": "0x444848",
+     "newLiteral": "0x444848",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff85087",
+     "newLoadBytes": "dff85087"
+    },
+    {
+     "new": "0x200767b4",
+     "oldLoad": "0x4442d0",
+     "newLoad": "0x4442d6",
+     "oldLiteral": "0x444848",
+     "newLiteral": "0x444848",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff87465",
+     "newLoadBytes": "dff87065"
+    },
+    {
+     "new": "0x200767b4",
+     "oldLoad": "0x44493c",
+     "newLoad": "0x444964",
+     "oldLiteral": "0x445200",
+     "newLiteral": "0x445384",
+     "window": [
+      16,
+      12
+     ],
+     "oldLoadBytes": "dff8c058",
+     "newLoadBytes": "dff81c5a"
+    },
+    {
+     "new": "0x200767b4",
+     "oldLoad": "0x4454e8",
+     "newLoad": "0x445808",
+     "oldLiteral": "0x446040",
+     "newLiteral": "0x446364",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8541b",
+     "newLoadBytes": "dff8581b"
+    },
+    {
+     "new": "0x200767b4",
+     "oldLoad": "0x4456ea",
+     "newLoad": "0x445a0a",
+     "oldLiteral": "0x446040",
+     "newLiteral": "0x446364",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff85409",
+     "newLoadBytes": "dff85809"
+    },
+    {
+     "new": "0x200767b4",
+     "oldLoad": "0x445834",
+     "newLoad": "0x445b54",
+     "oldLiteral": "0x446040",
+     "newLiteral": "0x446364",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff80878",
+     "newLoadBytes": "dff80c78"
+    },
+    {
+     "new": "0x200767b4",
+     "oldLoad": "0x445944",
+     "newLoad": "0x445c68",
+     "oldLiteral": "0x446040",
+     "newLiteral": "0x446364",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8f876",
+     "newLoadBytes": "dff8f876"
+    },
+    {
+     "new": "0x200767b4",
+     "oldLoad": "0x445ac8",
+     "newLoad": "0x445dec",
+     "oldLiteral": "0x446040",
+     "newLiteral": "0x446364",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff87485",
+     "newLoadBytes": "dff87485"
+    },
+    {
+     "new": "0x200767b4",
+     "oldLoad": "0x445ba6",
+     "newLoad": "0x445eca",
+     "oldLiteral": "0x446040",
+     "newLiteral": "0x446364",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff89804",
+     "newLoadBytes": "dff89804"
+    },
+    {
+     "new": "0x200767b4",
+     "oldLoad": "0x445c4a",
+     "newLoad": "0x445f6e",
+     "oldLiteral": "0x446040",
+     "newLiteral": "0x446364",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8f473",
+     "newLoadBytes": "dff8f473"
+    },
+    {
+     "new": "0x200767b4",
+     "oldLoad": "0x463af8",
+     "newLoad": "0x463e78",
+     "oldLiteral": "0x463dfc",
+     "newLiteral": "0x46417c",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff80023",
+     "newLoadBytes": "dff80023"
+    },
+    {
+     "new": "0x200767b4",
+     "oldLoad": "0x465378",
+     "newLoad": "0x4656f8",
+     "oldLiteral": "0x465e60",
+     "newLiteral": "0x4661e0",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8e40a",
+     "newLoadBytes": "dff8e40a"
+    },
+    {
+     "new": "0x200767b4",
+     "oldLoad": "0x465948",
+     "newLoad": "0x465cc8",
+     "oldLiteral": "0x465e60",
+     "newLiteral": "0x4661e0",
+     "window": [
+      24,
+      8
+     ],
+     "oldLoadBytes": "dff81405",
+     "newLoadBytes": "dff81405"
+    },
+    {
+     "new": "0x200767b4",
+     "oldLoad": "0x465a1a",
+     "newLoad": "0x465d9a",
+     "oldLiteral": "0x465e60",
+     "newLiteral": "0x4661e0",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff84404",
+     "newLoadBytes": "dff84404"
+    },
+    {
+     "new": "0x200767b4",
+     "oldLoad": "0x465aea",
+     "newLoad": "0x465e6a",
+     "oldLiteral": "0x465e60",
+     "newLiteral": "0x4661e0",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff87403",
+     "newLoadBytes": "dff87403"
+    },
+    {
+     "new": "0x200767b4",
+     "oldLoad": "0x465bc0",
+     "newLoad": "0x465f40",
+     "oldLiteral": "0x465e60",
+     "newLiteral": "0x4661e0",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "a7480068",
+     "newLoadBytes": "a7480068"
+    },
+    {
+     "new": "0x200767b4",
+     "oldLoad": "0x465cbc",
+     "newLoad": "0x46603c",
+     "oldLiteral": "0x465e60",
+     "newLiteral": "0x4661e0",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "68480068",
+     "newLoadBytes": "68480068"
+    },
+    {
+     "new": "0x200767b4",
+     "oldLoad": "0x468db6",
+     "newLoad": "0x469136",
+     "oldLiteral": "0x469414",
+     "newLiteral": "0x469794",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff85c16",
+     "newLoadBytes": "dff85c16"
+    },
+    {
+     "new": "0x200767b4",
+     "oldLoad": "0x468f94",
+     "newLoad": "0x469314",
+     "oldLiteral": "0x469414",
+     "newLiteral": "0x469794",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff87c14",
+     "newLoadBytes": "dff87c14"
+    }
+   ]
+  },
+  "0x2007646c": {
+   "new": "0x200764a4",
+   "kind": "ram",
+   "sources": [
+    "debug.c"
+   ],
+   "loadEvidence": [
+    {
+     "new": "0x200764a4",
+     "oldLoad": "0x4d90cc",
+     "newLoad": "0x4db80c",
+     "oldLiteral": "0x4d9bc0",
+     "newLiteral": "0x4dc300",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8f01a",
+     "newLoadBytes": "dff8f01a"
+    },
+    {
+     "new": "0x200764a4",
+     "oldLoad": "0x4d91b2",
+     "newLoad": "0x4db8f2",
+     "oldLiteral": "0x4d9bc0",
+     "newLiteral": "0x4dc300",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff80c0a",
+     "newLoadBytes": "dff80c0a"
+    },
+    {
+     "new": "0x200764a4",
+     "oldLoad": "0x4d91f8",
+     "newLoad": "0x4db938",
+     "oldLiteral": "0x4d9bc0",
+     "newLiteral": "0x4dc300",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8c449",
+     "newLoadBytes": "dff8c449"
+    },
+    {
+     "new": "0x200764a4",
+     "oldLoad": "0x4d981c",
+     "newLoad": "0x4dbf5c",
+     "oldLiteral": "0x4d9bc0",
+     "newLiteral": "0x4dc300",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8a003",
+     "newLoadBytes": "dff8a003"
+    },
+    {
+     "new": "0x200764a4",
+     "oldLoad": "0x4d989c",
+     "newLoad": "0x4dbfdc",
+     "oldLiteral": "0x4d9bc0",
+     "newLiteral": "0x4dc300",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff82003",
+     "newLoadBytes": "dff82003"
+    },
+    {
+     "new": "0x200764a4",
+     "oldLoad": "0x4d98f4",
+     "newLoad": "0x4dc034",
+     "oldLiteral": "0x4d9bc0",
+     "newLiteral": "0x4dc300",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8c802",
+     "newLoadBytes": "dff8c802"
+    },
+    {
+     "new": "0x200764a4",
+     "oldLoad": "0x4d9956",
+     "newLoad": "0x4dc096",
+     "oldLiteral": "0x4d9bc0",
+     "newLiteral": "0x4dc300",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "9a480068",
+     "newLoadBytes": "9a480068"
+    }
+   ]
+  },
+  "0x201350a8": {
+   "new": "0x201350a8",
+   "kind": "ram",
+   "sources": [
+    "debug.c"
+   ],
+   "loadEvidence": [
+    {
+     "new": "0x201350a8",
+     "oldLoad": "0x48c362",
+     "newLoad": "0x48d692",
+     "oldLiteral": "0x48c3dc",
+     "newLiteral": "0x48d70c",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "1e492000",
+     "newLoadBytes": "1e492000"
+    }
+   ]
+  },
+  "0x20076e08": {
+   "new": "0x20076e68",
+   "kind": "ram",
+   "sources": [
+    "debug.c"
+   ],
+   "loadEvidence": [
+    {
+     "new": "0x20076e68",
+     "oldLoad": "0x45839a",
+     "newLoad": "0x45871a",
+     "oldLiteral": "0x458540",
+     "newLiteral": "0x4588c0",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "69480068",
+     "newLoadBytes": "69480068"
+    },
+    {
+     "new": "0x20076e68",
+     "oldLoad": "0x4583dc",
+     "newLoad": "0x45875c",
+     "oldLiteral": "0x458540",
+     "newLiteral": "0x4588c0",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "58480068",
+     "newLoadBytes": "58480068"
+    },
+    {
+     "new": "0x20076e68",
+     "oldLoad": "0x458420",
+     "newLoad": "0x4587a0",
+     "oldLiteral": "0x458540",
+     "newLiteral": "0x4588c0",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "47480068",
+     "newLoadBytes": "47480068"
+    },
+    {
+     "new": "0x20076e68",
+     "oldLoad": "0x597e38",
+     "newLoad": "0x59aa3c",
+     "oldLiteral": "0x59888c",
+     "newLiteral": "0x59b490",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8501a",
+     "newLoadBytes": "dff8501a"
+    },
+    {
+     "new": "0x20076e68",
+     "oldLoad": "0x5983ca",
+     "newLoad": "0x59afce",
+     "oldLiteral": "0x59888c",
+     "newLiteral": "0x59b490",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8c004",
+     "newLoadBytes": "dff8c004"
+    },
+    {
+     "new": "0x20076e68",
+     "oldLoad": "0x5983f6",
+     "newLoad": "0x59affa",
+     "oldLiteral": "0x59888c",
+     "newLiteral": "0x59b490",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff894a4",
+     "newLoadBytes": "dff894a4"
+    },
+    {
+     "new": "0x20076e68",
+     "oldLoad": "0x5984f8",
+     "newLoad": "0x59b0fc",
+     "oldLiteral": "0x59888c",
+     "newLiteral": "0x59b490",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff89003",
+     "newLoadBytes": "dff89003"
+    },
+    {
+     "new": "0x20076e68",
+     "oldLoad": "0x598724",
+     "newLoad": "0x59b328",
+     "oldLiteral": "0x59888c",
+     "newLiteral": "0x59b490",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "59480068",
+     "newLoadBytes": "59480068"
+    },
+    {
+     "new": "0x20076e68",
+     "oldLoad": "0x5987b6",
+     "newLoad": "0x59b3ba",
+     "oldLiteral": "0x59888c",
+     "newLiteral": "0x59b490",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "35480068",
+     "newLoadBytes": "35480068"
+    },
+    {
+     "new": "0x20076e68",
+     "oldLoad": "0x605128",
+     "newLoad": "0x607e18",
+     "oldLiteral": "0x60516c",
+     "newLiteral": "0x607e5c",
+     "window": [
+      24,
+      8
+     ],
+     "oldLoadBytes": "10490860",
+     "newLoadBytes": "10490860"
+    }
+   ]
+  },
+  "0x202020a8": {
+   "new": "0x202020a8",
+   "kind": "ram",
+   "sources": [
+    "debug.c"
+   ],
+   "loadEvidence": [
+    {
+     "new": "0x202020a8",
+     "oldLoad": "0x605114",
+     "newLoad": "0x607e04",
+     "oldLiteral": "0x605168",
+     "newLiteral": "0x607e58",
+     "window": [
+      24,
+      0
+     ],
+     "oldLoadBytes": "144c2500",
+     "newLoadBytes": "144c2500"
+    }
+   ]
+  },
+  "0x2000033c": {
+   "new": "0x2000033c",
+   "kind": "ram",
+   "sources": [
+    "debug.c"
+   ],
+   "loadEvidence": [
+    {
+     "new": "0x2000033c",
+     "oldLoad": "0x48c356",
+     "newLoad": "0x48d686",
+     "oldLiteral": "0x48c3d4",
+     "newLiteral": "0x48d704",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "1f48fff7",
+     "newLoadBytes": "1f48fff7"
+    },
+    {
+     "new": "0x2000033c",
+     "oldLoad": "0x48c38a",
+     "newLoad": "0x48d6ba",
+     "oldLiteral": "0x48c3d4",
+     "newLiteral": "0x48d704",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "1248fff7",
+     "newLoadBytes": "1248fff7"
+    },
+    {
+     "new": "0x2000033c",
+     "oldLoad": "0x48c398",
+     "newLoad": "0x48d6c8",
+     "oldLiteral": "0x48c3d4",
+     "newLiteral": "0x48d704",
+     "window": [
+      16,
+      12
+     ],
+     "oldLoadBytes": "0e48fff7",
+     "newLoadBytes": "0e48fff7"
+    },
+    {
+     "new": "0x2000033c",
+     "oldLoad": "0x52a210",
+     "newLoad": "0x52cab4",
+     "oldLiteral": "0x52a418",
+     "newLiteral": "0x52ccbc",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "814800e0",
+     "newLoadBytes": "814800e0"
+    },
+    {
+     "new": "0x2000033c",
+     "oldLoad": "0x52a318",
+     "newLoad": "0x52cbbc",
+     "oldLiteral": "0x52a418",
+     "newLiteral": "0x52ccbc",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "3f4861f7",
+     "newLoadBytes": "3f4860f7"
+    },
+    {
+     "new": "0x2000033c",
+     "oldLoad": "0x52a324",
+     "newLoad": "0x52cbc8",
+     "oldLiteral": "0x52a418",
+     "newLiteral": "0x52ccbc",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "3c4861f7",
+     "newLoadBytes": "3c4860f7"
+    }
+   ]
+  },
+  "0x202728a8": {
+   "new": "0x202728a8",
+   "kind": "ram",
+   "sources": [
+    "debug.c"
+   ],
+   "loadEvidence": [
+    {
+     "new": "0x202728a8",
+     "oldLoad": "0x48c354",
+     "newLoad": "0x48d684",
+     "oldLiteral": "0x48c3d0",
+     "newLiteral": "0x48d700",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "1e491f48",
+     "newLoadBytes": "1e491f48"
+    }
+   ]
+  },
+  "0x20000000": {
+   "new": "0x20000000",
+   "kind": "address-space-boundary",
+   "sources": [
+    "cfw_context.c",
+    "settings_ext.c"
+   ]
+  },
+  "0x4bf483": {
+   "new": "0x4c1367",
+   "sources": [
+    "als_sensor.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r1, r2, r3, r4, r5, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r1, r2, r3, r4, r5, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "3eb5040000200020adf8080002a900206af023fa002841d1bdf808502d052d0dbdf8080080b2000b012111fa00f005fb",
+   "newBytes": "3eb5040000200020adf8080002a900206af003ff002841d1bdf808502d052d0dbdf8080080b2000b012111fa00f005fb"
+  },
+  "0x4beded": {
+   "new": "0x4c0cd1",
+   "sources": [
+    "als_sensor.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r4}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r4}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "10b4dff8b8180a68521c0523b2fbf3f403fb14220a60dff8a828096842f82100dff83c0b0168491c016010bc704710b4",
+   "newBytes": "10b4dff8b8180a68521c0523b2fbf3f403fb14220a60dff8a828096842f82100dff83c0b0168491c016010bc704710b4"
+  },
+  "0x4bef4b": {
+   "new": "0x4c0e2f",
+   "sources": [
+    "als_sensor.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "ldr.w",
+    "r0, [pc, #0xa00]"
+   ],
+   "newInstruction": [
+    "ldr.w",
+    "r0, [pc, #0xa00]"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "dff8000a0068052807d2dff85407dff84c17096850f821000ee00020002109e052f8210005e0dff8382752f821308342",
+   "newBytes": "dff8000a0068052807d2dff85407dff84c17096850f821000ee00020002109e052f8210005e0dff8382752f821308342"
+  },
+  "0x4bf177": {
+   "new": "0x4c105b",
+   "sources": [
+    "als_sensor.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r3, r4, r5, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r3, r4, r5, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "38b50400dff8f8572000fff7b4ff28602000fff7c7ffdff8e81708602868fff7deffdff8041b086031bd38b504000d00",
+   "newBytes": "38b50400dff8f8572000fff7b4ff28602000fff7c7ffdff8e81708602868fff7deffdff8041b086031bd38b504000d00"
+  },
+  "0x4b7b29": {
+   "new": "0x4b9a0d",
+   "sources": [
+    "als_sensor.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r7, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r7, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "80b50100dff8680700688bf78bf801bd80b5dff85c0700688bf7a4f801bd80b5dff8bc0b0068fdf749fd01bd80b500f0",
+   "newBytes": "80b50100dff86807006889f719f901bd80b5dff85c07006889f732f901bd80b5dff8bc0b0068fdf749fd01bd80b500f0"
+  },
+  "0x4b80ef": {
+   "new": "0x4b9fd3",
+   "sources": [
+    "als_sensor.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r2, r3, r4, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r2, r3, r4, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "1cb50400fff7f8ff022822d185f728fb80070cd5dff87006019040f283100090dff86836584a5849012085f7c0fd85f7",
+   "newBytes": "1cb50400fff7f8ff022822d183f7b6fb80070cd5dff87006019040f283100090dff86836584a5849012083f74efe83f7"
+  },
+  "0x4b8161": {
+   "new": "0x4ba045",
+   "sources": [
+    "als_sensor.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r2, r3, r4, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r2, r3, r4, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "1cb50400fff7bfff022822d185f7effa80070cd5dff80c0601904ff4c8700090dff804363b4a3c49012085f787fd85f7",
+   "newBytes": "1cb50400fff7bfff022822d183f77dfb80070cd5dff80c0601904ff4c8700090dff804363b4a3c49012083f715fe83f7"
+  },
+  "0x47d809": {
+   "new": "0x47eaa5",
+   "sources": [
+    "als_sensor.c",
+    "settings_ext.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r1, r2, r3, r4, r5, r6, r7, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r1, r2, r3, r4, r5, r6, r7, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "feb504000d0016001f00cdf73ffa002821d0bff798ff80070cd5dff82c0401904ff4d6700090dff824348a4a8a490420",
+   "newBytes": "feb504000d0016001f00ccf783fa002821d0bef74afe80070cd5dff82c0401904ff4d6700090dff824348a4a8a490420"
+  },
+  "0x20003d08": {
+   "new": "0x20003d08",
+   "kind": "ram",
+   "sources": [
+    "als_sensor.c"
+   ],
+   "loadEvidence": [
+    {
+     "new": "0x20003d08",
+     "oldLoad": "0x4b7a94",
+     "newLoad": "0x4b9978",
+     "oldLiteral": "0x4b8510",
+     "newLiteral": "0x4ba3f4",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8783a",
+     "newLoadBytes": "dff8783a"
+    }
+   ]
+  },
+  "0x200763d4": {
+   "new": "0x2007640c",
+   "kind": "ram",
+   "sources": [
+    "als_sensor.c"
+   ],
+   "loadEvidence": [
+    {
+     "new": "0x2007640c",
+     "oldLoad": "0x4bf522",
+     "newLoad": "0x4c1406",
+     "oldLiteral": "0x4bfe10",
+     "newLiteral": "0x4c1cf4",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8ec48",
+     "newLoadBytes": "dff8ec48"
+    },
+    {
+     "new": "0x2007640c",
+     "oldLoad": "0x4bf636",
+     "newLoad": "0x4c151a",
+     "oldLiteral": "0x4bfe10",
+     "newLiteral": "0x4c1cf4",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8d817",
+     "newLoadBytes": "dff8d817"
+    },
+    {
+     "new": "0x2007640c",
+     "oldLoad": "0x4bfcbc",
+     "newLoad": "0x4c1ba0",
+     "oldLiteral": "0x4bfe10",
+     "newLiteral": "0x4c1cf4",
+     "window": [
+      24,
+      4
+     ],
+     "oldLoadBytes": "54480068",
+     "newLoadBytes": "54480068"
+    }
+   ]
+  },
+  "0x200763d8": {
+   "new": "0x20076410",
+   "kind": "ram",
+   "sources": [
+    "als_sensor.c"
+   ],
+   "loadEvidence": [
+    {
+     "new": "0x20076410",
+     "oldLoad": "0x4bf5d4",
+     "newLoad": "0x4c14b8",
+     "oldLiteral": "0x4bfe28",
+     "newLiteral": "0x4c1d0c",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff85018",
+     "newLoadBytes": "dff85018"
+    },
+    {
+     "new": "0x20076410",
+     "oldLoad": "0x4bf692",
+     "newLoad": "0x4c1576",
+     "oldLiteral": "0x4bfe28",
+     "newLiteral": "0x4c1d0c",
+     "window": [
+      16,
+      12
+     ],
+     "oldLoadBytes": "dff89417",
+     "newLoadBytes": "dff89417"
+    },
+    {
+     "new": "0x20076410",
+     "oldLoad": "0x4bf6ea",
+     "newLoad": "0x4c15ce",
+     "oldLiteral": "0x4bfe28",
+     "newLiteral": "0x4c1d0c",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff83c17",
+     "newLoadBytes": "dff83c17"
+    },
+    {
+     "new": "0x20076410",
+     "oldLoad": "0x4bf852",
+     "newLoad": "0x4c1736",
+     "oldLiteral": "0x4bfe28",
+     "newLiteral": "0x4c1d0c",
+     "window": [
+      24,
+      4
+     ],
+     "oldLoadBytes": "dff8d415",
+     "newLoadBytes": "dff8d415"
+    },
+    {
+     "new": "0x20076410",
+     "oldLoad": "0x4bf8bc",
+     "newLoad": "0x4c17a0",
+     "oldLiteral": "0x4bfe28",
+     "newLiteral": "0x4c1d0c",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff86815",
+     "newLoadBytes": "dff86815"
+    },
+    {
+     "new": "0x20076410",
+     "oldLoad": "0x4bfafc",
+     "newLoad": "0x4c19e0",
+     "oldLiteral": "0x4bfe28",
+     "newLiteral": "0x4c1d0c",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff82813",
+     "newLoadBytes": "dff82813"
+    },
+    {
+     "new": "0x20076410",
+     "oldLoad": "0x4bfb62",
+     "newLoad": "0x4c1a46",
+     "oldLiteral": "0x4bfe28",
+     "newLiteral": "0x4c1d0c",
+     "window": [
+      24,
+      0
+     ],
+     "oldLoadBytes": "b1480068",
+     "newLoadBytes": "b1480068"
+    }
+   ]
+  },
+  "0x200763f0": {
+   "new": "0x20076428",
+   "kind": "ram",
+   "sources": [
+    "als_sensor.c"
+   ],
+   "loadEvidence": [
+    {
+     "new": "0x20076428",
+     "oldLoad": "0x4beeca",
+     "newLoad": "0x4c0dae",
+     "oldLiteral": "0x4bfb5c",
+     "newLiteral": "0x4c1a40",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8900c",
+     "newLoadBytes": "dff8900c"
+    },
+    {
+     "new": "0x20076428",
+     "oldLoad": "0x4bef0c",
+     "newLoad": "0x4c0df0",
+     "oldLiteral": "0x4bfb5c",
+     "newLiteral": "0x4c1a40",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff84c0c",
+     "newLoadBytes": "dff84c0c"
+    },
+    {
+     "new": "0x20076428",
+     "oldLoad": "0x4bef28",
+     "newLoad": "0x4c0e0c",
+     "oldLiteral": "0x4bfb5c",
+     "newLiteral": "0x4c1a40",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8300c",
+     "newLoadBytes": "dff8300c"
+    },
+    {
+     "new": "0x20076428",
+     "oldLoad": "0x4bf2be",
+     "newLoad": "0x4c11a2",
+     "oldLiteral": "0x4bfb5c",
+     "newLiteral": "0x4c1a40",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff89c08",
+     "newLoadBytes": "dff89c08"
+    },
+    {
+     "new": "0x20076428",
+     "oldLoad": "0x4bf5dc",
+     "newLoad": "0x4c14c0",
+     "oldLiteral": "0x4bfb5c",
+     "newLiteral": "0x4c1a40",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff87c15",
+     "newLoadBytes": "dff87c15"
+    },
+    {
+     "new": "0x20076428",
+     "oldLoad": "0x4bf74a",
+     "newLoad": "0x4c162e",
+     "oldLiteral": "0x4bfb5c",
+     "newLiteral": "0x4c1a40",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff81014",
+     "newLoadBytes": "dff81014"
+    },
+    {
+     "new": "0x20076428",
+     "oldLoad": "0x4bf99c",
+     "newLoad": "0x4c1880",
+     "oldLiteral": "0x4bfb5c",
+     "newLiteral": "0x4c1a40",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "6f490860",
+     "newLoadBytes": "6f490860"
+    },
+    {
+     "new": "0x20076428",
+     "oldLoad": "0x4bfce6",
+     "newLoad": "0x4c1bca",
+     "oldLiteral": "0x4bfeb8",
+     "newLiteral": "0x4c1d9c",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "74480568",
+     "newLoadBytes": "74480568"
+    },
+    {
+     "new": "0x20076428",
+     "oldLoad": "0x4bfd8c",
+     "newLoad": "0x4c1c70",
+     "oldLiteral": "0x4bfeb8",
+     "newLiteral": "0x4c1d9c",
+     "window": [
+      24,
+      8
+     ],
+     "oldLoadBytes": "4a480068",
+     "newLoadBytes": "4a480068"
+    }
+   ]
+  },
+  "0x200763f4": {
+   "new": "0x2007642c",
+   "kind": "ram",
+   "sources": [
+    "als_sensor.c"
+   ],
+   "loadEvidence": [
+    {
+     "new": "0x2007642c",
+     "oldLoad": "0x4bf0d6",
+     "newLoad": "0x4c0fba",
+     "oldLiteral": "0x4bf97c",
+     "newLiteral": "0x4c1860",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8a418",
+     "newLoadBytes": "dff8a418"
+    },
+    {
+     "new": "0x2007642c",
+     "oldLoad": "0x4bf2b0",
+     "newLoad": "0x4c1194",
+     "oldLiteral": "0x4bf97c",
+     "newLiteral": "0x4c1860",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8c816",
+     "newLoadBytes": "dff8c816"
+    },
+    {
+     "new": "0x2007642c",
+     "oldLoad": "0x4bf5e4",
+     "newLoad": "0x4c14c8",
+     "oldLiteral": "0x4bf97c",
+     "newLiteral": "0x4c1860",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff89413",
+     "newLoadBytes": "dff89413"
+    },
+    {
+     "new": "0x2007642c",
+     "oldLoad": "0x4bf7a4",
+     "newLoad": "0x4c1688",
+     "oldLiteral": "0x4bf97c",
+     "newLiteral": "0x4c1860",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "75480599",
+     "newLoadBytes": "75480599"
+    },
+    {
+     "new": "0x2007642c",
+     "oldLoad": "0x4bf9ac",
+     "newLoad": "0x4c1890",
+     "oldLiteral": "0x4bfe68",
+     "newLiteral": "0x4c1d4c",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8b854",
+     "newLoadBytes": "dff8b854"
+    },
+    {
+     "new": "0x2007642c",
+     "oldLoad": "0x4bfcda",
+     "newLoad": "0x4c1bbe",
+     "oldLiteral": "0x4bfe68",
+     "newLiteral": "0x4c1d4c",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "63490868",
+     "newLoadBytes": "63490868"
+    },
+    {
+     "new": "0x2007642c",
+     "oldLoad": "0x4bfd80",
+     "newLoad": "0x4c1c64",
+     "oldLiteral": "0x4bfe68",
+     "newLiteral": "0x4c1d4c",
+     "window": [
+      24,
+      0
+     ],
+     "oldLoadBytes": "394a1068",
+     "newLoadBytes": "394a1068"
+    }
+   ]
+  },
+  "0x200763f8": {
+   "new": "0x20076430",
+   "kind": "ram",
+   "sources": [
+    "als_sensor.c"
+   ],
+   "loadEvidence": [
+    {
+     "new": "0x20076430",
+     "oldLoad": "0x4bf04e",
+     "newLoad": "0x4c0f32",
+     "oldLiteral": "0x4bf974",
+     "newLiteral": "0x4c1858",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff82419",
+     "newLoadBytes": "dff82419"
+    },
+    {
+     "new": "0x20076430",
+     "oldLoad": "0x4bf17a",
+     "newLoad": "0x4c105e",
+     "oldLiteral": "0x4bf974",
+     "newLiteral": "0x4c1858",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8f857",
+     "newLoadBytes": "dff8f857"
+    },
+    {
+     "new": "0x20076430",
+     "oldLoad": "0x4bf322",
+     "newLoad": "0x4c1206",
+     "oldLiteral": "0x4bf974",
+     "newLiteral": "0x4c1858",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff85006",
+     "newLoadBytes": "dff85006"
+    },
+    {
+     "new": "0x20076430",
+     "oldLoad": "0x4bf5ec",
+     "newLoad": "0x4c14d0",
+     "oldLiteral": "0x4bf974",
+     "newLiteral": "0x4c1858",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff88413",
+     "newLoadBytes": "dff88413"
+    }
+   ]
+  },
+  "0x20076400": {
+   "new": "0x20076438",
+   "kind": "ram",
+   "sources": [
+    "als_sensor.c"
+   ],
+   "loadEvidence": [
+    {
+     "new": "0x20076438",
+     "oldLoad": "0x4bf05e",
+     "newLoad": "0x4c0f42",
+     "oldLiteral": "0x4bfca0",
+     "newLiteral": "0x4c1b84",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8401c",
+     "newLoadBytes": "dff8401c"
+    },
+    {
+     "new": "0x20076438",
+     "oldLoad": "0x4bf198",
+     "newLoad": "0x4c107c",
+     "oldLiteral": "0x4bfca0",
+     "newLiteral": "0x4c1b84",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8041b",
+     "newLoadBytes": "dff8041b"
+    },
+    {
+     "new": "0x20076438",
+     "oldLoad": "0x4bf340",
+     "newLoad": "0x4c1224",
+     "oldLiteral": "0x4bfde8",
+     "newLiteral": "0x4c1ccc",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8a41a",
+     "newLoadBytes": "dff8a41a"
+    },
+    {
+     "new": "0x20076438",
+     "oldLoad": "0x4bf5fe",
+     "newLoad": "0x4c14e2",
+     "oldLiteral": "0x4bfca0",
+     "newLiteral": "0x4c1b84",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8a016",
+     "newLoadBytes": "dff8a016"
+    },
+    {
+     "new": "0x20076438",
+     "oldLoad": "0x4bf7c0",
+     "newLoad": "0x4c16a4",
+     "oldLiteral": "0x4bfde8",
+     "newLiteral": "0x4c1ccc",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff82406",
+     "newLoadBytes": "dff82406"
+    },
+    {
+     "new": "0x20076438",
+     "oldLoad": "0x4bf802",
+     "newLoad": "0x4c16e6",
+     "oldLiteral": "0x4bfde8",
+     "newLiteral": "0x4c1ccc",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8e405",
+     "newLoadBytes": "dff8e405"
+    },
+    {
+     "new": "0x20076438",
+     "oldLoad": "0x4bf822",
+     "newLoad": "0x4c1706",
+     "oldLiteral": "0x4bfde8",
+     "newLiteral": "0x4c1ccc",
+     "window": [
+      16,
+      12
+     ],
+     "oldLoadBytes": "dff8c405",
+     "newLoadBytes": "dff8c405"
+    },
+    {
+     "new": "0x20076438",
+     "oldLoad": "0x4bf8b0",
+     "newLoad": "0x4c1794",
+     "oldLiteral": "0x4bfca0",
+     "newLiteral": "0x4c1b84",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8ec63",
+     "newLoadBytes": "dff8ec63"
+    },
+    {
+     "new": "0x20076438",
+     "oldLoad": "0x4bf9d6",
+     "newLoad": "0x4c18ba",
+     "oldLiteral": "0x4bfca0",
+     "newLiteral": "0x4c1b84",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "b2480068",
+     "newLoadBytes": "b2480068"
+    },
+    {
+     "new": "0x20076438",
+     "oldLoad": "0x4bfa1e",
+     "newLoad": "0x4c1902",
+     "oldLiteral": "0x4bfca0",
+     "newLiteral": "0x4c1b84",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "a0480068",
+     "newLoadBytes": "a0480068"
+    },
+    {
+     "new": "0x20076438",
+     "oldLoad": "0x4bfaaa",
+     "newLoad": "0x4c198e",
+     "oldLiteral": "0x4bfca0",
+     "newLiteral": "0x4c1b84",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "7d4d2868",
+     "newLoadBytes": "7d4d2868"
+    },
+    {
+     "new": "0x20076438",
+     "oldLoad": "0x4bfd16",
+     "newLoad": "0x4c1bfa",
+     "oldLiteral": "0x4bfde8",
+     "newLiteral": "0x4c1ccc",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "34480068",
+     "newLoadBytes": "34480068"
+    },
+    {
+     "new": "0x20076438",
+     "oldLoad": "0x4bfd4c",
+     "newLoad": "0x4c1c30",
+     "oldLiteral": "0x4bfde8",
+     "newLiteral": "0x4c1ccc",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "26480068",
+     "newLoadBytes": "26480068"
+    }
+   ]
+  },
+  "0x20000068": {
+   "new": "0x20000068",
+   "kind": "ram",
+   "sources": [
+    "als_sensor.c"
+   ],
+   "loadEvidence": [
+    {
+     "new": "0x20000068",
+     "oldLoad": "0x4bf16a",
+     "newLoad": "0x4c104e",
+     "oldLiteral": "0x4bfbc4",
+     "newLiteral": "0x4c1aa8",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8581a",
+     "newLoadBytes": "dff8581a"
+    },
+    {
+     "new": "0x20000068",
+     "oldLoad": "0x4bf252",
+     "newLoad": "0x4c1136",
+     "oldLiteral": "0x4bfbc4",
+     "newLiteral": "0x4c1aa8",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff87029",
+     "newLoadBytes": "dff87029"
+    },
+    {
+     "new": "0x20000068",
+     "oldLoad": "0x4bf2c4",
+     "newLoad": "0x4c11a8",
+     "oldLiteral": "0x4bfbc4",
+     "newLiteral": "0x4c1aa8",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8fc18",
+     "newLoadBytes": "dff8fc18"
+    },
+    {
+     "new": "0x20000068",
+     "oldLoad": "0x4bf336",
+     "newLoad": "0x4c121a",
+     "oldLiteral": "0x4bfbc4",
+     "newLiteral": "0x4c1aa8",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff88c18",
+     "newLoadBytes": "dff88c18"
+    },
+    {
+     "new": "0x20000068",
+     "oldLoad": "0x4bf7b8",
+     "newLoad": "0x4c169c",
+     "oldLiteral": "0x4bfbc4",
+     "newLiteral": "0x4c1aa8",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff80804",
+     "newLoadBytes": "dff80804"
+    },
+    {
+     "new": "0x20000068",
+     "oldLoad": "0x4bf7fa",
+     "newLoad": "0x4c16de",
+     "oldLiteral": "0x4bfbc4",
+     "newLiteral": "0x4c1aa8",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8c803",
+     "newLoadBytes": "dff8c803"
+    },
+    {
+     "new": "0x20000068",
+     "oldLoad": "0x4bf9ce",
+     "newLoad": "0x4c18b2",
+     "oldLiteral": "0x4bfbc4",
+     "newLiteral": "0x4c1aa8",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "7d480068",
+     "newLoadBytes": "7d480068"
+    },
+    {
+     "new": "0x20000068",
+     "oldLoad": "0x4bfa16",
+     "newLoad": "0x4c18fa",
+     "oldLiteral": "0x4bfbc4",
+     "newLiteral": "0x4c1aa8",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "6b480068",
+     "newLoadBytes": "6b480068"
+    },
+    {
+     "new": "0x20000068",
+     "oldLoad": "0x4bfd1c",
+     "newLoad": "0x4c1c00",
+     "oldLiteral": "0x4bfec0",
+     "newLiteral": "0x4c1da4",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "68480068",
+     "newLoadBytes": "68480068"
+    },
+    {
+     "new": "0x20000068",
+     "oldLoad": "0x4bfd52",
+     "newLoad": "0x4c1c36",
+     "oldLiteral": "0x4bfec0",
+     "newLiteral": "0x4c1da4",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "5b480068",
+     "newLoadBytes": "5b480068"
+    },
+    {
+     "new": "0x20000068",
+     "oldLoad": "0x4bfdc0",
+     "newLoad": "0x4c1ca4",
+     "oldLiteral": "0x4bfec0",
+     "newLiteral": "0x4c1da4",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "3f49434a",
+     "newLoadBytes": "3f49434a"
+    }
+   ]
+  },
+  "0x20074c80": {
+   "new": "0x20074c90",
+   "kind": "ram",
+   "sources": [
+    "als_sensor.c"
+   ],
+   "loadEvidence": [
+    {
+     "new": "0x20074c90",
+     "oldLoad": "0x46f27a",
+     "newLoad": "0x46f85e",
+     "oldLiteral": "0x46fd3c",
+     "newLiteral": "0x470320",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8c04a",
+     "newLoadBytes": "dff8c04a"
+    },
+    {
+     "new": "0x20074c90",
+     "oldLoad": "0x46f290",
+     "newLoad": "0x46f874",
+     "oldLiteral": "0x46fd3c",
+     "newLiteral": "0x470320",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8a80a",
+     "newLoadBytes": "dff8a80a"
+    },
+    {
+     "new": "0x20074c90",
+     "oldLoad": "0x46f29e",
+     "newLoad": "0x46f882",
+     "oldLiteral": "0x46fd3c",
+     "newLiteral": "0x470320",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff89c4a",
+     "newLoadBytes": "dff89c4a"
+    },
+    {
+     "new": "0x20074c90",
+     "oldLoad": "0x46f750",
+     "newLoad": "0x46fd34",
+     "oldLiteral": "0x46fd3c",
+     "newLiteral": "0x470320",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8e855",
+     "newLoadBytes": "dff8e855"
+    },
+    {
+     "new": "0x20074c90",
+     "oldLoad": "0x46f79e",
+     "newLoad": "0x46fd82",
+     "oldLiteral": "0x46fd3c",
+     "newLiteral": "0x470320",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff89c45",
+     "newLoadBytes": "dff89c45"
+    },
+    {
+     "new": "0x20074c90",
+     "oldLoad": "0x46f850",
+     "newLoad": "0x46fe34",
+     "oldLiteral": "0x46fd3c",
+     "newLiteral": "0x470320",
+     "window": [
+      24,
+      4
+     ],
+     "oldLoadBytes": "dff8e804",
+     "newLoadBytes": "dff8e804"
+    },
+    {
+     "new": "0x20074c90",
+     "oldLoad": "0x46f954",
+     "newLoad": "0x46ff38",
+     "oldLiteral": "0x46fd3c",
+     "newLiteral": "0x470320",
+     "window": [
+      24,
+      8
+     ],
+     "oldLoadBytes": "dff8e463",
+     "newLoadBytes": "dff8e463"
+    },
+    {
+     "new": "0x20074c90",
+     "oldLoad": "0x46fa70",
+     "newLoad": "0x470054",
+     "oldLiteral": "0x46fd3c",
+     "newLiteral": "0x470320",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "b248211d",
+     "newLoadBytes": "b248211d"
+    },
+    {
+     "new": "0x20074c90",
+     "oldLoad": "0x46fb54",
+     "newLoad": "0x470138",
+     "oldLiteral": "0x46fd3c",
+     "newLiteral": "0x470320",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "7949098b",
+     "newLoadBytes": "7949098b"
+    },
+    {
+     "new": "0x20074c90",
+     "oldLoad": "0x46fc6a",
+     "newLoad": "0x47024e",
+     "oldLiteral": "0x46fd3c",
+     "newLiteral": "0x470320",
+     "window": [
+      24,
+      4
+     ],
+     "oldLoadBytes": "344c2500",
+     "newLoadBytes": "344c2500"
+    },
+    {
+     "new": "0x20074c90",
+     "oldLoad": "0x46fcd8",
+     "newLoad": "0x4702bc",
+     "oldLiteral": "0x46fd3c",
+     "newLiteral": "0x470320",
+     "window": [
+      24,
+      4
+     ],
+     "oldLoadBytes": "184d0022",
+     "newLoadBytes": "184d0022"
+    },
+    {
+     "new": "0x20074c90",
+     "oldLoad": "0x46fd54",
+     "newLoad": "0x470338",
+     "oldLiteral": "0x470554",
+     "newLiteral": "0x470b38",
+     "window": [
+      24,
+      0
+     ],
+     "oldLoadBytes": "dff8fc07",
+     "newLoadBytes": "dff8fc07"
+    },
+    {
+     "new": "0x20074c90",
+     "oldLoad": "0x46fdce",
+     "newLoad": "0x4703b2",
+     "oldLiteral": "0x470554",
+     "newLiteral": "0x470b38",
+     "window": [
+      24,
+      0
+     ],
+     "oldLoadBytes": "dff88447",
+     "newLoadBytes": "dff88447"
+    },
+    {
+     "new": "0x20074c90",
+     "oldLoad": "0x46fe40",
+     "newLoad": "0x470424",
+     "oldLiteral": "0x470554",
+     "newLiteral": "0x470b38",
+     "window": [
+      8,
+      0
+     ],
+     "oldLoadBytes": "dff81007",
+     "newLoadBytes": "dff81007"
+    },
+    {
+     "new": "0x20074c90",
+     "oldLoad": "0x46fe7e",
+     "newLoad": "0x470462",
+     "oldLiteral": "0x470554",
+     "newLiteral": "0x470b38",
+     "window": [
+      24,
+      4
+     ],
+     "oldLoadBytes": "dff8d406",
+     "newLoadBytes": "dff8d406"
+    },
+    {
+     "new": "0x20074c90",
+     "oldLoad": "0x46ffb4",
+     "newLoad": "0x470598",
+     "oldLiteral": "0x470554",
+     "newLiteral": "0x470b38",
+     "window": [
+      16,
+      4
+     ],
+     "oldLoadBytes": "dff89c15",
+     "newLoadBytes": "dff89c15"
+    },
+    {
+     "new": "0x20074c90",
+     "oldLoad": "0x46ffc8",
+     "newLoad": "0x4705ac",
+     "oldLiteral": "0x470554",
+     "newLiteral": "0x470b38",
+     "window": [
+      16,
+      12
+     ],
+     "oldLoadBytes": "dff88805",
+     "newLoadBytes": "dff88805"
+    },
+    {
+     "new": "0x20074c90",
+     "oldLoad": "0x470006",
+     "newLoad": "0x4705ea",
+     "oldLiteral": "0x470554",
+     "newLiteral": "0x470b38",
+     "window": [
+      16,
+      12
+     ],
+     "oldLoadBytes": "dff84c05",
+     "newLoadBytes": "dff84c05"
+    },
+    {
+     "new": "0x20074c90",
+     "oldLoad": "0x470034",
+     "newLoad": "0x470618",
+     "oldLiteral": "0x470554",
+     "newLiteral": "0x470b38",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff81c65",
+     "newLoadBytes": "dff81c65"
+    },
+    {
+     "new": "0x20074c90",
+     "oldLoad": "0x470124",
+     "newLoad": "0x470708",
+     "oldLiteral": "0x470554",
+     "newLiteral": "0x470b38",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff82c04",
+     "newLoadBytes": "dff82c04"
+    },
+    {
+     "new": "0x20074c90",
+     "oldLoad": "0x470134",
+     "newLoad": "0x470718",
+     "oldLiteral": "0x470554",
+     "newLiteral": "0x470b38",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff81c04",
+     "newLoadBytes": "dff81c04"
+    },
+    {
+     "new": "0x20074c90",
+     "oldLoad": "0x4703e2",
+     "newLoad": "0x4709c6",
+     "oldLiteral": "0x470554",
+     "newLiteral": "0x470b38",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "5c4c2078",
+     "newLoadBytes": "5c4c2078"
+    }
+   ]
+  },
+  "0x438000": {
+   "new": "0x438000",
+   "kind": "address-space-boundary",
+   "sources": [
+    "als_sensor.c"
+   ]
+  },
+  "0x4e64fd": {
+   "new": "0x4e8d91",
+   "sources": [
+    "texture_cache.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push.w",
+    "{r1, r2, r3, r4, r5, r6, r7, r8, sb, sl, fp, lr}"
+   ],
+   "newInstruction": [
+    "push.w",
+    "{r1, r2, r3, r4, r5, r6, r7, r8, sb, sl, fp, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "2de9fe4f070091469846002f10d1624802906248019062480090674b5a226249032069f723fb00205ff0ff310860fae7",
+   "newBytes": "2de9fe4f070091469846002f10d1624802906248019062480090674b5a226249032067f76bf800205ff0ff310860fae7"
+  },
+  "0x4e644f": {
+   "new": "0x4e8ce3",
+   "sources": [
+    "texture_cache.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r1, r2, r3, r4, r5, r6, r7, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r1, r2, r3, r4, r5, r6, r7, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "feb505000e002c68002c10d18e4802908e4801908e4800908e4b36228e49032069f77bfb00205ff0ff310860fae78a4f",
+   "newBytes": "feb505000e002c68002c10d18e4802908e4801908e4800908e4b36228e49032067f7c3f800205ff0ff310860fae78a4f"
+  },
+  "0x4e64a1": {
+   "new": "0x4e8d35",
+   "sources": [
+    "texture_cache.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r0, r1, r2, r3, r4, r5, r6, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r0, r1, r2, r3, r4, r5, r6, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "7fb50500002d10d17a4802907f4801907a4800907e4b43227a49032069f754fb00205ff0ff310860fae7e869002814d0",
+   "newBytes": "7fb50500002d10d17a4802907f4801907a4800907e4b43227a49032067f79cf800205ff0ff310860fae7e869002814d0"
+  },
+  "0x200769ac": {
+   "new": "0x20076a04",
+   "kind": "ram",
+   "sources": [
+    "texture_cache.c"
+   ],
+   "loadEvidence": [
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x47132a",
+     "newLoad": "0x47190e",
+     "oldLiteral": "0x4714f8",
+     "newLiteral": "0x471adc",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "73490860",
+     "newLoadBytes": "73490860"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x47136c",
+     "newLoad": "0x471950",
+     "oldLiteral": "0x4714f8",
+     "newLiteral": "0x471adc",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "62490860",
+     "newLoadBytes": "62490860"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x4713dc",
+     "newLoad": "0x4719c0",
+     "oldLiteral": "0x4714f8",
+     "newLiteral": "0x471adc",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "46480068",
+     "newLoadBytes": "46480068"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x471410",
+     "newLoad": "0x4719f4",
+     "oldLiteral": "0x4714f8",
+     "newLiteral": "0x471adc",
+     "window": [
+      16,
+      12
+     ],
+     "oldLoadBytes": "39480368",
+     "newLoadBytes": "39480368"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x4a0afc",
+     "newLoad": "0x4a1e30",
+     "oldLiteral": "0x4a0e8c",
+     "newLiteral": "0x4a21c0",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff88c03",
+     "newLoadBytes": "dff88c03"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x4a0b4e",
+     "newLoad": "0x4a1e82",
+     "oldLiteral": "0x4a0e8c",
+     "newLiteral": "0x4a21c0",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff83c03",
+     "newLoadBytes": "dff83c03"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x4a3e18",
+     "newLoad": "0x4a514c",
+     "oldLiteral": "0x4a3eac",
+     "newLiteral": "0x4a51e0",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "24480168",
+     "newLoadBytes": "24480168"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x4efd96",
+     "newLoad": "0x4f262a",
+     "oldLiteral": "0x4f012c",
+     "newLiteral": "0x4f29c0",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff89403",
+     "newLoadBytes": "dff89403"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x4f1442",
+     "newLoad": "0x4f3cd6",
+     "oldLiteral": "0x4f1d8c",
+     "newLiteral": "0x4f4620",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff84809",
+     "newLoadBytes": "dff84809"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x4fd476",
+     "newLoad": "0x4ffd1a",
+     "oldLiteral": "0x4fe030",
+     "newLiteral": "0x5008d4",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8b86b",
+     "newLoadBytes": "dff8b86b"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x4feefc",
+     "newLoad": "0x5017a0",
+     "oldLiteral": "0x4ff598",
+     "newLiteral": "0x501e3c",
+     "window": [
+      24,
+      0
+     ],
+     "oldLoadBytes": "dff89866",
+     "newLoadBytes": "dff89866"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x4ff8ba",
+     "newLoad": "0x50215e",
+     "oldLiteral": "0x500430",
+     "newLiteral": "0x502cd4",
+     "window": [
+      24,
+      0
+     ],
+     "oldLoadBytes": "dff8746b",
+     "newLoadBytes": "dff8746b"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x4ffb04",
+     "newLoad": "0x5023a8",
+     "oldLiteral": "0x500430",
+     "newLiteral": "0x502cd4",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff82899",
+     "newLoadBytes": "dff82899"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x4ffcc6",
+     "newLoad": "0x50256a",
+     "oldLiteral": "0x500430",
+     "newLiteral": "0x502cd4",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff86887",
+     "newLoadBytes": "dff86887"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x4ffe8a",
+     "newLoad": "0x50272e",
+     "oldLiteral": "0x500430",
+     "newLiteral": "0x502cd4",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8a475",
+     "newLoadBytes": "dff8a475"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x50113a",
+     "newLoad": "0x5039de",
+     "oldLiteral": "0x501dd4",
+     "newLiteral": "0x504678",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8980c",
+     "newLoadBytes": "dff8980c"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x501410",
+     "newLoad": "0x503cb4",
+     "oldLiteral": "0x501dd4",
+     "newLiteral": "0x504678",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8c079",
+     "newLoadBytes": "dff8c079"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x502550",
+     "newLoad": "0x504df4",
+     "oldLiteral": "0x502fcc",
+     "newLiteral": "0x505870",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8780a",
+     "newLoadBytes": "dff8780a"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x502864",
+     "newLoad": "0x505108",
+     "oldLiteral": "0x502fcc",
+     "newLiteral": "0x505870",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff86407",
+     "newLoadBytes": "dff86407"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x50299a",
+     "newLoad": "0x50523e",
+     "oldLiteral": "0x502fcc",
+     "newLiteral": "0x505870",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff83006",
+     "newLoadBytes": "dff83006"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x502ad8",
+     "newLoad": "0x50537c",
+     "oldLiteral": "0x502fcc",
+     "newLiteral": "0x505870",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8f004",
+     "newLoadBytes": "dff8f004"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x502bd0",
+     "newLoad": "0x505474",
+     "oldLiteral": "0x502fcc",
+     "newLiteral": "0x505870",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8f803",
+     "newLoadBytes": "dff8f803"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x50361e",
+     "newLoad": "0x505ec2",
+     "oldLiteral": "0x50423c",
+     "newLiteral": "0x506ae0",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff81c7c",
+     "newLoadBytes": "dff81c7c"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x503a52",
+     "newLoad": "0x5062f6",
+     "oldLiteral": "0x50423c",
+     "newLiteral": "0x506ae0",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8e8a7",
+     "newLoadBytes": "dff8e8a7"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x503edc",
+     "newLoad": "0x506780",
+     "oldLiteral": "0x50423c",
+     "newLiteral": "0x506ae0",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff85c83",
+     "newLoadBytes": "dff85c83"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x504100",
+     "newLoad": "0x5069a4",
+     "oldLiteral": "0x50423c",
+     "newLiteral": "0x506ae0",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "4e480168",
+     "newLoadBytes": "4e480168"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x505272",
+     "newLoad": "0x507b22",
+     "oldLiteral": "0x505c10",
+     "newLiteral": "0x5084c0",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff89ca9",
+     "newLoadBytes": "dff89ca9"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x505e28",
+     "newLoad": "0x5086d8",
+     "oldLiteral": "0x5066c0",
+     "newLiteral": "0x508f70",
+     "window": [
+      24,
+      4
+     ],
+     "oldLoadBytes": "dff89408",
+     "newLoadBytes": "dff89408"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x506316",
+     "newLoad": "0x508bc6",
+     "oldLiteral": "0x5066c0",
+     "newLiteral": "0x508f70",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8a803",
+     "newLoadBytes": "dff8a803"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x508150",
+     "newLoad": "0x50aa00",
+     "oldLiteral": "0x50836c",
+     "newLiteral": "0x50ac1c",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff81882",
+     "newLoadBytes": "dff81882"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x50bf30",
+     "newLoad": "0x50e7e0",
+     "oldLiteral": "0x50c7b8",
+     "newLiteral": "0x50f068",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff884b8",
+     "newLoadBytes": "dff884b8"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x50c07e",
+     "newLoad": "0x50e92e",
+     "oldLiteral": "0x50c7b8",
+     "newLiteral": "0x50f068",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff83807",
+     "newLoadBytes": "dff83807"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x50c148",
+     "newLoad": "0x50e9f8",
+     "oldLiteral": "0x50c7b8",
+     "newLiteral": "0x50f068",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff86c06",
+     "newLoadBytes": "dff86c06"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x50c18c",
+     "newLoad": "0x50ea3c",
+     "oldLiteral": "0x50c7b8",
+     "newLiteral": "0x50f068",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff82806",
+     "newLoadBytes": "dff82806"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x50c2e2",
+     "newLoad": "0x50eb92",
+     "oldLiteral": "0x50c7b8",
+     "newLiteral": "0x50f068",
+     "window": [
+      16,
+      12
+     ],
+     "oldLoadBytes": "dff8d404",
+     "newLoadBytes": "dff8d404"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x50c78c",
+     "newLoad": "0x50f03c",
+     "oldLiteral": "0x50c7b8",
+     "newLiteral": "0x50f068",
+     "window": [
+      16,
+      12
+     ],
+     "oldLoadBytes": "0a480168",
+     "newLoadBytes": "0a480168"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x50c9ca",
+     "newLoad": "0x50f27a",
+     "oldLiteral": "0x50d5dc",
+     "newLiteral": "0x50fe8c",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff810ac",
+     "newLoadBytes": "dff810ac"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x50cb4c",
+     "newLoad": "0x50f3fc",
+     "oldLiteral": "0x50d5dc",
+     "newLiteral": "0x50fe8c",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff88c9a",
+     "newLoadBytes": "dff88c9a"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x50ed24",
+     "newLoad": "0x5115d4",
+     "oldLiteral": "0x50f924",
+     "newLiteral": "0x5121d4",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8fc0b",
+     "newLoadBytes": "dff8fc0b"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x50ed9e",
+     "newLoad": "0x51164e",
+     "oldLiteral": "0x50f924",
+     "newLiteral": "0x5121d4",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8840b",
+     "newLoadBytes": "dff8840b"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x50ee7a",
+     "newLoad": "0x51172a",
+     "oldLiteral": "0x50f924",
+     "newLiteral": "0x5121d4",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8a80a",
+     "newLoadBytes": "dff8a80a"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x50f0da",
+     "newLoad": "0x51198a",
+     "oldLiteral": "0x50f924",
+     "newLiteral": "0x5121d4",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff848b8",
+     "newLoadBytes": "dff848b8"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x50fbfe",
+     "newLoad": "0x5124ae",
+     "oldLiteral": "0x510a84",
+     "newLiteral": "0x513334",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8849e",
+     "newLoadBytes": "dff8849e"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x51f6dc",
+     "newLoad": "0x521f80",
+     "oldLiteral": "0x51f934",
+     "newLiteral": "0x5221d8",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "954f0022",
+     "newLoadBytes": "954f0022"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x51faf8",
+     "newLoad": "0x52239c",
+     "oldLiteral": "0x5207c0",
+     "newLiteral": "0x523064",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8c49c",
+     "newLoadBytes": "dff8c49c"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x520732",
+     "newLoad": "0x522fd6",
+     "oldLiteral": "0x5207c0",
+     "newLiteral": "0x523064",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "234f0022",
+     "newLoadBytes": "234f0022"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x520b92",
+     "newLoad": "0x523436",
+     "oldLiteral": "0x521818",
+     "newLiteral": "0x5240bc",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8847c",
+     "newLoadBytes": "dff8847c"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x5224ee",
+     "newLoad": "0x524d92",
+     "oldLiteral": "0x522e20",
+     "newLiteral": "0x5256c4",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff83059",
+     "newLoadBytes": "dff83059"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x523730",
+     "newLoad": "0x525fd4",
+     "oldLiteral": "0x524160",
+     "newLiteral": "0x526a04",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff82c7a",
+     "newLoadBytes": "dff82c7a"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x5238ec",
+     "newLoad": "0x526190",
+     "oldLiteral": "0x524160",
+     "newLiteral": "0x526a04",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff87088",
+     "newLoadBytes": "dff87088"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x523aac",
+     "newLoad": "0x526350",
+     "oldLiteral": "0x524160",
+     "newLiteral": "0x526a04",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8b066",
+     "newLoadBytes": "dff8b066"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x55e214",
+     "newLoad": "0x560ad0",
+     "oldLiteral": "0x55e810",
+     "newLiteral": "0x561108",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8f805",
+     "newLoadBytes": "dff83406"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x55e27e",
+     "newLoad": "0x560b3a",
+     "oldLiteral": "0x55e810",
+     "newLiteral": "0x561108",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff89005",
+     "newLoadBytes": "dff8cc05"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x55e31e",
+     "newLoad": "0x560bda",
+     "oldLiteral": "0x55e810",
+     "newLiteral": "0x561108",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8f004",
+     "newLoadBytes": "dff82c05"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x55e63e",
+     "newLoad": "0x560f32",
+     "oldLiteral": "0x55e810",
+     "newLiteral": "0x561108",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "74480168",
+     "newLoadBytes": "75480168"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x55eada",
+     "newLoad": "0x5613e2",
+     "oldLiteral": "0x55f700",
+     "newLiteral": "0x562008",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8245c",
+     "newLoadBytes": "dff8245c"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x55f6c8",
+     "newLoad": "0x561fd0",
+     "oldLiteral": "0x55f700",
+     "newLiteral": "0x562008",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "0d480168",
+     "newLoadBytes": "0d480168"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x55f850",
+     "newLoad": "0x562158",
+     "oldLiteral": "0x5604ac",
+     "newLiteral": "0x562db4",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8580c",
+     "newLoadBytes": "dff8580c"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x55f9c4",
+     "newLoad": "0x5622cc",
+     "oldLiteral": "0x5604ac",
+     "newLiteral": "0x562db4",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8e40a",
+     "newLoadBytes": "dff8e40a"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x560690",
+     "newLoad": "0x562f98",
+     "oldLiteral": "0x560fa8",
+     "newLiteral": "0x5638b0",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff81409",
+     "newLoadBytes": "dff81409"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x5608fc",
+     "newLoad": "0x563204",
+     "oldLiteral": "0x560fa8",
+     "newLiteral": "0x5638b0",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8a8b6",
+     "newLoadBytes": "dff8a8b6"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x560c4c",
+     "newLoad": "0x563554",
+     "oldLiteral": "0x560fa8",
+     "newLiteral": "0x5638b0",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "d64e0022",
+     "newLoadBytes": "d64e0022"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x56337c",
+     "newLoad": "0x565ca8",
+     "oldLiteral": "0x563d00",
+     "newLiteral": "0x566764",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff88009",
+     "newLoadBytes": "dff8b80a"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x56433c",
+     "newLoad": "0x566d54",
+     "oldLiteral": "0x565020",
+     "newLiteral": "0x567a5c",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8e00c",
+     "newLoadBytes": "dff8040d"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x564440",
+     "newLoad": "0x566e58",
+     "oldLiteral": "0x565020",
+     "newLiteral": "0x567a5c",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8dc0b",
+     "newLoadBytes": "dff8000c"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x56e288",
+     "newLoad": "0x570d44",
+     "oldLiteral": "0x56ee80",
+     "newLiteral": "0x57193c",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8f40b",
+     "newLoadBytes": "dff8f40b"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x56e702",
+     "newLoad": "0x5711be",
+     "oldLiteral": "0x56ee80",
+     "newLiteral": "0x57193c",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff87c07",
+     "newLoadBytes": "dff87c07"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x56e8de",
+     "newLoad": "0x57139a",
+     "oldLiteral": "0x56ee80",
+     "newLiteral": "0x57193c",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8a005",
+     "newLoadBytes": "dff8a005"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x56e946",
+     "newLoad": "0x571402",
+     "oldLiteral": "0x56ee80",
+     "newLiteral": "0x57193c",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff83805",
+     "newLoadBytes": "dff83805"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x56f288",
+     "newLoad": "0x571d44",
+     "oldLiteral": "0x56fe58",
+     "newLiteral": "0x572914",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8cc0b",
+     "newLoadBytes": "dff8cc0b"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x5a3470",
+     "newLoad": "0x5a6098",
+     "oldLiteral": "0x5a3814",
+     "newLiteral": "0x5a643c",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8a003",
+     "newLoadBytes": "dff8a003"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x5a3afe",
+     "newLoad": "0x5a6726",
+     "oldLiteral": "0x5a3d48",
+     "newLiteral": "0x5a6970",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "92480168",
+     "newLoadBytes": "92480168"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x5c676c",
+     "newLoad": "0x5c93a8",
+     "oldLiteral": "0x5c7208",
+     "newLiteral": "0x5c9e44",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8980a",
+     "newLoadBytes": "dff8980a"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x5c95b2",
+     "newLoad": "0x5cc1ee",
+     "oldLiteral": "0x5c9c18",
+     "newLiteral": "0x5cc854",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff86466",
+     "newLoadBytes": "dff86466"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x5c9898",
+     "newLoad": "0x5cc4d4",
+     "oldLiteral": "0x5c9c18",
+     "newLiteral": "0x5cc854",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff87c03",
+     "newLoadBytes": "dff87c03"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x5ca692",
+     "newLoad": "0x5cd2ce",
+     "oldLiteral": "0x5caf28",
+     "newLiteral": "0x5cdb64",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff89408",
+     "newLoadBytes": "dff89408"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x5cd152",
+     "newLoad": "0x5cfd9e",
+     "oldLiteral": "0x5cd3ac",
+     "newLiteral": "0x5d0090",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "96480168",
+     "newLoadBytes": "bc480168"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x5cd77a",
+     "newLoad": "0x5d046a",
+     "oldLiteral": "0x5ce010",
+     "newLiteral": "0x5d0d00",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff89408",
+     "newLoadBytes": "dff89408"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x5cd876",
+     "newLoad": "0x5d0566",
+     "oldLiteral": "0x5ce010",
+     "newLiteral": "0x5d0d00",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff89807",
+     "newLoadBytes": "dff89807"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x5cd8b6",
+     "newLoad": "0x5d05a6",
+     "oldLiteral": "0x5ce010",
+     "newLiteral": "0x5d0d00",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff85807",
+     "newLoadBytes": "dff85807"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x5cd91e",
+     "newLoad": "0x5d060e",
+     "oldLiteral": "0x5ce010",
+     "newLiteral": "0x5d0d00",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8f006",
+     "newLoadBytes": "dff8f006"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x5ce540",
+     "newLoad": "0x5d1230",
+     "oldLiteral": "0x5cecd4",
+     "newLiteral": "0x5d19c4",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff89007",
+     "newLoadBytes": "dff89007"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x5ce958",
+     "newLoad": "0x5d1648",
+     "oldLiteral": "0x5cecd4",
+     "newLiteral": "0x5d19c4",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "de480168",
+     "newLoadBytes": "de480168"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x5d06ec",
+     "newLoad": "0x5d33dc",
+     "oldLiteral": "0x5d12ec",
+     "newLiteral": "0x5d3fdc",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8fc0b",
+     "newLoadBytes": "dff8fc0b"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x5d0a20",
+     "newLoad": "0x5d3710",
+     "oldLiteral": "0x5d12ec",
+     "newLiteral": "0x5d3fdc",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8c808",
+     "newLoadBytes": "dff8c808"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x5d6904",
+     "newLoad": "0x5d95f4",
+     "oldLiteral": "0x5d6eec",
+     "newLiteral": "0x5d9bdc",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8e465",
+     "newLoadBytes": "dff8e465"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x5e6e0e",
+     "newLoad": "0x5e9afe",
+     "oldLiteral": "0x5e6e98",
+     "newLiteral": "0x5e9b88",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff88880",
+     "newLoadBytes": "dff88880"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x60196c",
+     "newLoad": "0x60465c",
+     "oldLiteral": "0x602464",
+     "newLiteral": "0x605154",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8f40a",
+     "newLoadBytes": "dff8f40a"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x601980",
+     "newLoad": "0x604670",
+     "oldLiteral": "0x602464",
+     "newLiteral": "0x605154",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8e00a",
+     "newLoadBytes": "dff8e00a"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x601b88",
+     "newLoad": "0x604878",
+     "oldLiteral": "0x602464",
+     "newLiteral": "0x605154",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8d808",
+     "newLoadBytes": "dff8d808"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x601c5e",
+     "newLoad": "0x60494e",
+     "oldLiteral": "0x602464",
+     "newLiteral": "0x605154",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff80408",
+     "newLoadBytes": "dff80408"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x601d3e",
+     "newLoad": "0x604a2e",
+     "oldLiteral": "0x602930",
+     "newLiteral": "0x605620",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8f05b",
+     "newLoadBytes": "dff8f05b"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x602858",
+     "newLoad": "0x605548",
+     "oldLiteral": "0x602930",
+     "newLiteral": "0x605620",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8d490",
+     "newLoadBytes": "dff8d490"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x6044d8",
+     "newLoad": "0x6071c8",
+     "oldLiteral": "0x605068",
+     "newLiteral": "0x607d58",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff88c0b",
+     "newLoadBytes": "dff88c0b"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x6074ae",
+     "newLoad": "0x60a19e",
+     "oldLiteral": "0x607e78",
+     "newLiteral": "0x60ab68",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff8c859",
+     "newLoadBytes": "dff8c859"
+    },
+    {
+     "new": "0x20076a04",
+     "oldLoad": "0x607652",
+     "newLoad": "0x60a342",
+     "oldLiteral": "0x607e78",
+     "newLiteral": "0x60ab68",
+     "window": [
+      24,
+      12
+     ],
+     "oldLoadBytes": "dff82458",
+     "newLoadBytes": "dff82458"
+    }
+   ]
+  },
+  "0x47d90f": {
+   "new": "0x47ebab",
+   "sources": [
+    "settings_ext.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     16,
+     0
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r1, r2, r3, r4, r5, r6, r7, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r1, r2, r3, r4, r5, r6, r7, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "feb504000d0016001f00cdf7bcf9002821d0bff715ff80070cd5dff8400301904ff4e2700090dff83833484a49490420",
+   "newBytes": "feb504000d0016001f00ccf700fa002821d0bef7c7fd80070cd5dff8400301904ff4e2700090dff83833484a49490420"
+  },
+  "0x49da09": {
+   "new": "0x49ed3d",
+   "sources": [
+    "settings_ext.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     10,
+     0
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r7, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r7, lr}"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "80b50023fff7b8fec0b202bd1cb50c006946fff73cfa002801d1002007e00098002801d0012000e000202070012016bd",
+   "newBytes": "80b50023fff7b8fec0b202bd1cb50c006946fff73cfa002801d1002007e00098002801d0012000e000202070012016bd"
+  },
+  "0x4ac333": {
+   "new": "0x4ad667",
+   "sources": [
+    "settings_ext.c"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "ldr.w",
+    "r0, [pc, #0x444]"
+   ],
+   "newInstruction": [
+    "ldr.w",
+    "r0, [pc, #0x444]"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "dff844040068704780b5fff79eff002801d1012007e0dff82c040068022801d1012000e0002002bd1fb504002000c0b2",
+   "newBytes": "dff844040068704780b5fff79eff002801d1012007e0dff82c040068022801d1012000e0002002bd1fb504002000c0b2"
+  },
+  "0x48c350": {
+   "new": "0x48d680",
+   "sources": [
+    "PRIMARY_TLSF_SIZE_SITE"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "movs.w",
+    "r2, #0x2d000"
+   ],
+   "newInstruction": [
+    "movs.w",
+    "r2, #0x2d000"
+   ],
+   "kind": "hook",
+   "oldBytes": "5ff434321e491f48fff724ff1e4c5ff44d221e492000fff71dff1d4d4ff480621c492800fff716fffff7dafe00202076",
+   "newBytes": "5ff434321e491f48fff724ff1e4c5ff44d221e492000fff71dff1d4d4ff480621c492800fff716fffff7dafe00202076"
+  },
+  "0x4a4402": {
+   "new": "0x4a5736",
+   "sources": [
+    "LOADBMP_BL_SITE"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "bl",
+    "#0x4ee3ba"
+   ],
+   "newInstruction": [
+    "bl",
+    "#0x4f0c4e"
+   ],
+   "kind": "hook",
+   "oldBytes": "49f0daff0500002d22d199f79ff980070ed5dff81808019040f279600090dff85037dff85027dff85017032099f735fc",
+   "newBytes": "4bf08afa0500002d22d198f705f880070ed5dff81808019040f279600090dff85037dff85027dff85017032098f79bfa"
+  },
+  "0x4ec0ee": {
+   "new": "0x4ee982",
+   "sources": [
+    "SNAPSHOT_BL_SITE"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "bl",
+    "#0x45cfdc"
+   ],
+   "newInstruction": [
+    "bl",
+    "#0x45d35c"
+   ],
+   "kind": "hook",
+   "oldBytes": "70f775ff012829d1e02058f7a2ff012824d100234c22391d3000fff7fefd002830d051f71dfb80070ad56a48019040f2",
+   "newBytes": "6ef7ebfc012829d1e02056f7eefc012824d100234c22391d3000fff7fefd002830d04ef7d3fe80070ad56a48019040f2"
+  },
+  "0x4ec10e": {
+   "new": "0x4ee9a2",
+   "sources": [
+    "IMAGE_ACK_SUCCESS_SITE"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "beq",
+    "#0x4ec172"
+   ],
+   "newInstruction": [
+    "beq",
+    "#0x4eea06"
+   ],
+   "kind": "hook",
+   "oldBytes": "30d051f71dfb80070ad56a48019040f236200090664b5c4a5d49012051f7b7fd51f70efbc00703d451f70afb400705d5",
+   "newBytes": "30d04ef7d3fe80070ad56a48019040f236200090664b5c4a5d4901204ff76df94ef7c4fec00703d44ef7c0fe400705d5"
+  },
+  "0x4a90e4": {
+   "new": "0x4aa418",
+   "sources": [
+    "SETTINGS_BL_SITE"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     10,
+     0
+    ]
+   ],
+   "oldInstruction": [
+    "bl",
+    "#0x47d808"
+   ],
+   "newInstruction": [
+    "bl",
+    "#0x47eaa4"
+   ],
+   "kind": "hook",
+   "oldBytes": "d4f790fb94f731fb80070cd5dff8a40401904ff4ad700090dff88c340d4a0e49042094f7c9fd94f720fbc00703d494f7",
+   "newBytes": "d4f744fb93f797f980070cd5dff8a40401904ff4ad700090dff88c340d4a0e49042093f72ffc93f786f9c00703d493f7"
+  },
+  "0x4a87e4": {
+   "new": "0x4a9b18",
+   "sources": [
+    "SETTINGS_DECODE_BL_SITE"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     12
+    ]
+   ],
+   "oldInstruction": [
+    "bl",
+    "#0x49da08"
+   ],
+   "newInstruction": [
+    "bl",
+    "#0x49ed3c"
+   ],
+   "kind": "hook",
+   "oldBytes": "f5f710f9c0b2002831d194f7aeff800715d50798002801d0079801e0dff84c090290dff84c0901906d200090dff83039",
+   "newBytes": "f5f710f9c0b2002831d193f714fe800715d50798002801d0079801e0dff84c090290dff84c0901906d200090dff83039"
+  },
+  "0x45f146": {
+   "new": "0x45f4c6",
+   "sources": [
+    "DISPLAY_START_BL_SITES"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "bl",
+    "#0x46a39e"
+   ],
+   "newInstruction": [
+    "bl",
+    "#0x46a982"
+   ],
+   "kind": "hook",
+   "oldBytes": "0bf02af90125002684e56068062840f0a380def7f9fa80070ed5dff86c0b019040f269300090dff8f836dff8f826dff8",
+   "newBytes": "0bf05cfa0125002684e56068062840f0a380def739f980070ed5dff86c0b019040f269300090dff8f836dff8f826dff8"
+  },
+  "0x45f206": {
+   "new": "0x45f586",
+   "sources": [
+    "DISPLAY_START_BL_SITES"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "bl",
+    "#0x46a39e"
+   ],
+   "newInstruction": [
+    "bl",
+    "#0x46a982"
+   ],
+   "kind": "hook",
+   "oldBytes": "0bf0caf801250026012044e0def79cfa80070ed5dff8e40a01904ff45d700090dff84036dff84026dff840160320def7",
+   "newBytes": "0bf0fcf901250026012044e0def7dcf880070ed5dff8e40a01904ff45d700090dff84036dff84026dff840160320def7"
+  },
+  "0x444a3a": {
+   "new": "0x444ab8",
+   "sources": [
+    "GESTURE_PRESS_SITE"
+   ],
+   "review": "Stock event 8: same r2=sp+0x14, r1=8, r0=[r5] arguments and r6 raw input, now after the new stock mode gate.",
+   "kind": "hook",
+   "oldBytes": "1df057fcd3e224f023f9002801d024f023f9fff748ff00287bd119f048fe002854d1e07a00280bd118f0bbfa012840f0",
+   "newBytes": "1df0d8fd00f033bc24f0a3fa002801d024f0a3fafff71cff00287bd119f0c8ff002854d1e07a00280bd118f03bfc0128"
+  },
+  "0x444a40": {
+   "new": "0x444ac0",
+   "sources": [
+    "GESTURE_SHORT_LONG_SITE"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     10,
+     0
+    ]
+   ],
+   "oldInstruction": [
+    "bl",
+    "#0x468c8a"
+   ],
+   "newInstruction": [
+    "bl",
+    "#0x46900a"
+   ],
+   "kind": "hook",
+   "oldBytes": "24f023f9002801d024f023f9fff748ff00287bd119f048fe002854d1e07a00280bd118f0bbfa012840f0978000230022",
+   "newBytes": "24f0a3fa002801d024f0a3fafff71cff00287bd119f0c8ff002854d1e07a00280bd118f03bfc012840f0978000230022"
+  },
+  "0x444d36": {
+   "new": "0x444f46",
+   "sources": [
+    "GESTURE_RELEASE_SITE"
+   ],
+   "review": "Stock event 0x4a: same signed source/release fields in sp+0x18/+0x1c, r2=sp+0x18, r1=0x4a, r0=[r5].",
+   "kind": "hook",
+   "oldBytes": "1df0d9fa55e1fff7d0fd012826d1f8f703fd80070ed5dff8f004019040f211200090dff8ac34dff8ac24dff8ac140420",
+   "newBytes": "1df091fbece124f05df8002823d0f8f7fbfb80070ed5dff8d00501904ff40b700090dff8b035dff8b025dff8b0150420"
+  },
+  "0x4f5156": {
+   "new": "0x4f79fa",
+   "sources": [
+    "EVENAI_ENTRY_SITE"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "push",
+    "{r0, r1, r2, r3, r4, r5, r6, lr}"
+   ],
+   "newInstruction": [
+    "push",
+    "{r0, r1, r2, r3, r4, r5, r6, lr}"
+   ],
+   "kind": "hook",
+   "oldBytes": "7fb506000c00150067f73dffc0b2012840f085803000c0b2002834d148f7ecfa80070dd5dff87c0a019067200090dff8",
+   "newBytes": "7fb506000c00150065f7abfcc0b2012840f085803000c0b2002834d145f79afe80070dd5dff87c0a019067200090dff8"
+  },
+  "0x4798f2": {
+   "new": "0x47ab86",
+   "sources": [
+    "DISPLAY_COPY_BL_SITES"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "bl",
+    "#0x4708d0"
+   ],
+   "newInstruction": [
+    "bl",
+    "#0x470eb4"
+   ],
+   "kind": "hook",
+   "oldBytes": "f6f7edfffff7eafdf5f79efb002802d10b980028dcd00398002800f0818001281dd0022860d0032809d0042864d00528",
+   "newBytes": "f6f795f9fff7eafdf4f746fd002802d10b980028dcd00398002800f0818001281dd0022860d0032809d0042864d00528"
+  },
+  "0x479a2e": {
+   "new": "0x47acc2",
+   "sources": [
+    "DISPLAY_COPY_BL_SITES"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "bl",
+    "#0x4708d0"
+   ],
+   "newInstruction": [
+    "bl",
+    "#0x470eb4"
+   ],
+   "kind": "hook",
+   "oldBytes": "f6f74ffffff74cfd0998019008980090079b069a0599049866f0f9fbc3f780fe80070ed5dff8a407019040f217100090",
+   "newBytes": "f6f7f7f8fff74cfd0998019008980090079b069a0599049867f0f5fec2f736fd80070ed5dff8ac07019040f217100090"
+  },
+  "0x4ac3ea": {
+   "new": "0x4ad71e",
+   "sources": [
+    "WEAR_NOTIFY_BL_SITES"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "bl",
+    "#0x48629e"
+   ],
+   "newInstruction": [
+    "bl",
+    "#0x4875ce"
+   ],
+   "kind": "hook",
+   "oldBytes": "d9f758ff5ee02000c0b2012834d191f7a9f980070dd5dff8840301907c200090dff87433dff85c23dff85c13032091f7",
+   "newBytes": "d9f756ff5ee02000c0b2012834d190f70ff880070dd5dff8840301907c200090dff87433dff85c23dff85c13032090f7"
+  },
+  "0x4ac44e": {
+   "new": "0x4ad782",
+   "sources": [
+    "WEAR_NOTIFY_BL_SITES"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "bl",
+    "#0x48629e"
+   ],
+   "newInstruction": [
+    "bl",
+    "#0x4875ce"
+   ],
+   "kind": "hook",
+   "oldBytes": "d9f726ff2ce0c2f72afd012828d1cdf7fafc25e091f774f9800710d52000c0b20290dff81c03019086200090dff80433",
+   "newBytes": "d9f724ff2ce0c1f782fe012828d1cdf7aafc25e08ff7daff800710d52000c0b20290dff81c03019086200090dff80433"
+  },
+  "0x444dfc": {
+   "new": "0x4450ac",
+   "sources": [
+    "COMPASS_EVENT_BL_SITE"
+   ],
+   "matches": [
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "bl",
+    "#0x4622ec"
+   ],
+   "newInstruction": [
+    "bl",
+    "#0x46266c"
+   ],
+   "kind": "hook",
+   "oldBytes": "1df076faf2e0f8f7a4fc800710d504980290dff8400401904ff409700090dff8ec33dff8ec23dff8ec130320f8f738ff",
+   "newBytes": "1df0defa39e1f8f74cfb800710d504980290dff8a804019040f247200090dff85034dff85024dff850140320f8f7e0fd"
+  },
+  "0x4eddd2": {
+   "new": "0x4f0666",
+   "sources": [
+    "inline-hook-or-trampoline"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "ldrh.w",
+    "r1, [sp, #0x2c]"
+   ],
+   "newInstruction": [
+    "ldrh.w",
+    "r1, [sp, #0x2c]"
+   ],
+   "kind": "hook",
+   "oldBytes": "bdf82c10814233db4ff7b8fc800716d54ff4907004904ff490700390bdf82c000290dff8480a019046200090dff8283a",
+   "newBytes": "bdf82c10814233db4df76ef8800716d54ff4907004904ff490700390bdf82c000290dff8480a019046200090dff8283a"
+  },
+  "0x4ede9a": {
+   "new": "0x4f072e",
+   "sources": [
+    "inline-hook-or-trampoline"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "ldrh.w",
+    "r0, [sp, #0x2e]"
+   ],
+   "newInstruction": [
+    "ldrh.w",
+    "r0, [sp, #0x2e]"
+   ],
+   "kind": "hook",
+   "oldBytes": "bdf82e0091282fdb4ff754fc800714d59020049090200390bdf82e000290dff8000b01904e200090dff86439dff86429",
+   "newBytes": "bdf82e0091282fdb4df70af8800714d59020049090200390bdf82e000290dff8000b01904e200090dff86439dff86429"
+  },
+  "0x4ede9e": {
+   "new": "0x4f0732",
+   "sources": [
+    "inline-hook-or-trampoline"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "cmp",
+    "r0, #0x91"
+   ],
+   "newInstruction": [
+    "cmp",
+    "r0, #0x91"
+   ],
+   "kind": "hook",
+   "oldBytes": "91282fdb4ff754fc800714d59020049090200390bdf82e000290dff8000b01904e200090dff86439dff86429dff86419",
+   "newBytes": "91282fdb4df70af8800714d59020049090200390bdf82e000290dff8000b01904e200090dff86439dff86429dff86419"
+  },
+  "0x444fe8": {
+   "new": "0x445326",
+   "sources": [
+    "inline-hook-or-trampoline"
+   ],
+   "matches": [
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "movs",
+    "r0, #0"
+   ],
+   "newInstruction": [
+    "movs",
+    "r0, #0"
+   ],
+   "kind": "hook",
+   "oldBytes": "00200bb0f0bddff8900270474c367600dff884020078012801d1012000e00020704785480068002801d0012000e00020",
+   "newBytes": "00200bb0f0bddff870027047dff86c020078012801d1012000e0002070477c480068002801d0012000e0002070479348"
+  },
+  "0x468c8a": {
+   "new": "0x46900a",
+   "sources": [
+    "inline-hook-or-trampoline"
+   ],
+   "matches": [
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "ldr.w",
+    "r0, [pc, #0x74c]"
+   ],
+   "newInstruction": [
+    "ldr.w",
+    "r0, [pc, #0x74c]"
+   ],
+   "kind": "hook",
+   "oldBytes": "dff84c070078704780b511f0def80020dff83c17087001bd00008d7f4600acef74000020dff82817087070470000f869",
+   "newBytes": "dff84c070078704780b500f0eeff0020dff83c17087001bd00000d834600742975000020dff82817087070470000506a"
+  },
+  "0x4f515a": {
+   "new": "0x4f79fe",
+   "sources": [
+    "inline-hook-or-trampoline"
+   ],
+   "matches": [
+    [
+     24,
+     0
+    ],
+    [
+     24,
+     4
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     24,
+     12
+    ],
+    [
+     16,
+     0
+    ],
+    [
+     16,
+     4
+    ],
+    [
+     16,
+     8
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     10,
+     0
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     8
+    ]
+   ],
+   "oldInstruction": [
+    "movs",
+    "r4, r1"
+   ],
+   "newInstruction": [
+    "movs",
+    "r4, r1"
+   ],
+   "kind": "hook",
+   "oldBytes": "0c00150067f73dffc0b2012840f085803000c0b2002834d148f7ecfa80070dd5dff87c0a019067200090dff8743adff8",
+   "newBytes": "0c00150065f7abfcc0b2012840f085803000c0b2002834d145f79afe80070dd5dff87c0a019067200090dff8743adff8"
+  },
+  "0x444902": {
+   "new": "0x44492a",
+   "kind": "supporting-code",
+   "sources": [
+    "ABI and branch review"
+   ],
+   "oldBytes": "f8b58ab006003078717850ea01200590b778f07857ea0027307957ea0047707957ea0067b079f17950ea0120317a50ea",
+   "newBytes": "f8b58ab006003078717850ea01200590b778f07857ea0027307957ea0047707957ea0067b079f17950ea0120317a50ea"
+  },
+  "0x4ec14a": {
+   "new": "0x4ee9de",
+   "kind": "supporting-code",
+   "sources": [
+    "ABI and branch review"
+   ],
+   "oldBytes": "002084f84800786a0490386a0390f8690290b8690190786900903b1d320004212800c0b2fff75ffe05b0f0bd000014b4",
+   "newBytes": "002084f84800786a0490386a0390f8690290b8690190786900903b1d320004212800c0b2fff75ffe05b0f0bd0000d0d5"
+  },
+  "0x4ec172": {
+   "new": "0x4eea06",
+   "kind": "supporting-code",
+   "sources": [
+    "ABI and branch review"
+   ],
+   "oldBytes": "05b0f0bd000014b46f008c607300303c790010b52ded030a85b001208df80400042205a90df1050420004df722fd0422",
+   "newBytes": "05b0f0bd0000d0d56f0028947300887c790010b52ded030a85b001208df80400042205a90df1050420004bf7d8f80422"
+  },
+  "0x48c34e": {
+   "new": "0x48d67e",
+   "kind": "supporting-code",
+   "sources": [
+    "ABI and branch review"
+   ],
+   "oldBytes": "38b55ff434321e491f48fff724ff1e4c5ff44d221e492000fff71dff1d4d4ff480621c492800fff716fffff7dafe0020",
+   "newBytes": "38b55ff434321e491f48fff724ff1e4c5ff44d221e492000fff71dff1d4d4ff480621c492800fff716fffff7dafe0020"
+  },
+  "0x48629f": {
+   "new": "0x4875cf",
+   "kind": "supporting-code",
+   "sources": [
+    "stock wear-hook callee"
+   ],
+   "oldBytes": "38b586b00500c4f7f6fc012808d0bef7a4fe002804d01020bef7c3fe012800d051e003a8c44991e81c0080e81c002800",
+   "newBytes": "38b586b00500c3f7f0fc012808d0bdf7a9fe002804d01020bdf7c1fe012800d051e003a8c44991e81c0080e81c002800"
+  },
+  "0x4c6b30": {
+   "new": "0x4c8c5c",
+   "sources": [
+    "BLE_2M_SITE"
+   ],
+   "kind": "in-place-bytes",
+   "oldBytes": "7c205070012090700f20d070b8201071",
+   "newBytes": "7c205070012090700f20d070b8201071"
+  },
+  "0x7ae7b8": {
+   "new": "0x7b2870",
+   "sources": [
+    "BLE_FAST_INTERVAL_SITE"
+   ],
+   "kind": "rodata-table",
+   "oldBytes": "0c0018000000580205000000",
+   "newBytes": "0c0018000000580205000000",
+   "note": "fast connection-parameter profile; both images carry two literal references to table-4 (see fastIntervalTableReferences)"
+  },
+  "0x47ae50": {
+   "new": "0x47c0ec",
+   "sources": [
+    "BLE_FORCE_FAST_SITE"
+   ],
+   "kind": "in-place-bytes",
+   "oldBytes": "0500",
+   "newBytes": "0500",
+   "note": "_connectParamReq_impl: movs r5,r0 before bl 0x4745bc/0x475814"
+  },
+  "0x45f006": {
+   "new": "0x45f386",
+   "sources": [
+    "HEADUP_GATE_BL_SITE"
+   ],
+   "kind": "hook-site",
+   "oldBytes": "10f0",
+   "newBytes": "10f0",
+   "note": "display-thread touch branch: bl stock idle gate; message slot stays [sp,#0xc]"
+  },
+  "0x45f01a": {
+   "new": "0x45f39a",
+   "sources": [
+    "IDLE_INPUT_GATE_SITE"
+   ],
+   "kind": "hook-site",
+   "oldBytes": "fff765fb",
+   "newBytes": "fff765fb",
+   "note": "bl stock mode check; r4 = input record loaded from [message+8] two instructions earlier"
+  },
+  "0x4b6922": {
+   "new": "0x4b8806",
+   "sources": [
+    "COMPASS_DECODE_BL_SITE"
+   ],
+   "kind": "hook-site",
+   "oldBytes": "65f0",
+   "newBytes": "66f0",
+   "note": "IMU parser callback: bl GAF decode with r3 = GAF buffer (0x20074af0 -> 0x20074b00 passed by register)"
+  },
+  "0x4b632e": {
+   "new": "0x4b8212",
+   "sources": [
+    "COMPASS_REPORT_BL_SITE"
+   ],
+   "kind": "hook-site",
+   "oldBytes": "fff759fc",
+   "newBytes": "fff759fc",
+   "note": "sensor-hub emitter: bl DRV_IMUSendUIEvent(9, heading)"
+  },
+  "0x4448e1": {
+   "new": "0x444909",
+   "sources": [
+    "gesture_fwd.c"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "80b528f0e7fb012807d028f07bfc012803d02af04dfa012801d1012000e00020",
+   "newBytes": "80b528f0c5fe012807d028f059ff012803d02af02bfd012801d1012000e00020",
+   "note": "FUN_004448e0: idle path ignores head-up (OTA/onboarding)"
+  },
+  "0x45e521": {
+   "new": "0x45e8a1",
+   "sources": [
+    "gesture_fwd.c"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "80b510f0b5fe807a02bd1cb5dff87445206800284cd1dff87005e4f7dcfc2060",
+   "newBytes": "80b510f0e7ff807a02bd1cb5dff87445206800284cd1dff87005e4f71cfb2060",
+   "note": "FUN_0045e520: settings->head_up_switch"
+  },
+  "0x45e6e9": {
+   "new": "0x45ea69",
+   "sources": [
+    "settings_ext.c"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "80b511f002ff002801d0012000e0002002bd1cb5dff8e443206800280dd00021",
+   "newBytes": "80b512f034f8002801d0012000e0002002bd1cb5dff8e443206800280dd00021",
+   "note": "FUN_0045e6e8: idle mode check"
+  },
+  "0x46f137": {
+   "new": "0x46f71b",
+   "sources": [
+    "gesture_fwd.c:asm"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "e0b54df06cff012822d1cef705fb80070dd5dff8a80801905c200090dff8a438",
+   "newBytes": "e0b54ff0ecfb012822d1cef713f880070dd5dff8a80801905c200090dff8a438",
+   "note": "FUN_0046f136: stock idle gate (movw/movt trampoline literal)"
+  },
+  "0x47efa9": {
+   "new": "0x480261",
+   "sources": [
+    "ring_battery.c"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "80b534f01ff8002808d0fff77eff002801d0012000e00020c0b207e0fff77bff",
+   "newBytes": "80b534f01ffe002808d0fff77eff002801d0012000e00020c0b207e0fff77bff",
+   "note": "dashboard ring-connected predicate"
+  },
+  "0x47eeb2": {
+   "new": "0x48016a",
+   "sources": [
+    "validate_ring_battery_stock"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "1a480078c0f30010c0b2704717480078c0f34010c0b27047000024d56f00fc51",
+   "newBytes": "1a480078c0f30010c0b2704717480078c0f34010c0b27047000064f96f00c48b",
+   "note": "connection-bit getters"
+  },
+  "0x47efa8": {
+   "new": "0x480260",
+   "sources": [
+    "validate_ring_battery_stock"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "80b534f01ff8002808d0fff77eff002801d0012000e00020c0b207e0fff77bff",
+   "newBytes": "80b534f01ffe002808d0fff77eff002801d0012000e00020c0b207e0fff77bff",
+   "note": "dashboard connection predicate"
+  },
+  "0x4a9be2": {
+   "new": "0x4aaf16",
+   "sources": [
+    "validate_ring_battery_stock"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "80b569f0ddf802bd",
+   "newBytes": "80b56af09bfb02bd",
+   "note": "dashboard battery getter"
+  },
+  "0x512d84": {
+   "new": "0x515634",
+   "sources": [
+    "validate_ring_battery_stock"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "0200d2b2652a00db6420384a1070c9b2002901d0012000e0002050707047334890f90000c0b2704730484078704710b5",
+   "newBytes": "0200d2b2652a00db6420384a1070c9b2002901d0012000e0002050707047334890f90000c0b2704730484078704710b5",
+   "note": "ring battery cache setter and accessors"
+  },
+  "0x4b5be5": {
+   "new": "0x4b7ac9",
+   "sources": [
+    "compass.c"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "7fb504000d0002f07cfa0600b9f75cf9002823d187f7a9fd80070dd50294dff8",
+   "newBytes": "7fb504000d0002f07cfa0600b7f7dcfc002823d185f737fe80070dd50294dff8",
+   "note": "DRV_IMUSendUIEvent"
+  },
+  "0x51c485": {
+   "new": "0x51ed29",
+   "sources": [
+    "compass.c"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "2de9fe4f04000d0016001f00002016f1050816f1050916f1030a16f1040b0090",
+   "newBytes": "2de9fe4f04000d0016001f00002016f1050816f1050916f1030a16f1040b0090",
+   "note": "GAF decode"
+  },
+  "0x4745bd": {
+   "new": "0x475815",
+   "sources": [
+    "BLE_FORCE_FAST_SITE callee"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "dff8f405006870478048006890f854007047dff8e81508707047dff8e0050078",
+   "newBytes": "dff82c0600687047dff81006006890f854007047dff81c1608707047dff81406",
+   "note": "connection lookup called right after the forced mode byte"
+  },
+  "0x4b2fed": {
+   "new": "0x4b4ea5",
+   "sources": [
+    "ring predicate callee"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "10b5d3f7a3fd0400a9f7f2ff2100c9b2012905d10100c9b2012901d1012008e0",
+   "newBytes": "10b5d2f7dfff0400a8f756fa2100c9b2012905d10100c9b2012901d1012008e0",
+   "note": "role query inside the dashboard ring-connected predicate"
+  },
+  "0x512da3": {
+   "new": "0x515653",
+   "sources": [
+    "ring dash getter callee"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "334890f90000c0b2704730484078704710b586b00c21002203ac200029f791f9",
+   "newBytes": "334890f90000c0b2704730484078704710b586b00c21002203ac200026f739fd",
+   "note": "ring battery level accessor"
+  },
+  "0x47eebf": {
+   "new": "0x480177",
+   "sources": [
+    "ring predicate callee"
+   ],
+   "kind": "rom-call",
+   "oldBytes": "17480078c0f34010c0b27047000024d56f00fc517500f4cf7900e80479006c81",
+   "newBytes": "17480078c0f34010c0b27047000064f96f00c48b750068107a00ec4479002857",
+   "note": "second connection-bit getter"
+  },
+  "0x200652e0": {
+   "new": "0x200652e0",
+   "sources": [
+    "compass.c"
+   ],
+   "kind": "ram",
+   "loadEvidence": [
+    {
+     "oldLoad": "0x4b62e0",
+     "oldLiteral": "0x4b6fdc",
+     "newLoad": "0x4b81c4",
+     "newLiteral": "0x4b8ec0",
+     "oldLoadBytes": "dff8f81c",
+     "newLoadBytes": "dff8f81c"
+    },
+    {
+     "oldLoad": "0x4b5780",
+     "oldLiteral": "0x4b61e0",
+     "newLoad": "0x4b7664",
+     "newLiteral": "0x4b80c4",
+     "oldLoadBytes": "dff85c7a",
+     "newLoadBytes": "dff85c7a"
+    },
+    {
+     "oldLoad": "0x4b6cae",
+     "oldLiteral": "0x4b6fdc",
+     "newLoad": "0x4b8b92",
+     "newLiteral": "0x4b8ec0",
+     "oldLoadBytes": "cb4a9368",
+     "newLoadBytes": "cb4a9368"
+    }
+   ]
+  },
+  "0x2007737e": {
+   "new": "0x200773fe",
+   "sources": [
+    "compass.c"
+   ],
+   "kind": "ram",
+   "loadEvidence": [
+    {
+     "oldLoad": "0x4b6942",
+     "oldLiteral": "0x4b749c",
+     "newLoad": "0x4b8826",
+     "newLiteral": "0x4b9380",
+     "oldLoadBytes": "dff8581b",
+     "newLoadBytes": "dff8581b"
+    }
+   ]
+  },
+  "0x20077380": {
+   "new": "0x20077400",
+   "sources": [
+    "compass.c"
+   ],
+   "kind": "ram",
+   "loadEvidence": [
+    {
+     "oldLoad": "0x4b6948",
+     "oldLiteral": "0x4b74a0",
+     "newLoad": "0x4b882c",
+     "newLiteral": "0x4b9384",
+     "oldLoadBytes": "dff8540b",
+     "newLoadBytes": "dff8540b"
+    },
+    {
+     "oldLoad": "0x4b4c72",
+     "oldLiteral": "0x4b55cc",
+     "newLoad": "0x4b6b56",
+     "newLiteral": "0x4b74b0",
+     "oldLoadBytes": "dff85809",
+     "newLoadBytes": "dff85809"
+    }
+   ]
+  },
+  "0x2007737f": {
+   "new": "0x200773ff",
+   "sources": [
+    "compass.c"
+   ],
+   "kind": "ram",
+   "loadEvidence": [
+    {
+     "oldLoad": "0x4b6952",
+     "oldLiteral": "0x4b74a4",
+     "newLoad": "0x4b8836",
+     "newLiteral": "0x4b9388",
+     "oldLoadBytes": "dff8501b",
+     "newLoadBytes": "dff8501b"
+    }
+   ]
+  },
+  "0x200772a6": {
+   "new": "0x20077314",
+   "sources": [
+    "ring_battery.c"
+   ],
+   "kind": "ram",
+   "loadEvidence": [
+    {
+     "oldLoad": "0x512d8e",
+     "oldLiteral": "0x512e70",
+     "newLoad": "0x51563e",
+     "newLiteral": "0x515720",
+     "oldLoadBytes": "384a1070",
+     "newLoadBytes": "384a1070"
+    },
+    {
+     "oldLoad": "0x512da2",
+     "oldLiteral": "0x512e70",
+     "newLoad": "0x515652",
+     "newLiteral": "0x515720",
+     "oldLoadBytes": "334890f9",
+     "newLoadBytes": "334890f9"
+    },
+    {
+     "oldLoad": "0x512dac",
+     "oldLiteral": "0x512e70",
+     "newLoad": "0x51565c",
+     "newLiteral": "0x515720",
+     "oldLoadBytes": "30484078",
+     "newLoadBytes": "30484078"
+    }
+   ]
+  },
+  "0x20077406": {
+   "new": "0x20077489",
+   "sources": [
+    "validate_ring_battery_stock"
+   ],
+   "kind": "ram",
+   "loadEvidence": [
+    {
+     "oldLoad": "0x47eeb2",
+     "oldLiteral": "0x47ef1c",
+     "newLoad": "0x48016a",
+     "newLiteral": "0x4801d4",
+     "oldLoadBytes": "1a480078",
+     "newLoadBytes": "1a480078"
+    }
+   ]
+  },
+  "0x553d39": {
+   "new": "0x5565e1",
+   "kind": "rom-call",
+   "sources": [
+    "mic_control.c"
+   ],
+   "derivation": "2.2.10.18 FW_CODEC_CTRL: thread.audio codec-control message poster (2.2.10.10 0x5565e0, Thumb +1). Identified 2026-09-14 by disassembly: production_codec_mic_func_init 0x5ab8ca does `movs r0,#1; bl 0x5565e0` and service_audio_manager acquire 0x56ac64 calls the same target (param 1 = DMIC open + I2S on + i2s init + 2 s codec check timer; 0 = timer stop + I2S deinit + output off; 2 = GX8002 reboot). 2.2.9.22 equivalent 0x553d38 located by the same call from the 2.2.9.22 production init. ABI (uint32 param) inferred from both stock callers; gated behind CONFIGURE flag bit2."
+  },
+  "0x20077470": {
+   "new": "0x20077470",
+   "kind": "ram",
+   "sources": [
+    "mic_control.c"
+   ],
+   "derivation": "2.2.10.10 RAM cell (same address as key; RAM is not rebased). Identified 2026-09-14 by disassembly of thread.audio/service_audio_manager: codec-on flag (u8): set 1 by the codec-control on-path 0x556404, 0 by the off-path; the one-shot codec audio check 0x5564d2 runs only while set. 2.2.10.18 clears it from the tap once frames flow (MIC_FLAG_MGR_CTRL)."
+  },
+  "0x20076e48": {
+   "new": "0x20076e48",
+   "kind": "ram",
+   "sources": [
+    "mic_control.c"
+   ],
+   "derivation": "2.2.10.10 RAM cell (same address as key; RAM is not rebased). Identified 2026-09-14 by disassembly of thread.audio/service_audio_manager: fresh DMA frame count (u32) incremented by the I2S DMA handler 0x55626a for frames dequeued within 41 ms; read by the codec audio check (needs >= 20 per 2 s window). Reported in the 2.2.10.18 status mirror."
+  },
+  "0x200773d7": {
+   "new": "0x200773d7",
+   "kind": "ram",
+   "sources": [
+    "mic_control.c"
+   ],
+   "derivation": "2.2.10.10 RAM cell (same address as key; RAM is not rebased). Identified 2026-09-14 by disassembly of thread.audio/service_audio_manager: gx8002b I2S init state (u8, 'gx8002b i2s already init' guard in 0x595a58). Reported in the status mirror."
+  },
+  "0x200773d6": {
+   "new": "0x200773d6",
+   "kind": "ram",
+   "sources": [
+    "mic_control.c"
+   ],
+   "derivation": "2.2.10.10 RAM cell (same address as key; RAM is not rebased). Identified 2026-09-14 by disassembly of thread.audio/service_audio_manager: codec power state (u8, 'codec is not power on' guard). Reported in the status mirror."
+  },
+  "0x20077451": {
+   "new": "0x20077451",
+   "kind": "ram",
+   "sources": [
+    "mic_control.c"
+   ],
+   "derivation": "2.2.10.10 RAM cell (same address as key; RAM is not rebased). Identified 2026-09-14 by disassembly of thread.audio/service_audio_manager: service.audio.manager master/slave boot-sync state (u8, set 1 on the RIGHT after msg 2). Reported in the status mirror."
+  },
+  "0x200763b8": {
+   "new": "0x200763b8",
+   "kind": "ram",
+   "sources": [
+    "mic_control.c"
+   ],
+   "derivation": "2.2.10.10 RAM cell (same address as key; RAM is not rebased). Identified 2026-09-14 by disassembly of thread.audio/service_audio_manager: service.audio.manager app-slot table (u8[8], slots 1..6 used by stock apps, LEFT only): release powers the codec down when every slot is 0. 2.2.10.18 holds slot 7 while armed on the LEFT."
+  },
+  "0x200765b8": {
+   "new": "0x200765b8",
+   "kind": "ram",
+   "sources": [
+    "mic_control.c"
+   ],
+   "derivation": "2.2.10.10 RAM cell (same address as key). Identified 2026-09-14 by disassembly of the BLE connection-parameter path: slave (phone-link) connection-context pointer; +0x18 granted interval (1.25 ms), +0x1a latency, +0x1c supervision timeout (10 ms), +0x1e profile mode (0xa3 fast/0xa4 slow), written by the update-event handler 0x47cc08 and read by _connectParamReq_impl 0x47c0e8. Reported read-only in the 2.2.10.19 'ML' link record."
+  },
+  "0x200773a5": {
+   "new": "0x200773a5",
+   "kind": "ram",
+   "sources": [
+    "mic_control.c"
+   ],
+   "derivation": "2.2.10.10 RAM cell (same address as key). Identified 2026-09-14 by disassembly of the BLE connection-parameter path: fast-mode-in-effect flag, written by the update-event handler 0x47cc08 (set with the request timestamp 0x200765bc when the central grants the fast profile, cleared when it leaves it) and tested first by APP_ConnectParamESSSetFastMode 0x47d478. 2.2.10.19-.23 mislabelled it 'central connected' (it read 0 while connected on the default profile). Reported read-only in the 'ML' link record byte 3."
+  },
+  "0x47c18d": {
+   "new": "0x47d429",
+   "kind": "rom-call",
+   "sources": [
+    "mic_control.c"
+   ],
+   "oldBytes": "38b50400dff874040078002803d0a420",
+   "newBytes": "38b50400dff874040078002803d0a420",
+   "derivation": "2.2.10.24 FW_CONN_FAST: connection-parameter fast-profile setter (2.2.10.10 0x47d428, Thumb +1; 2.2.9.22 0x47c18c). Identified 2026-09-14 by disassembly of the protobuf device-config handler ('[pb.devc]pConnParams->setSpeed = eConnParamState_%s', 0x4d3eba new / 0x4d18fa old): setSpeed FAST does `movs r0,#0; bl` to this function, SLOW to 0x47d598/0x47c2fc. Body: if 0x200773a2 (slow-forced) set, marks 0x20004d80 slow; records requested mode 0xa3 via 0x47b922; stops the request timer (callback 0x47c710); if the argument is nonzero arms a 60 s auto-slow; then starts the request timer at 0 ms. 0x47c710 posts event 0xb9 to the BLE task, whose handler 0x47d6b4 calls _connectParamReq_impl 0x47c0e8 -> DmConnUpdate with the fast table. Ten stock callers (OTA, image transfer, pb) use the same (uint32 auto_slow) ABI. Called with 0 from mic_session_start and on RENEW while the granted profile byte is not 0xa3."
+  },
+  "0x20004d7f": {
+   "new": "0x20004d7f",
+   "kind": "ram",
+   "sources": [
+    "mic_control.c"
+   ],
+   "derivation": "2.2.10.10 RAM cell (same address as key). Identified 2026-09-14 by disassembly of the BLE connection-parameter path: last mode handed to _connectParamReq_impl 0x47c0e8 (stored at its exit 0x47c6e8 and on the rate-limited deferral 0x47c402). Reported read-only in the 2.2.10.26 'ML' link record."
+  },
+  "0x20004d80": {
+   "new": "0x20004d80",
+   "kind": "ram",
+   "sources": [
+    "mic_control.c"
+   ],
+   "derivation": "2.2.10.10 RAM cell (same address as key). Identified 2026-09-14 by disassembly of the BLE connection-parameter path: mode currently accepted on the phone link: written by the update-event handler 0x47cc08 (0x47d142/0x47d14c/0x47d348) and by _connectParamReq_impl when the link is already in the requested profile; read by 0x47d408 (is-fast predicate used by the streaming dispatcher). Reported read-only in the 2.2.10.26 'ML' link record."
+  },
+  "0x20004d82": {
+   "new": "0x20004d82",
+   "kind": "ram",
+   "sources": [
+    "mic_control.c"
+   ],
+   "derivation": "2.2.10.10 RAM cell (same address as key). Identified 2026-09-14 by disassembly of the BLE connection-parameter path: mode the 45 s rate limiter holds for its retry timer (compared at 0x47c46c, logged from 0x47b96e/0x47c314). Reported read-only in the 2.2.10.26 'ML' link record."
+  },
+  "0x20004d83": {
+   "new": "0x20004d83",
+   "kind": "ram",
+   "sources": [
+    "mic_control.c"
+   ],
+   "derivation": "2.2.10.10 RAM cell (same address as key). Identified 2026-09-14 by disassembly of the BLE connection-parameter path: mode recorded by the request setter 0x47b922 (called by the ESS/OTA/protobuf fast and slow setters). Reported read-only in the 2.2.10.26 'ML' link record."
+  },
+  "0x200773a4": {
+   "new": "0x200773a4",
+   "kind": "ram",
+   "sources": [
+    "mic_control.c"
+   ],
+   "derivation": "2.2.10.10 RAM cell (same address as key). Identified 2026-09-14 by disassembly of the BLE connection-parameter path: fast-budget link bitmask: bit per link index (0..2), cap of two set bits; acquired in 0x47b61e ('fast capped, defer' when full), released in 0x47b736. Reported read-only in the 2.2.10.26 'ML' link record."
+  },
+  "0x200773a7": {
+   "new": "0x200773a7",
+   "kind": "ram",
+   "sources": [
+    "mic_control.c"
+   ],
+   "derivation": "2.2.10.10 RAM cell (same address as key). Identified 2026-09-14 by disassembly of the BLE connection-parameter path: connection-parameter rate-limiter pending flag (timestamp at 0x200765c0): while set and younger than 45 s, _connectParamReq_impl defers via the 0x47c710 timer instead of issuing DmConnUpdate; cleared by the update-complete event (0x47d71e). Reported read-only in the 2.2.10.26 'ML' link record."
+  },
+  "0x200765c4": {
+   "new": "0x200765c4",
+   "kind": "ram",
+   "sources": [
+    "mic_control.c"
+   ],
+   "derivation": "2.2.10.10 RAM cell (same address as key). Identified 2026-09-14 by disassembly of the BLE connection-parameter path: request counter (u32) incremented by the request setter 0x47b922 on every fast/slow request. Reported read-only in the 2.2.10.26 'ML' link record."
+  },
+  "0x553d5b": {
+   "new": "0x556603",
+   "kind": "rom-call",
+   "sources": [
+    "mic_control.c"
+   ],
+   "oldBytes": "1fb5694600220023002481e81c000121",
+   "newBytes": "1fb5694600220023002481e81c000121",
+   "derivation": "2.2.10.28 FW_CODEC_PREP: codec-prep message poster the stock service_audio_manager acquire posts immediately before ctrl(1) (2.2.10.10 0x556602, Thumb +1; 2.2.9.22 0x553d5a, adjacent to ctrl 0x553d38/0x5565e0, offset +0x22). Identified 2026-09-14 by disassembly of acquire 0x56ac64: `movs r0,#1; bl 0x556602` then `movs r0,#1; bl 0x5565e0`; 0x556602 builds a zero message and calls the audio-thread poster 0x5561b0 (queue 0x200046f8) with subtype 1 (the GX8002 configuration step). Sibling 0x556624 posts subtype 4. ABI (uint32 subtype) inferred from both stock callers. Gated behind MIC_FLAG_ARM_HW; posted from the settings-write context like the other codec messages."
+  },
+  "0x592db5": {
+   "new": "0x5959b9",
+   "kind": "rom-call",
+   "sources": [
+    "mic_control.c"
+   ],
+   "oldBytes": "e0b5b2490878",
+   "newBytes": "e0b5b2490878",
+   "derivation": "2.2.10.41 FW_CODEC_PWR_OFF: gx8002 power OFF (drv_gx8002b.c; logs 'gx8002 power off.' / 'gx8002 already power off.'; guards on power flag 0x200773d6; the first step of the codec reboot handler 0x595c12 and a direct call from the UART test dispatcher 0x59c200). 2.2.10.10 0x5959b8 (Thumb +1); 2.2.9.22 0x592db4 located by prologue byte-match with the codec-driver functions in identical relative order/spacing in both images (power on / power off / i2s init deltas 0xb4 and 0xa0). ABI (void, no args) from both stock callers. Called from the CFW settle timer (RTOS timer thread), which stock itself does from its non-audio UART test dispatcher."
+  },
+  "0x592d01": {
+   "new": "0x595905",
+   "kind": "rom-call",
+   "sources": [
+    "mic_control.c"
+   ],
+   "oldBytes": "e0b5dff87c13",
+   "newBytes": "e0b5dff87c13",
+   "derivation": "2.2.10.41 FW_CODEC_PWR_ON: gx8002 power ON (drv_gx8002b.c; logs 'gx8002 power on.' / 'gx8002 already power on.'; guards on 0x200773d6; the step after the 100 ms delay in the reboot handler 0x595c12 and a direct call from 0x59c200). 2.2.10.10 0x595904 (Thumb +1); 2.2.9.22 0x592d00 located by prologue byte-match with the codec-driver functions in identical relative order/spacing in both images (power on / power off / i2s init deltas 0xb4 and 0xa0). ABI (void, no args) from both stock callers. Called from the CFW settle timer (RTOS timer thread), which stock itself does from its non-audio UART test dispatcher."
+  },
+  "0x51d815": {
+   "new": "0x5200b9",
+   "kind": "rom-call",
+   "sources": [
+    "mic_control.c"
+   ],
+   "oldBytes": "38b504000d002000c0b201280ed00228",
+   "newBytes": "38b504000d002000c0b201280ed00228",
+   "derivation": "2.2.10.42 FW_PIN_WRITE: the board's logical-pin writer dispatcher (2.2.10.10 0x5200b8, Thumb +1; 2.2.9.22 0x51d814 by 28-byte prologue match, and the old function carries the same 0x8f/0x92 codec GPIO constants and the 0x86 rail GPIO). ABI (uint32 logical_pin, uint32 value) from the codec driver's callers (`movs r1,#val; movs r0,#pin; bl`). Logical pins 7 and 8 are plain GPIO writes to Apollo GPIO 143 and 146 (the GX8002 enable/reset lines, handlers 0x520198/0x5201ae \u2192 0x554102); logical pin 6 is NOT a GPIO \u2014 it sets/clears bit 6 of the rail-request mask 0x200765fc inside a critical section and drives Apollo GPIO 134, a shared regulator enable, low when the mask is zero. The codec driver's power-off (0x5959b8) clears pin 6 and drops that rail, which the EM9305 radio path depends on: the phone logs 'connection timed out' 772 ms after CONFIGURE (720 ms supervision). The CFW therefore resets the codec through pins 7 and 8 ONLY and never writes pin 6. Called from the CFW settle timer (RTOS timer thread); the stock UART test dispatcher 0x59c200 reaches the same driver from a non-audio thread."
+  },
+  "0x5681a9": {
+   "new": "0x56ac65",
+   "kind": "rom-call",
+   "sources": [
+    "mic_control.c"
+   ],
+   "oldBytes": "1fb50400f4f616ff022801d0",
+   "newBytes": "1fb50400f2f678fb022801d0",
+   "derivation": "2.2.10.46 FW_AUDM_ACQUIRE: service_audio_manager acquire (LEFT-only; bails unless _private_getCurrentRoleStatus==2). Registers app_id in the slot table 0x200763b8, and on the first active client resets shared audio state and enables PDM + the GX8002 codec + DMA (openCFW g2-service-audio-manager-recovery.md: 'first acquire resets shared audio state and enables PDM + codec'). 2.2.10.10 0x56ac64 (Thumb +1); 2.2.9.22 0x5681a8 by prologue match + helper delta 0x2abc (its slot-count helper 0x56ac48 matches old 0x56818c) + the app_id<8 and slot==1 checks. ABI (uint8 app_id) from the disassembly and the at_codec.c caller (openCFW). oldBytes/newBytes cover the side-check prologue; the differing BL to the side getter is expected across versions."
+  },
+  "0x568337": {
+   "new": "0x56adf3",
+   "kind": "rom-call",
+   "sources": [
+    "mic_control.c"
+   ],
+   "oldBytes": "1fb50400f4f64ffe022801d0",
+   "newBytes": "1fb50400f2f6b1fa022801d0",
+   "derivation": "2.2.10.46 FW_AUDM_RELEASE: service_audio_manager release (LEFT-only); clears app_id from the slot table and, when every slot is 0, disables the codec + PDM. 2.2.10.10 0x56adf2; 2.2.9.22 0x568336 by the same prologue+delta reasoning as the acquire. ABI (uint8 app_id)."
+  },
+  "0x4db279": {
+   "new": "0x4ddb05",
+   "kind": "rom-call",
+   "sources": [
+    "mic_control.c"
+   ],
+   "oldBytes": "f8b504000d0016001f0066f0ddfa2000",
+   "newBytes": "f8b504000d0016001f0066f0ebfa2000",
+   "derivation": "2.2.10.50 FW_DM_SET_PHY: Cordio DmSetPhy(connId, allPhys, txPhys, rxPhys, phyOptions) (2.2.10.10 0x4ddb04, Thumb +1; 2.2.9.22 at the key address). Identified 2026-09-15 in both images by the same chain: the unique `movw #0x2032` (HCI LE Set PHY opcode) marks HciLeSetPhyCmd; its single BL caller is DmSetPhy, which resolves the DM connection via the conn-table lookup and passes phyOptions from its stack slot. Single stock caller is the ring-link '[ring.proto]RING_SetPhyProcess' wrapper (0x479426 new); the phone link never receives a PHY request from stock."
+  },
+  "0x20076594": {
+   "new": "0x20076594",
+   "kind": "ram",
+   "sources": [
+    "mic_control.c"
+   ],
+   "derivation": "2.2.10.10 RAM cell (same address as key). Identified 2026-09-15 by disassembly of the connection-parameter request path: _connectParamReq_impl (0x47c0e8) calls the getter 0x475814 which returns *(0x20076594), the phone-connection object, and reads its DM connId byte at +4 for the DmConnUpdate request. mic_control reads the same object/+4 to address DmSetPhy at the phone link; validated as a 0x20xxxxxx pointer and connId 1..4 before use."
+  },
+  "0x56873b": {
+   "new": "0x56b1f7",
+   "kind": "rom-call",
+   "sources": [
+    "mic_control.c"
+   ],
+   "oldBytes": "38b584b00d001400002d01d0002c22d1",
+   "newBytes": "38b584b00d001400002d01d0002c22d1",
+   "derivation": "2.2.10.51 FW_AUDM_PEER_MSG_ORIG: stock common-data handler for inter-temple frame 0x010C (2.2.10.10 0x56b1f6, Thumb +1; 2.2.9.22 0x56873a, identical 16-byte body). Identified 2026-09-15 from the rodata dispatch table entry {u32 0x010C, handler, 0} at 0x6c12a0 (new) / 0x6be5b0 (old): validates (data,len), logs, then feeds data[0] to the audio-manager peer-message processor 0x556928 and returns 0. mic_peer_sync_hook tail-calls it for every frame it does not swallow."
+  },
+  "0x46aac9": {
+   "new": "0x46b0ad",
+   "kind": "rom-call",
+   "sources": [
+    "mic_control.c"
+   ],
+   "oldBytes": "2de9f84388b006000c0090461f00dff8",
+   "newBytes": "2de9f84388b006000c0090461f00dff8",
+   "derivation": "2.2.10.62 FW_PEER_SEND: inter-temple common-data send (2.2.10.10 0x46b0ac, Thumb +1; 2.2.9.22 0x46aac8, identical 16-byte body). Identified 2026-09-15 by mapping the audio manager's AUDM_SendSyncMsgToPeer body from the openCFW 2.2.6.10 image (0x54F694) into both images (2.2.10.10 0x56af78, 2.2.9.22 0x5684bc): that sender's only transport call is `mov.w r0,#0x10c; add r1,sp,#0xc; movs r2,#1; movs r3,#0; bl` here, i.e. send(record_id, buf, len, opt=0). openCFW names the 2.2.6.10 twin 0x4651E0 'G2 common-data peer transport'."
+  },
+  "0x593139": {
+   "new": "0x595d3d",
+   "kind": "rom-call",
+   "sources": [
+    "mic_control.c"
+   ],
+   "oldBytes": "2de9f84f86b004008a4690461d00109e",
+   "newBytes": "2de9f84f86b004008a4690461d00109e",
+   "derivation": "2.2.10.62 FW_LC3_ENCODE_MONO: stock SVC_Lc3EncodeMono (2.2.10.10 0x595d3c, Thumb +1; 2.2.9.22 0x593138, matched by BL-masked 48-byte body). Identified 2026-09-15 from the pool references to the '[svc.audio]lc3_encode failed at frame %d, ret=%d' and 'SVC_Lc3EncodeMono' strings; ABI per openCFW g2-liblc3-service-audio-route.md: int encode(const void *pcm, uint32_t bytes, void *out, int32_t *written, void *ctx) with the 0x1c-byte context header {fmt, dt_us, sr_hz, nch, ch, bitrate, enc} and inline encoder storage; the encoder is created lazily via lc3_setup_encoder (0x5ad5a4) when ctx->enc == 0."
+  },
+  "0x5d60eb": {
+   "new": "0x5d8ddb",
+   "kind": "rom-call",
+   "sources": [
+    "zlib_glue.c"
+   ],
+   "derivation": "2.2.10.69 FW_INFLATE_RESET: zlib 1.1.4 inflateReset (2.2.10.10 0x5d8dda, Thumb +1; 2.2.9.22 0x5d60ea). Identified 2026-09-15: the function immediately preceding the already-reviewed inflateEnd (0x5d612b -> 0x5d8e1b, same +0x2cf0 delta) with the exact zlib body: z/z->state NULL check returns Z_STREAM_ERROR(-2), total_in=total_out=0, msg=NULL, state->mode = state->nowrap ? BLOCKS(7) : METHOD(0), then inflate_blocks_reset(state->blocks, z, NULL). Byte-identical in both images.",
+   "oldBytes": "80b5002802d0c169002902d17ff0010015e0002141614169816000218161c169c968002901d0072100e00021c2691170",
+   "newBytes": "80b5002802d0c169002902d17ff0010015e0002141614169816000218161c169c968002901d0072100e00021c2691170"
+  },
+  "0x442389": {
+   "new": "0x442389",
+   "kind": "rom-call",
+   "sources": [
+    "zlib_glue.c"
+   ],
+   "derivation": "2.2.10.69 FW_SEM_TAKE: FreeRTOS xQueueSemaphoreTake(handle, ticks) (same address in 2.2.9.22 and 2.2.10.10; kernel text is unchanged between the two). Identified 2026-09-15 as the single BL target inside the stock display-gate wrapper FUN_00479482 (already reviewed as 0x479483 -> 0x47a717) after it loads the semaphore handle and 1000 ticks; the wrapper returns pdTRUE/pdFALSE from this call only to discard it (pop {r0,pc}), which is why the CFW calls it directly. Body: NULL/invalid-queue configASSERT stubs, then the standard semaphore take loop.",
+   "oldBytes": "73b582b0060000240025002e06d1d2f135fa00205ff0ff310860fee7306c002806d0d2f12bfa00205ff0ff310860fee7",
+   "newBytes": "73b582b0060000240025002e06d1d5f1adf800205ff0ff310860fee7306c002806d0d5f1a3f800205ff0ff310860fee7"
+  },
+  "0x5410ef": {
+   "new": "0x543997",
+   "kind": "rom-call",
+   "sources": [
+    "mic_control.c"
+   ],
+   "derivation": "2.2.10.69 FW_HCI_LE_SET_DATA_LEN: Cordio HciLeSetDataLen(handle, txOctets, txTime) (2.2.10.10 0x543996, Thumb +1; 2.2.9.22 0x5410ee). Identified 2026-09-15 in both images by the unique `movw r0,#0x2022` (HCI LE Set Data Length opcode) with length 6 into hciCmdAlloc (the same allocator HciLeSetPhyCmd/0x2032 uses, reviewed via FW_DM_SET_PHY), followed by three little-endian u16 stores (handle, txOctets, txTime) and hciCmdSend. Bodies identical modulo BL displacement.",
+   "oldBytes": "70b506000c001500062142f22200fff750fe0100002815d0c81c0670401cb6b2360a0670401c0470401ca4b2240a0470",
+   "newBytes": "70b506000c001500062142f22200fff74efe0100002815d0c81c0670401cb6b2360a0670401c0470401ca4b2240a0470"
+  },
+  "0x4ca71f": {
+   "new": "0x4cca83",
+   "kind": "rom-call",
+   "sources": [
+    "mic_control.c"
+   ],
+   "derivation": "2.2.10.69 FW_DM_CONN_CCB: Cordio dmConnCcbById(connId) -> dmConnCcb_t* or NULL (2.2.10.10 0x4cca82, Thumb +1; 2.2.9.22 0x4ca71e). Identified 2026-09-15 as the lookup DmSetPhy (reviewed 0x4db279 -> 0x4ddb05) calls between its WSF lock/unlock: table base literal, 0x30-byte entries indexed by connId-1, valid flag at +0x16, NULL when unused; DmSetPhy then reads the HCI handle u16 at +0xc, which mic_request_dle reuses. Byte-identical in both images except the table literal.",
+   "oldBytes": "411e30229c4b0800c0b250431844807d002804d0c9b2514303eb010000e000207047444d0000934a0323002005e0917d",
+   "newBytes": "411e30229c4b0800c0b250431844807d002804d0c9b2514303eb010000e000207047444d0000934a0323002005e0917d"
+  },
+  "0x200769e4": {
+   "new": "0x200769e4",
+   "kind": "ram",
+   "sources": [
+    "zlib_glue.c"
+   ],
+   "derivation": "2.2.10.10 RAM cell (same address as key): the stock display-gate semaphore handle. Identified 2026-09-15 as the literal loaded by the reviewed display-gate take/give wrappers (2.2.10.10 0x47a716 `ldr r2,[pc,#0xe8]` -> literal 0x47a804; 2.2.9.22 0x479482 loads 0x2007698c the same way). Both wrappers test the cell for NULL, take/give it through the FreeRTOS semaphore entries, and log on failure; the CFW takes it directly so the take result is observable."
+  },
+  "0x20004780": {
+   "new": "0x20004780",
+   "kind": "ram",
+   "sources": [
+    "mic_control.c"
+   ],
+   "derivation": "2.2.10.10 RAM cell (same address in 2.2.9.22): the stock ble_msgtx control block; the FreeRTOS handle of the 150-entry msgtx queue is at +0xc. Identified 2026-09-15 as the literal the msgtx enqueue (2.2.10.10 0x47e5de, 2.2.9.22 0x47d342 \u2014 the six-argument function every reviewed notify entry calls, openCFW open_cfw_ble_msgtx_enqueue) loads before testing the handle for NULL and posting with xQueueGenericSend 0x443298. The CFW reads the queue depth (Queue_t.uxMessagesWaiting at handle+0x38, uxLength at +0x3c; layout confirmed by the semaphore take checking uxItemSize at +0x40) to back-pressure relay notifies below the enqueue's silent half-capacity drop."
+  }
+ },
+ "hooks": [
+  {
+   "symbol": "PRIMARY_TLSF_SIZE_SITE",
+   "oldAddress": "0x48c350",
+   "newAddress": "0x48d680",
+   "oldBytes": "5ff43432",
+   "newStockBytes": "5ff43432",
+   "function": null,
+   "patchedBytes": "5ff43332"
+  },
+  {
+   "symbol": "LOADBMP_BL_SITE",
+   "oldAddress": "0x4a4402",
+   "newAddress": "0x4a5736",
+   "oldBytes": "49f0daff",
+   "newStockBytes": "4bf08afa",
+   "function": "image_deferred"
+  },
+  {
+   "symbol": "SNAPSHOT_BL_SITE",
+   "oldAddress": "0x4ec0ee",
+   "newAddress": "0x4ee982",
+   "oldBytes": "70f775ff",
+   "newStockBytes": "6ef7ebfc",
+   "function": "snapshot_side"
+  },
+  {
+   "symbol": "IMAGE_ACK_SUCCESS_SITE",
+   "oldAddress": "0x4ec10e",
+   "newAddress": "0x4ee9a2",
+   "oldBytes": "30d0",
+   "newStockBytes": "30d0",
+   "function": null,
+   "patchedBytes": "1cd0"
+  },
+  {
+   "symbol": "SETTINGS_BL_SITE",
+   "oldAddress": "0x4a90e4",
+   "newAddress": "0x4aa418",
+   "oldBytes": "d4f790fb",
+   "newStockBytes": "d4f744fb",
+   "function": "settings_send_wrapper"
+  },
+  {
+   "symbol": "SETTINGS_DECODE_BL_SITE",
+   "oldAddress": "0x4a87e4",
+   "newAddress": "0x4a9b18",
+   "oldBytes": "f5f710f9",
+   "newStockBytes": "f5f710f9",
+   "function": "settings_decode_wrapper"
+  },
+  {
+   "symbol": "DISPLAY_START_BL_SITES",
+   "oldAddress": "0x45f146",
+   "newAddress": "0x45f4c6",
+   "oldBytes": "0bf02af9",
+   "newStockBytes": "0bf05cfa",
+   "function": "faceclaw_display_start"
+  },
+  {
+   "symbol": "DISPLAY_START_BL_SITES",
+   "oldAddress": "0x45f206",
+   "newAddress": "0x45f586",
+   "oldBytes": "0bf0caf8",
+   "newStockBytes": "0bf0fcf9",
+   "function": "faceclaw_display_start_headup"
+  },
+  {
+   "symbol": "GESTURE_PRESS_SITE",
+   "oldAddress": "0x444a3a",
+   "newAddress": "0x444ab8",
+   "oldBytes": "1df057fc",
+   "newStockBytes": "1df0d8fd",
+   "function": "gesture_press"
+  },
+  {
+   "symbol": "GESTURE_SHORT_LONG_SITE",
+   "oldAddress": "0x444a40",
+   "newAddress": "0x444ac0",
+   "oldBytes": "24f023f9",
+   "newStockBytes": "24f0a3fa",
+   "function": "gesture_short_long"
+  },
+  {
+   "symbol": "GESTURE_RELEASE_SITE",
+   "oldAddress": "0x444d36",
+   "newAddress": "0x444f46",
+   "oldBytes": "1df0d9fa",
+   "newStockBytes": "1df091fb",
+   "function": "gesture_release"
+  },
+  {
+   "symbol": "EVENAI_ENTRY_SITE",
+   "oldAddress": "0x4f5156",
+   "newAddress": "0x4f79fa",
+   "oldBytes": "7fb50600",
+   "newStockBytes": "7fb50600",
+   "function": "faceclaw_evenai_display_entry"
+  },
+  {
+   "symbol": "DISPLAY_COPY_BL_SITES",
+   "oldAddress": "0x4798f2",
+   "newAddress": "0x47ab86",
+   "oldBytes": "f6f7edff",
+   "newStockBytes": "f6f795f9",
+   "function": "display_copy_hook"
+  },
+  {
+   "symbol": "DISPLAY_COPY_BL_SITES",
+   "oldAddress": "0x479a2e",
+   "newAddress": "0x47acc2",
+   "oldBytes": "f6f74fff",
+   "newStockBytes": "f6f7f7f8",
+   "function": "display_copy_hook"
+  },
+  {
+   "symbol": "WEAR_NOTIFY_BL_SITES",
+   "oldAddress": "0x4ac3ea",
+   "newAddress": "0x4ad71e",
+   "oldBytes": "d9f758ff",
+   "newStockBytes": "d9f756ff",
+   "function": "faceclaw_send_wear_event"
+  },
+  {
+   "symbol": "WEAR_NOTIFY_BL_SITES",
+   "oldAddress": "0x4ac44e",
+   "newAddress": "0x4ad782",
+   "oldBytes": "d9f726ff",
+   "newStockBytes": "d9f724ff",
+   "function": "faceclaw_send_wear_event"
+  },
+  {
+   "symbol": "BLE_2M_SITE",
+   "oldAddress": "0x4c6b30",
+   "newAddress": "0x4c8c5c",
+   "oldBytes": "7c205070",
+   "newStockBytes": "7c205070",
+   "patchedBytes": "7d20",
+   "function": null
+  },
+  {
+   "symbol": "BLE_FAST_INTERVAL_SITE",
+   "oldAddress": "0x7ae7b8",
+   "newAddress": "0x7b2870",
+   "oldBytes": "0c0018000000580205000000",
+   "newStockBytes": "0c0018000000580205000000",
+   "patchedBytes": "0c001800",
+   "function": null,
+   "note": "2.2.10.22+: min = max = 15 ms (the exact form Apple accepts; a 15-30 range left the Mac's 30 ms default in force). 2.2.10.21: 0c001800; 2.2.10.19/20: 09000c00; <= 2.2.10.18: 06000600."
+  },
+  {
+   "symbol": "BLE_FORCE_FAST_SITE",
+   "oldAddress": "0x47ae50",
+   "newAddress": "0x47c0ec",
+   "oldBytes": "0500f9f7b3fb",
+   "newStockBytes": "0500f9f791fb",
+   "patchedBytes": "a325",
+   "blOffset": 2,
+   "function": null
+  },
+  {
+   "symbol": "HEADUP_GATE_BL_SITE",
+   "oldAddress": "0x45f006",
+   "newAddress": "0x45f386",
+   "oldBytes": "10f096f8",
+   "newStockBytes": "10f0c8f9",
+   "function": "headup_gate"
+  },
+  {
+   "symbol": "IDLE_INPUT_GATE_SITE",
+   "oldAddress": "0x45f01a",
+   "newAddress": "0x45f39a",
+   "oldBytes": "fff765fb",
+   "newStockBytes": "fff765fb",
+   "bl": true,
+   "function": "faceclaw_idle_input_gate"
+  },
+  {
+   "symbol": "COMPASS_DECODE_BL_SITE",
+   "oldAddress": "0x4b6922",
+   "newAddress": "0x4b8806",
+   "oldBytes": "65f0affd",
+   "newStockBytes": "66f08ffa",
+   "function": "compass_decode_capture"
+  },
+  {
+   "symbol": "COMPASS_REPORT_BL_SITE",
+   "oldAddress": "0x4b632e",
+   "newAddress": "0x4b8212",
+   "oldBytes": "fff759fc",
+   "newStockBytes": "fff759fc",
+   "function": "compass_report_event"
+  },
+  {
+   "symbol": "AUDM_PEER_SYNC_TABLE_SITE",
+   "oldAddress": "0x6be5b4",
+   "newAddress": "0x6c12a4",
+   "oldBytes": "3b875600",
+   "newStockBytes": "f7b15600",
+   "function": "mic_peer_sync_hook"
+  }
+ ],
+ "tlsfTailInstructionFalsePositives": [
+  {
+   "address": "0x522960",
+   "bytes": "81f82920",
+   "decoded": "strb.w r2, [r1, #0x29]"
+  },
+  {
+   "address": "0x522a88",
+   "bytes": "81f82920",
+   "decoded": "strb.w r2, [r1, #0x29]"
+  },
+  {
+   "address": "0x522c1e",
+   "bytes": "81f82920",
+   "decoded": "strb.w r2, [r1, #0x29]"
+  },
+  {
+   "address": "0x54a56a",
+   "bytes": "94f82920",
+   "decoded": "ldrb.w r2, [r4, #0x29]"
+  },
+  {
+   "address": "0x54a5b6",
+   "bytes": "94f82920",
+   "decoded": "ldrb.w r2, [r4, #0x29]"
+  },
+  {
+   "address": "0x58389c",
+   "bytes": "80f82920",
+   "decoded": "strb.w r2, [r0, #0x29]"
+  },
+  {
+   "address": "0x58459e",
+   "bytes": "90f82920",
+   "decoded": "ldrb.w r2, [r0, #0x29]"
+  },
+  {
+   "address": "0x5c5b2c",
+   "bytes": "56f82920",
+   "decoded": "ldr.w r2, [r6, sb, lsl #2]"
+  },
+  {
+   "address": "0x5e0538",
+   "bytes": "50f82920",
+   "decoded": "ldr.w r2, [r0, sb, lsl #2]"
+  },
+  {
+   "address": "0x60f9ca",
+   "bytes": "58f82920",
+   "decoded": "ldr.w r2, [r8, sb, lsl #2]"
+  },
+  {
+   "address": "0x60f9ec",
+   "bytes": "56f82920",
+   "decoded": "ldr.w r2, [r6, sb, lsl #2]"
+  },
+  {
+   "address": "0x60f9f4",
+   "bytes": "56f82920",
+   "decoded": "ldr.w r2, [r6, sb, lsl #2]"
+  },
+  {
+   "address": "0x60fa32",
+   "bytes": "56f82920",
+   "decoded": "ldr.w r2, [r6, sb, lsl #2]"
+  },
+  {
+   "address": "0x60fa58",
+   "bytes": "52f82920",
+   "decoded": "ldr.w r2, [r2, sb, lsl #2]"
+  },
+  {
+   "address": "0x60fa72",
+   "bytes": "52f82920",
+   "decoded": "ldr.w r2, [r2, sb, lsl #2]"
+  },
+  {
+   "address": "0x60fa7a",
+   "bytes": "56f82920",
+   "decoded": "ldr.w r2, [r6, sb, lsl #2]"
+  },
+  {
+   "address": "0x60fa94",
+   "bytes": "57f82920",
+   "decoded": "ldr.w r2, [r7, sb, lsl #2]"
+  },
+  {
+   "address": "0x60faa2",
+   "bytes": "52f82920",
+   "decoded": "ldr.w r2, [r2, sb, lsl #2]"
+  },
+  {
+   "address": "0x615b0c",
+   "bytes": "51f82920",
+   "decoded": "ldr.w r2, [r1, sb, lsl #2]"
+  },
+  {
+   "address": "0x615b12",
+   "bytes": "41f82920",
+   "decoded": "str.w r2, [r1, sb, lsl #2]"
+  }
+ ],
+ "stockIdentityCount": 15,
+ "sourceSha256": {
+  "als_sensor.c": "4ba0f4d5b5f8d54a85cc712c37a29f013f3b8b30e906a75737f2faf866b777bc",
+  "apply_patches.py": "e8bdcbd5cdb70c7d27e7ee40acb10c9c0c3ca3833269974819fe7ad0a861a4d6",
+  "build.py": "77641c27cedf10df2be23e08623ff54c4aaf0f85e1e0727ce5d507b29c6a6abd",
+  "cfw_context.c": "8d47971db4811d125f1d1b0557167e75c283ad3d7719d3aec00f2da6194d5663",
+  "cfw_context.h": "3ca2d175dbb1d00965f910b138f6e149968f99bc8532a5207aef9b4602438987",
+  "cfw_patches.json": "2a7134fc27efa44090698d8314634590b9369633b76361b4854b9f1370dfe453",
+  "compass.c": "8cf825c18a6a5fe90aac7d5f015254f7e4285f56c58cd9162b23fc33bb887e64",
+  "debug.c": "6425771d6176b20e59c839d6a5b8b14a62765b7dc56754573e17d9ca0f53b9bd",
+  "debug.h": "ab412e8f802f1e1dc660806c921e634c14508167cd4dff421380745cbaa8d1bb",
+  "draw.c": "c920c107be7bbb14a8062bced46f51ab7f8b821d2afd82aab6cf42ad2c6a0c3b",
+  "draw.h": "2ee0429058ebaa26716c6104c780066ff0c0a66bae3ddc05b2ac1f9b6d504668",
+  "gen_patches.py": "a4b7975d45394c5c63525a6702acd5841c27c87f88448f986a564c83330e03ea",
+  "gesture_fwd.c": "7ac458076c6a78043d76144b27c4a864228e6d811fa6cb4f0dbc5216b2dc8f1e",
+  "malloc.c": "52aa63bb01c249197c1af5be9fb0c8b39ec6f53fd373e9eb3ad5cd31c9bbb7db",
+  "malloc.h": "ced997a766dbbd2bc63a6c86a91cf470a0b2fa542b393f908b31d8db7bad91e8",
+  "mic_control.c": "8c4dc7b0d4eda1a747abeab837cc3d58eb4ad4798084829de16af8638a216930",
+  "patch_compress.py": "e14b2856be20aa395f6d1f8a0e9fbb3830538a54054b2004f5da583f64c02e1e",
+  "patches_main.c": "d46b3bc24efc60109df7a8db66bbf728e8bd336e702ed6d3de64433fa6fc850d",
+  "protobuf.c": "965661ea640f46c095a522a1367d53dde03ea02aa3d7293ad36c44f4dbfa0564",
+  "protobuf.h": "3dbb978f30b350d77d5686d82d4eaad21cd83a4fdebe641bc2da1032652d8e3b",
+  "ring_battery.c": "509b33ac9817116fe96cc751f2c906bb26bdb3224ef446daf863c72789cf7561",
+  "rle.c": "b6f99a570d79e6f37d4402d106c9d905646ed567970a8bd8cd6f92b18bece822",
+  "rle.h": "d270cd5c8a1cfda71f4d4e686073920885f00c1903e0a6733f265c8d1396f61a",
+  "settings_ext.c": "8535213e67a3cc58aefadfc8f608e753ba88ba4e493f52bd314f3b6bf72bb4f6",
+  "texture_cache.c": "7b76922f7c286ef9c278f96cde0f1f925ef1c820dc4e81997dfe8613df760f4b",
+  "texture_cache.h": "ffc2840741642809628e180fcc666d1037c6ca07792282f9995bb51eaa0f97cb",
+  "utils.c": "84c6c52bcf149a9db032420e8bd25eac2a2085fedc7947e131c4e5dc252f1983",
+  "utils.h": "49d71e6876fa672e932bc06a5432be4665641327c557640d5129541a4bd97241",
+  "zlib_glue.c": "3bc284866e12e09fafc818dcd6b8c10207b7f81a0351cfd99b825ecb0b4bd410"
+ },
+ "ringBatteryStockAbi": [
+  {
+   "oldAddress": "0x512d84",
+   "newAddress": "0x515634",
+   "oldBytes": "0200d2b2652a00db6420384a1070c9b2002901d0012000e0002050707047334890f90000c0b27047304840787047",
+   "newBytes": "0200d2b2652a00db6420384a1070c9b2002901d0012000e0002050707047334890f90000c0b27047304840787047",
+   "description": "cache setter and accessors"
+  },
+  {
+   "oldAddress": "0x512e70",
+   "newAddress": "0x515720",
+   "oldBytes": "a6720720",
+   "newBytes": "14730720",
+   "description": "cache address literal"
+  },
+  {
+   "oldAddress": "0x47efa8",
+   "newAddress": "0x480260",
+   "oldBytes": "80b534f01ff8002808d0fff77eff002801d0012000e00020c0b207e0fff77bff002801d0012000e00020c0b202bd",
+   "newBytes": "80b534f01ffe002808d0fff77eff002801d0012000e00020c0b207e0fff77bff002801d0012000e00020c0b202bd",
+   "description": "dashboard connection predicate"
+  },
+  {
+   "oldAddress": "0x47eeb2",
+   "newAddress": "0x48016a",
+   "oldBytes": "1a480078c0f30010c0b2704717480078c0f34010c0b27047",
+   "newBytes": "1a480078c0f30010c0b2704717480078c0f34010c0b27047",
+   "description": "connection-bit getters"
+  },
+  {
+   "oldAddress": "0x47ef1c",
+   "newAddress": "0x4801d4",
+   "oldBytes": "06740720",
+   "newBytes": "89740720",
+   "description": "connection-bit address literal"
+  },
+  {
+   "oldAddress": "0x4a9be2",
+   "newAddress": "0x4aaf16",
+   "oldBytes": "80b569f0ddf802bd",
+   "newBytes": "80b56af09bfb02bd",
+   "description": "dashboard battery getter"
+  }
+ ],
+ "fastIntervalTableReferences": {
+  "oldTableMinus4": "0x7ae7b4",
+  "newTableMinus4": "0x7b286c",
+  "count": 2
+ },
+ "trampolineLiterals": {
+  "settings_ext.c": [
+   [
+    "movw r12, #0x515b",
+    "movw r12, #0x79ff"
+   ]
+  ],
+  "gesture_fwd.c": [
+   [
+    "movw r0, #0x4fe9",
+    "movw r0, #0x5327"
+   ],
+   [
+    "movw r3, #0x8c8b",
+    "movw r3, #0x900b"
+   ],
+   [
+    "movw r0, #0xf137",
+    "movw r0, #0xf71b"
+   ]
+  ]
+ },
+ "capabilityMarker": "Faceclaw/3"
+}

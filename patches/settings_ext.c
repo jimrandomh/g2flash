@@ -75,13 +75,13 @@ void mic_apply_control(const uint8_t *data, uint32_t len);
 unsigned mic_append_status(unsigned char *buf, unsigned len, unsigned capacity);
 typedef void (*display_start_fn)(unsigned app_id, void *arg, unsigned arg_len, void *cb);
 
-#define FW_SEND 0x0047d809 /* FUN_0047d808 | thumb bit */
-#define FW_NOTIFY_SEND 0x0047d90fu /* FUN_0047d90e | thumb bit */
-#define FW_PB_DECODE ((pb_decode_fn)0x0049da09u)       /* FUN_0049da08 */
-#define FW_DISPLAY_START ((display_start_fn)0x0046a39fu) /* FUN_0046a39e */
-#define FW_SIDE_ID ((lens_side_fn)0x0045cfddu)         /* 1=right, 2=left */
+#define FW_SEND 0x0047eaa5 /* FUN_0047d808 | thumb bit */
+#define FW_NOTIFY_SEND 0x0047ebabu /* FUN_0047d90e | thumb bit */
+#define FW_PB_DECODE ((pb_decode_fn)0x0049ed3du)       /* FUN_0049da08 */
+#define FW_DISPLAY_START ((display_start_fn)0x0046a983u) /* FUN_0046a39e */
+#define FW_SIDE_ID ((lens_side_fn)0x0045d35du)         /* 1=right, 2=left */
 typedef unsigned (*wear_status_fn)(void);
-#define FW_WEAR_STATUS ((wear_status_fn)0x004ac333u)   /* cached WearDetect status: 1=off, 2=on */
+#define FW_WEAR_STATUS ((wear_status_fn)0x004ad667u)   /* cached WearDetect status: 1=off, 2=on */
 
 #define FACECLAW_PROTO_VERSION 1u
 #define FACECLAW_CONTROL_FIELD 101u
@@ -210,7 +210,7 @@ static void faceclaw_send_gesture_event(customCfwContext *ctx, unsigned event, u
  * so unlike the double-tap wake there is no CLAIM/fallback handshake, and the
  * stock branch still runs (and frees the record) exactly as before.
  *
- * HOOK: 0x45f01a `bl FUN_0045e6e8` (the mode check right after the idle gate)
+ * HOOK: 0x0045f39a `bl FUN_0045e6e8` (the mode check right after the idle gate)
  * is retargeted to faceclaw_idle_input_gate. r4 holds the input record there:
  * u16 raw source at +2 (0/1 = temple touchpads, 4 = ring), u32 gesture subtype
  * at +4 -- the same record the UI dispatcher reads (from +2) while an app is
@@ -218,7 +218,7 @@ static void faceclaw_send_gesture_event(customCfwContext *ctx, unsigned event, u
  * mode result unchanged and only forwards in the mode where the stock code
  * would have launched the dashboard on a double tap (mode != 1). */
 typedef int (*idle_mode_fn)(void);
-#define FW_IDLE_MODE ((idle_mode_fn)0x0045e6e9u) /* FUN_0045e6e8 */
+#define FW_IDLE_MODE ((idle_mode_fn)0x0045ea69u) /* FUN_0045e6e8 */
 #define IDLE_GESTURE_TAP     0u
 #define IDLE_GESTURE_LONG    3u
 #define IDLE_GESTURE_RELEASE 0xeu
@@ -265,7 +265,7 @@ __attribute__((used, noinline)) void faceclaw_send_wear_event(unsigned wearing) 
 }
 
 /* Replaces the two dashboard-start BLs in the idle policy: the double-tap site
- * (0x45f146) through faceclaw_display_start and the head-up site (0x45f206)
+ * (0x0045f4c6) through faceclaw_display_start and the head-up site (0x0045f586)
  * through faceclaw_display_start_headup, so the phone learns which gesture
  * woke it. A second double tap while a wake is pending is an emergency
  * stock-dashboard override; a head-up while one is pending is not (a head
@@ -413,7 +413,7 @@ int settings_decode_wrapper(void *stream, const void *fields, void *dest) {
 /* Entry trampoline for even_ai_display_ctrl. The first four stock bytes
  * (`push {r0-r6,lr}; mov r6,r0`) are replaced by a B.W here. Reproduce them,
  * suppress only START while a valid Faceclaw lease exists, and otherwise
- * resume the stock function at 0x004f515a with every argument restored. */
+ * resume the stock function at 0x004f79fe with every argument restored. */
 __attribute__((naked)) void faceclaw_evenai_display_entry(void) {
     __asm volatile(
         "push {r0-r6, lr}\n"
@@ -426,7 +426,7 @@ __attribute__((naked)) void faceclaw_evenai_display_entry(void) {
         "ldmia sp, {r0-r3}\n"
         "mov r6, r0\n"
         "1:\n"
-        "movw r12, #0x515b\n"   /* 0x004f515a | Thumb bit; BX needs bit 0 set */
+        "movw r12, #0x79ff\n"   /* 0x004f79fe | Thumb bit; BX needs bit 0 set */
         "movt r12, #0x004f\n"
         "bx r12\n"
         "2:\n"

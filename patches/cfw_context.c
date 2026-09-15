@@ -6,7 +6,8 @@
 static customCfwContext *peekCustomCfwContext(void) {
     customCfwContext *ctx = *(customCfwContext **)CFW_CTX_SLOT;
     if (((uintptr_t)ctx & 3) == 0 && (uintptr_t)ctx - 0x20000000u < 0x00800000u &&
-        ctx->magic == CFW_CTX_MAGIC)
+        ctx->magic == CFW_CTX_MAGIC &&
+        ctx->ctx_size == (uint32_t)sizeof(customCfwContext))   /* 2.2.10.38: same layout only */
         return ctx;
     return 0;
 }
@@ -24,6 +25,7 @@ static customCfwContext *getCustomCfwContext(void) {
     if (ctx) {
         bzero((uint8_t *)ctx, sizeof(customCfwContext));
         ctx->magic = CFW_CTX_MAGIC;
+        ctx->ctx_size = (uint32_t)sizeof(customCfwContext);   /* 2.2.10.38 */
         ctx->diag_hide = 1;    /* overlay off by default; mode 7 sub 2 turns it on */
         for (uint32_t i = 0; i < CFW_FID_RING; i++) ctx->recent_fids[i] = 0xffff;  /* sentinel */
     }

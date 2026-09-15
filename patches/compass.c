@@ -8,7 +8,7 @@
  * selection both run on the sensor-hub task. Never infer the source later from
  * a global that may already describe a newer sample.
  *
- * Replace the heading-report call at 0x4b632e, preserving its stock UI event,
+ * Replace the heading-report call at 0x004b8212, preserving its stock UI event,
  * and send one sid-8 command-15 notification directly. This replaces the old
  * CFW global-display forwarding hook (it must not also emit a second heading).
  * Stock Navigation remains untouched. The sender copies its stack payload.
@@ -22,16 +22,16 @@
  * Magnetic flags otherwise carry the driver's last known values.
  */
 #ifndef COMPASS_HOST_TEST
-#define COMPASS_DECODE ((int (*)(void *, const void *, const void *, uint8_t *))0x0051c485U)
-#define COMPASS_STOCK_EVENT ((int (*)(uint32_t, int32_t))0x004b5be5U)
+#define COMPASS_DECODE ((int (*)(void *, const void *, const void *, uint8_t *))0x0051ed29U)
+#define COMPASS_STOCK_EVENT ((int (*)(uint32_t, int32_t))0x004b7ac9U)
 /* Thread_MsgPbNotifyByBle, as called by stock navigation at 0x59f58c.
- * MsgPbTxByBle (0x47d808, used by ALS replies) gives the wrong frame flag. */
-#define COMPASS_SEND ((int (*)(int, int, const uint8_t *, unsigned))0x0047d90fU)
-#define COMPASS_SIDE ((int (*)(void))0x0045cfddU)
+ * MsgPbTxByBle (0x0047eaa4, used by ALS replies) gives the wrong frame flag. */
+#define COMPASS_SEND ((int (*)(int, int, const uint8_t *, unsigned))0x0047ebabU)
+#define COMPASS_SIDE ((int (*)(void))0x0045d35dU)
 #define COMPASS_RING ((volatile uint8_t *)0x200652e0U)
-#define COMPASS_MAG_SEEN (*(volatile uint8_t *)0x2007737eU)
-#define COMPASS_ACCURACY (*(volatile uint8_t *)0x20077380U)
-#define COMPASS_ANOMALIES (*(volatile uint8_t *)0x2007737fU)
+#define COMPASS_MAG_SEEN (*(volatile uint8_t *)0x200773feU)
+#define COMPASS_ACCURACY (*(volatile uint8_t *)0x20077400U)
+#define COMPASS_ANOMALIES (*(volatile uint8_t *)0x200773ffU)
 #endif
 
 int compass_decode_capture(void *device, const void *sensor0, const void *sensor1, uint8_t *gaf) {

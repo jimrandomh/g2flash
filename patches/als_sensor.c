@@ -45,9 +45,9 @@
  * scaled by scale_q10 (learned from the user's manual adjustments, 0x266..0x59a).
  *
  * Driver globals (all on the master lens, all written only by the hub task):
- *   0x200763d4 opened      0x200763d8 status     0x200763f0 als value
- *   0x200763f4 peak        0x200763f8 gear       0x20076400 target level
- *   0x20000068 scale_q10   0x20074c80 settings: +1 brightness level, +2 auto on
+ *   0x2007640c opened      0x20076410 status     0x20076428 als value
+ *   0x2007642c peak        0x20076430 gear       0x20076438 target level
+ *   0x20000068 scale_q10   0x20074c90 settings: +1 brightness level, +2 auto on
  *
  * WHAT THIS EXTENSION ADDS
  *
@@ -107,29 +107,29 @@ typedef int      (*als_hub_func_fn)(uint32_t func_id); /* FUN_004b80ee open / FU
 typedef int      (*als_send_fn)(int type, int sid, unsigned char *buf, unsigned len);
 typedef void     (*als_hub_handler_fn)(void *msg);
 
-#define ALS_FW_READ        ((als_read_fn)0x004bf483U)
-#define ALS_FW_RING_PUSH   ((als_ring_push_fn)0x004bededU)
-#define ALS_FW_RING_PEAK   ((als_ring_peak_fn)0x004bef4bU)
-#define ALS_FW_TARGET      ((als_target_fn)0x004bf177U)
-#define ALS_FW_TIMER_START ((als_timer_start_fn)0x004b7b29U)
-#define ALS_FW_FUNC_OPEN   ((als_hub_func_fn)0x004b80efU)
-#define ALS_FW_FUNC_CLOSE  ((als_hub_func_fn)0x004b8161U)
-#define ALS_FW_SEND        ((als_send_fn)0x0047d809U)   /* FUN_0047d808 aa21 send */
-#define ALS_FW_SIDE        ((lens_side_fn)0x0045cfddU)  /* 1 = master lens */
+#define ALS_FW_READ        ((als_read_fn)0x004c1367U)
+#define ALS_FW_RING_PUSH   ((als_ring_push_fn)0x004c0cd1U)
+#define ALS_FW_RING_PEAK   ((als_ring_peak_fn)0x004c0e2fU)
+#define ALS_FW_TARGET      ((als_target_fn)0x004c105bU)
+#define ALS_FW_TIMER_START ((als_timer_start_fn)0x004b9a0dU)
+#define ALS_FW_FUNC_OPEN   ((als_hub_func_fn)0x004b9fd3U)
+#define ALS_FW_FUNC_CLOSE  ((als_hub_func_fn)0x004ba045U)
+#define ALS_FW_SEND        ((als_send_fn)0x0047eaa5U)   /* FUN_0047d808 aa21 send */
+#define ALS_FW_SIDE        ((lens_side_fn)0x0045d35dU)  /* 1 = master lens */
 
 #define ALS_HUB_FUNC_ID    4u          /* sensor-hub FuncOpen/FuncClose type for the ALS */
 #define ALS_HUB_MSG_ID     8u          /* hub message posted by the ALS timer */
 #define ALS_HUB_TABLE      0x20003d08U /* 8 x {uint16 id, pad, fn} — hub struct + 0x24 */
 #define ALS_HUB_TABLE_N    8u
 
-#define ALS_OPENED     (*(volatile uint32_t *)0x200763d4U)
-#define ALS_STATUS     (*(volatile uint32_t *)0x200763d8U)
-#define ALS_VALUE      (*(volatile uint32_t *)0x200763f0U)
-#define ALS_PEAK       (*(volatile uint32_t *)0x200763f4U)
-#define ALS_GEAR       (*(volatile uint32_t *)0x200763f8U)
-#define ALS_TARGET     (*(volatile uint32_t *)0x20076400U)
+#define ALS_OPENED     (*(volatile uint32_t *)0x2007640cU)
+#define ALS_STATUS     (*(volatile uint32_t *)0x20076410U)
+#define ALS_VALUE      (*(volatile uint32_t *)0x20076428U)
+#define ALS_PEAK       (*(volatile uint32_t *)0x2007642cU)
+#define ALS_GEAR       (*(volatile uint32_t *)0x20076430U)
+#define ALS_TARGET     (*(volatile uint32_t *)0x20076438U)
 #define ALS_SCALE_Q10  (*(volatile uint32_t *)0x20000068U)
-#define ALS_SETTINGS   ((volatile uint8_t *)0x20074c80U) /* +1 level, +2 auto-brightness */
+#define ALS_SETTINGS   ((volatile uint8_t *)0x20074c90U) /* +1 level, +2 auto-brightness */
 
 #define ALS_STATUS_POLLING 3u
 #define ALS_INTERVAL_MIN   100u

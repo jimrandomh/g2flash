@@ -44,7 +44,11 @@ interpreted as custom messages of new types. Image traffic is compressed with
 zlib+RLE. Screen contents can be up to 640x480 (larger than the screen area
 supported by the stock firmware), you can update dirty rects rather than
 updating the whole screen at once, and you can send messages which perform
-rect-to-rect copies for low-bandwidth scroll animations. Because this mode
+rect-to-rect copies for low-bandwidth scroll animations. A changed-region
+update refreshes only the panel rows it touched over QSPI rather than pushing
+the whole 640x480 panel each frame, and the zlib inflate stream and its 32 KiB
+window are kept alive for the whole session (reset per frame) instead of being
+allocated and freed on every update. Because this mode
 writes directly to the framebuffer without going through EvenHub's
 screen-update functions, you cannot mix this mode with EvenHub list or text or
 list containers. A lease-scoped 64 KiB texture cache lets the phone upload RLE
@@ -71,7 +75,18 @@ the active configuration of both temples. When armed, capture is streamed as
 `'SM'` frames carrying the multi-channel samples, a millisecond timestamp, and
 the on-device SSR + TDOA angle estimate — everything a phone-side beamformer
 needs to do direction-of-arrival processing across the four microphones,
-fused with the compass/IMU heading the firmware already forwards. Streaming is
+fused with the compass/IMU heading the firmware already forwards. On a
+bilateral pair the right temple relays its two encoded channels to the left
+over the wired inter-temple link (the audio manager's common-data channel), so
+the phone receives all four microphones as one four-channel LC3 stream on a
+single Bluetooth connection rather than pairing two independent per-temple
+streams; each relayed chunk carries the inter-temple time offset the left
+temple measured, and a relay-statistics record (`'RS'`) reports pairing and
+loss so a dropped chunk shows up as a sequence gap on the phone instead of
+vanishing silently. Because the stock BLE message queue drops a streaming
+notification without warning once it is half full, the relay withholds and
+counts a frame when the queue nears that watermark instead of feeding the
+silent drop. Streaming is
 held by a fail-open 90-second renewal lease, so mics can never be left running
 when the phone goes away. Bringing up the capture hardware is additionally
 gated behind an explicit arm flag because several of the recovered stock audio
@@ -80,16 +95,20 @@ contract comment in `patches/mic_control.c`.
 
 The firmware also reconfigures the bluetooth stack for 2M PHY support and
 requests a 7.5 ms connection interval with latency 0. This prevents the stock
-one-minute slow-mode timer from throttling screen transfers. Connection
-parameters still depend on the phone; it must request  2M PHY and must agree to
-the short connection interval.
+one-minute slow-mode timer from throttling screen transfers. It also asks the
+controller for LE Data Length Extension (251-byte link-layer payloads) on the
+phone link when a microphone session arms, so a four-channel audio
+notification travels in a single radio packet instead of several — the stock
+host never raises its own transmit length. Connection parameters still depend
+on the phone; it must request 2M PHY, must agree to the short connection
+interval, and (for the larger data length) must not refuse the length update.
 
 Some other features this has (used by Faceclaw, but the exact API may not be
 fully documented):
 
  * Receive ring and temple-touchpad long-press and long-press-release as regular
    source-qualified gestures, rather than opening a modal offering to quit
- * Receive 2.2.9's tap-then-long gesture as distinct private event type 11 and,
+ * Receive 2.2.10's tap-then-long gesture as distinct private event type 11 and,
    while the framebuffer lease is held, suppress its incompatible stock Menu path
  * Play sound effects with the piezo buzzer
  * Receive on-head detection wear/unwear events, to trigger a lock-screen
@@ -166,11 +185,11 @@ push custom firmware (a patched `*_cfw.bin` image) onto the device.
 ```bash
 cd g2flash
 ./build_cfw.sh                       # set up venv, download stock fw, patch, verify
-./venv/bin/python g2flash.py -c g2://local -f g2_2.2.9.22_cfw.bin
+./venv/bin/python g2flash.py -c g2://local -f g2_2.2.10.10_cfw.bin
 ```
 
 `build_cfw.sh` does the whole build: it creates `./venv` with the flasher's
-dependencies, downloads the stock **G2 2.2.9.22** firmware from Even's CDN,
+dependencies, downloads the stock **G2 2.2.10.10** firmware from Even's CDN,
 applies the patches in `patches/`, and verifies that both the download and the
 patched result match pinned SHA-256 hashes (so a clean run proves you got
 exactly the reviewed image). Run `./build_cfw.sh --help` for options
@@ -190,19 +209,21 @@ exactly the reviewed image). Run `./build_cfw.sh --help` for options
     This is what `build_cfw.sh` uses to produce the image.
   - `gen_patches.py` — compiles the injected code with **clang** and (re)generates
     `cfw_patches.json`. Run it after editing the patch sources:
-    `python3 patches/gen_patches.py g2_2.2.9.22.bin patches/cfw_patches.json`
+    `python3 patches/gen_patches.py g2_2.2.10.10.bin patches/cfw_patches.json`
     (or `./build_cfw.sh --update-patches`), then commit the JSON.
   - `patch_compress.py` — the all-in-one patcher (576 carrier lift + image
     compression + direct framebuffer presentation + capability field);
     `gen_patches.py` calls it to build the ops.
     Holds every stock-firmware address the patches depend on; see
-    `../notes/fw-2.2.9.22-cfw-rebase.md` for how they were derived.
+    `patches/REBASE-2.2.10.10.md` (this fork's 2.2.9.22 -> 2.2.10.10 rebase) and
+    `../notes/fw-2.2.9.22-cfw-rebase.md` (the earlier 2.2.6.10 -> 2.2.9.22 rebase)
+    for how they were derived.
   - `build.py`, `*.c` — the C→position-independent-Thumb pipeline and sources
     for the injected firmware code (compiled by `gen_patches.py`; the resulting
     machine code lands in `cfw_patches.json`).
 - `requirements.txt` — the flasher's Python dependencies.
 
-Firmware images (`g2_2.2.9.22*.bin`) are **not** checked in — they are Even's
+Firmware images (`g2_2.2.10.10*.bin`) are **not** checked in — they are Even's
 firmware, so you build them locally with `build_cfw.sh`.
 
 ## Requirements
@@ -292,15 +313,15 @@ otherwise the glasses reject the component on END with status 7 (CHECK_FAIL).
 # dry run: connect to both arms over the local radio and stop before any write
 python g2flash.py \
   -c 'g2://local?left=AA:BB:CC:11:22:33&right=AA:BB:CC:44:55:66&addressType=public' \
-  -f g2_2.2.9.22.bin --stop-before flash
+  -f g2_2.2.10.10.bin --stop-before flash
 
 # fix checksums after patching, no device needed
-python g2flash.py --recompute-checksums g2_2.2.9.22_cfw.bin
+python g2flash.py --recompute-checksums g2_2.2.10.10_cfw.bin
 
 # flash the custom firmware to both arms via DroidBridge
 python g2flash.py \
   -c 'g2://droidbridge?phone=192.168.1.50&port=8080&token=secret&left=AA:BB:CC:11:22:33&right=AA:BB:CC:44:55:66' \
-  -f g2_2.2.9.22_cfw.bin
+  -f g2_2.2.10.10_cfw.bin
 ```
 
 ## How it works (brief)
@@ -311,7 +332,7 @@ is an EVENOTA container of five or six components; each is streamed over the fir
 data service (`...e1001`) as a FILE_CHECK subheader followed by 4 KB blocks,
 then an END check the glasses verify against a per-component CRC32C. Before
 BEGIN, it performs the stock control-channel authentication handshake; omitting
-that handshake appears to cause firmware 2.2.9 to close an otherwise busy GATT
+that handshake appears to cause firmware 2.2.10 to close an otherwise busy GATT
 connection after about 30 seconds. OTA data fragments refresh the transfer watchdog. The
 official OTA capture sends no EvenHub-control heartbeats between BEGIN and the
 final END, so neither does this flasher. DroidBridge flashes also reuse one HTTP connection
