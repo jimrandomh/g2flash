@@ -111,15 +111,18 @@ static void append_free_kib(char *out, uint32_t free_bytes, uint32_t maxlen) {
         u_to_dec(out, free_bytes >> 10, maxlen); /* round down: never overstate */
 }
 
-/* Overlay, as a Terminus 6x12 text line across the top-left of the frame (white on a
- * black bar), the diagnostic flags that are set followed by the PREVIOUS message's
- * timings. Flags: REORDER, SKIP, DUP, SNAPOF, ALLOC (the last is set by any failed
- * CFW-owned allocation); normally all should stay clear, so this reads "OK". The timings
- * are microseconds: `w` = the whole image_worker, `p` = the present_shadow step within
- * it (packed framebuffer copy + cache clean), e.g. "OK w834us p210us". The trailing
- * `f13/20/27=A/B/Ck` values are free KiB (rounded down) in the TLSF arenas beginning at
- * 0x201350a8, 0x202020a8, and 0x202728a8 respectively. Suppressed when diag_hide is set
- * (mode 7). Drawn into the physical packed-4bpp framebuffer. */
+static void append_heap_kib(char *out, cfw_heap_stats stats, uint32_t maxlen) {
+    append_free_kib(out, stats.free_bytes, maxlen);
+    strlcat(out, "/", maxlen);
+    append_free_kib(out, stats.max_alloc, maxlen);
+}
+
+/* Terminus 6x12 diagnostic overlay at the top-left of the packed framebuffer.
+ * First line: sticky REORDER/SKIP/DUP/ALLOC flags and previous worker/present
+ * durations in microseconds. Second: last received message size and CRC.
+ * Third: total free / maximum malloc request for each heap, in whole KiB.
+ * Heap snapshots are approximate; failed validation displays ?/?. Suppressed
+ * when diag_hide is set (mode 7). */
 static void cfw_draw_flags(uint8_t *disp, uint32_t w, uint32_t h) {
     customCfwContext *ctx = getCustomCfwContext();
     if (ctx == 0 || ctx->diag_hide) return;
@@ -146,22 +149,6 @@ static void cfw_draw_flags(uint8_t *disp, uint32_t w, uint32_t h) {
     u_to_dec(line, ctx->last_present_us, sizeof(line));
     strlcat(line, "us", sizeof(line));
 
-    uint32_t free_13 = heap_object_free(0x20000358u, 0x201350a8u, 0x000cd000u);
-    uint32_t free_20 =
-        *(volatile uint32_t *)0x20076e08u == 0x202020a8u
-            ? tlsf_arena_free(0x202020a8u, 0x00070800u)
-            : TLSF_FREE_INVALID;
-    /* The stock 0x2000033c descriptor is initialized with 0x2d000 bytes. The
-     * CFW patch reduces it to 0x2cc00, reserving the final 1 KiB for CFW state. */
-    uint32_t free_27 = heap_object_free(0x2000033cu, 0x202728a8u, 0x0002cc00u);
-    strlcat(line, " f13/20/27=", sizeof(line));
-    append_free_kib(line, free_13, sizeof(line));
-    strlcat(line, "/", sizeof(line));
-    append_free_kib(line, free_20, sizeof(line));
-    strlcat(line, "/", sizeof(line));
-    append_free_kib(line, free_27, sizeof(line));
-    strlcat(line, "k", sizeof(line));
-
     draw_string(disp, w, h, IMAGE_X + 2, IMAGE_Y + 2, line, 15, 0);
 
     /* The BLE task publishes both fields with one aligned 32-bit store. Keep
@@ -178,4 +165,19 @@ static void cfw_draw_flags(uint8_t *disp, uint32_t w, uint32_t h) {
     hex[4] = 0;
     strlcat(line, hex, sizeof(line));
     draw_string(disp, w, h, IMAGE_X + 2, IMAGE_Y + 14, line, 15, 0);
+
+    cfw_heap_stats heap_13 = heap_object_stats(0x20000358u, 0x201350a8u, 0x000cd000u);
+    cfw_heap_stats heap_20 = {TLSF_FREE_INVALID, TLSF_FREE_INVALID};
+    if (CFW_HEAP_READ32(0x20076e08u) == 0x202020a8u)
+        heap_20 = tlsf_arena_stats(0x202020a8u, 0x00070800u);
+    /* Stock heap 27 is reduced from 0x2d000 to 0x2cc00, reserving the final
+     * 1 KiB for CFW state. These are the LVGL, EvenHub, and other heaps. */
+    cfw_heap_stats heap_27 = heap_object_stats(0x2000033cu, 0x202728a8u, 0x0002cc00u);
+    strlcpy(line, "free/max KiB: LVGL ", sizeof(line));
+    append_heap_kib(line, heap_13, sizeof(line));
+    strlcat(line, " EvenHub ", sizeof(line));
+    append_heap_kib(line, heap_20, sizeof(line));
+    strlcat(line, " Other ", sizeof(line));
+    append_heap_kib(line, heap_27, sizeof(line));
+    draw_string(disp, w, h, IMAGE_X + 2, IMAGE_Y + 26, line, 15, 0);
 }

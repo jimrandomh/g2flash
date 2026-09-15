@@ -14,14 +14,19 @@ typedef void (*heap_free_fn)(uint32_t descriptor, void *ptr);
 static void *cfw_malloc(uint32_t size);
 static void *cfw_heap13_malloc(uint32_t size);
 static void cfw_heap13_free(void *ptr);
-static uint32_t tlsf_arena_free(uint32_t arena, uint32_t arena_size);
-static uint32_t heap_object_free(uint32_t descriptor, uint32_t arena, uint32_t arena_size);
+typedef struct {
+    uint32_t free_bytes;
+    uint32_t max_alloc;
+} cfw_heap_stats;
+static cfw_heap_stats tlsf_arena_stats(uint32_t arena, uint32_t arena_size);
+static cfw_heap_stats heap_object_stats(uint32_t descriptor, uint32_t arena, uint32_t arena_size);
 
 /* The stock TLSF build is the 32-bit, 4-byte-aligned configuration. A pool made
  * by tlsf_create_with_pool() starts after its 0xc74-byte control structure. Its
  * physical block chain has a size/status word at the pool address, then another
  * size/status word every (block size + 4) bytes, and ends with a zero-size word
- * at arena_end - 4. Sum the payload capacity of free blocks, validating every
+ * at arena_end - 4. Sum the payload capacity of free blocks and find the largest
+ * ordinary (4-byte-aligned) malloc request, validating every
  * step so an uninitialized pool or a concurrent split/coalesce produces "?"
  * instead of an out-of-arena read or a bogus free-space value.
  *
