@@ -7,10 +7,10 @@
  * then (2) set DEMCR.TRCENA and DWT->CTRL.CYCCNTENA. We re-assert all three cheaply per
  * measurement (only the idle SWO-trace block touches DEMCR).
  *
- * To convert cycles->us we need the core clock. The guessed global 0x2007646c reads 0
+ * To convert cycles->us we need the core clock. The guessed global 0x200764a4 reads 0
  * on hardware (it's only written on a DVFS event, if ever), so instead we CALIBRATE:
  * measure how many CYCCNT cycles elapse across one edge of the firmware's 1 ms OS tick
- * (RAM 0x20076d80, SysTick chain) — that IS cycles-per-ms. Cached in the ctx; a bounded
+ * (RAM 0x20076de0, SysTick chain) — that IS cycles-per-ms. Cached in the ctx; a bounded
  * spin falls back to 250 MHz if the tick never advances. All divides are 32-bit
  * (hardware UDIV) — a 64-bit divide would emit an external __aeabi_uldivmod build.py
  * rejects. (Limitation: cached across DVFS; a clock switch makes the figure ~stale.) */
@@ -18,7 +18,7 @@
 #define DWT_LAR     (*(volatile uint32_t *)0xE0001FB0U)  /* DWT CoreSight Lock Access Reg */
 #define DWT_CTRL    (*(volatile uint32_t *)0xE0001000U)  /* DWT->CTRL (CYCCNTENA bit0) */
 #define DWT_CYCCNT  (*(volatile uint32_t *)0xE0001004U)  /* DWT->CYCCNT (core cycles) */
-#define FW_CORE_HZ  (*(volatile uint32_t *)0x2007646cU)  /* guessed core-clock global (reads 0 on hw) */
+#define FW_CORE_HZ  (*(volatile uint32_t *)0x200764a4U)  /* guessed core-clock global (reads 0 on hw) */
 #define DWT_UNLOCK_KEY 0xC5ACCE55U
 
 
@@ -54,15 +54,24 @@ static void cfw_time_start(uint32_t *t) {
     DWT_LAR   = DWT_UNLOCK_KEY;                     /* unlock the DWT (CoreSight lock) */
     DWT_DEMCR |= (1u << 24);                        /* TRCENA */
     DWT_CTRL  |= 1u;                                /* CYCCNTENA */
-    customCfwContext *ctx = getCustomCfwContext();
-    if (ctx) cfw_cyc_per_ms(ctx);                   /* calibrate once, outside the window */
+    /* 2.2.10.69: no calibration here. This runs on the display task too (display_copy_hook),
+     * where the one-time tick-edge spin (up to ~10-20 ms if the tick stalls) delayed a present
+     * and could allocate a context. The image worker calls cfw_time_calibrate() instead; until
+     * it has, cfw_time_end falls back to the assumed clock. */
     *t = DWT_CYCCNT;
+}
+
+/* Calibrate cycles-per-ms once, from a thread that may block briefly (the image worker).
+ * Peeks the context so this never allocates. */
+void cfw_time_calibrate(void) {
+    customCfwContext *ctx = peekCustomCfwContext();
+    if (ctx) cfw_cyc_per_ms(ctx);
 }
 
 static uint32_t cfw_time_end(const uint32_t *t) {
     uint32_t dc = DWT_CYCCNT - *t;
-    customCfwContext *ctx = getCustomCfwContext();
-    uint32_t cpm = ctx ? cfw_cyc_per_ms(ctx) : 0;      /* calibrated cycles/ms (cached) */
+    customCfwContext *ctx = peekCustomCfwContext();
+    uint32_t cpm = ctx ? ctx->cyc_per_ms : 0;          /* calibrated cycles/ms, if the worker did */
     uint32_t cyc_per_us = cpm ? (cpm / 1000u) : 250u;  /* fallback: assume 250 MHz */
     if (cyc_per_us == 0) cyc_per_us = 1;
     return dc / cyc_per_us;
@@ -150,7 +159,7 @@ static void cfw_draw_flags(uint8_t *disp, uint32_t w, uint32_t h) {
 
     uint32_t free_13 = heap_object_free(0x20000358u, 0x201350a8u, 0x000cd000u);
     uint32_t free_20 =
-        *(volatile uint32_t *)0x20076e08u == 0x202020a8u
+        *(volatile uint32_t *)0x20076e68u == 0x202020a8u
             ? tlsf_arena_free(0x202020a8u, 0x00070800u)
             : TLSF_FREE_INVALID;
     /* The stock 0x2000033c descriptor is initialized with 0x2d000 bytes. The

@@ -25,7 +25,20 @@ static void rle_emit(rle_state *s, uint8_t v, uint32_t n) {
             uint32_t avail = s->rowbytes - s->bpos;  /* whole bytes left in this row */
             uint32_t bytes = n >> 1;
             if (bytes > avail) bytes = avail;
-            for (uint32_t i = 0; i < bytes; i++) row[s->bpos + i] = pair;
+            /* 2.2.10.69: fill word-wise. Runs in this codec are long (4bpp graphics), so the
+             * aligned middle dominates: head bytes to a 4-byte boundary, then 32-bit stores of
+             * the replicated pair, then the tail. Same `left`/`err` accounting as before. */
+            {
+                uint8_t *p = row + s->bpos;
+                uint32_t left = bytes;
+                while (left && ((uintptr_t)p & 3u)) { *p++ = pair; left--; }
+                uint32_t word = (uint32_t)pair * 0x01010101u;
+                uint32_t *w = (uint32_t *)(void *)p;
+                uint32_t words = left >> 2;
+                for (uint32_t i = 0; i < words; i++) w[i] = word;
+                p += words << 2; left -= words << 2;
+                while (left--) *p++ = pair;
+            }
             s->bpos += bytes; n -= bytes * 2;
             if (n && s->bpos < s->rowbytes) {        /* odd tail: open the next byte */
                 row[s->bpos] = (uint8_t)((row[s->bpos] & 0x0fu) | (uint8_t)(v << 4));

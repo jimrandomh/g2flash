@@ -31,10 +31,10 @@ typedef int (*cfw_font_dsc_fn)(const void *font, void *dsc,
 typedef const uint8_t *(*cfw_font_bitmap_fn)(void *dsc, void *draw_buf);
 typedef void (*cfw_font_release_fn)(void *dsc);
 
-#define CFW_FONT_GET_DSC ((cfw_font_dsc_fn)0x004e64fdU)
-#define CFW_FONT_GET_BITMAP ((cfw_font_bitmap_fn)0x004e644fU)
-#define CFW_FONT_RELEASE ((cfw_font_release_fn)0x004e64a1U)
-#define CFW_FONT20_ROOT (*(const uint8_t * volatile *)0x200769acU)
+#define CFW_FONT_GET_DSC ((cfw_font_dsc_fn)0x004e8d91U)
+#define CFW_FONT_GET_BITMAP ((cfw_font_bitmap_fn)0x004e8ce3U)
+#define CFW_FONT_RELEASE ((cfw_font_release_fn)0x004e8d35U)
+#define CFW_FONT20_ROOT (*(const uint8_t * volatile *)0x20076a04U)
 
 /* The stock build uses the embedded ARM short-enum ABI. Keep this opaque so
  * our compiler's enum-size flags cannot silently change the layout.

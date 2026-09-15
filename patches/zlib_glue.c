@@ -2,6 +2,7 @@
 #include "cfw_context.h"
 #include "rle.h"
 #include "debug.h"
+static void seq_tick(void *arg);
 
 /*
  * zlib (DEFLATE) image support for the G2 CFW — multi-mode load wrapper.
@@ -185,40 +186,55 @@ typedef int (*compass_control_fn)(void);              /* stock Start/StopIMUComp
 typedef int (*compass_config_fn)(uint32_t, const uint32_t *); /* sensor-hub FuncConfig */
 
 /* firmware entry points (Thumb bit set for blx via constant pointer) */
-#define FW_INIT2   ((inflateInit2_fn)0x005d6167U)   /* FUN_005d6166 inflateInit2_ */
-#define FW_INFLATE ((inflate_fn)0x005d6235U)        /* FUN_005d6234 inflate */
-#define FW_END     ((inflateEnd_fn)0x005d612bU)     /* FUN_005d612a inflateEnd */
-#define FW_LOADBMP ((loadbmp_fn)0x004ee3bbU)        /* FUN_004ee3ba set_image_data / BMP decoder */
-#define FW_FLUSH   ((cacheflush_fn)0x0047ce03U)     /* FUN_0047ce02 dcache clean range */
-#define FW_SETSRC  ((lv_set_src_fn)0x004a60c1U)     /* FUN_004a60c0 lv_image_set_src */
+#define FW_INIT2   ((inflateInit2_fn)0x005d8e57U)   /* FUN_005d6166 inflateInit2_ */
+#define FW_INFLATE ((inflate_fn)0x005d8f25U)        /* FUN_005d6234 inflate */
+#define FW_END     ((inflateEnd_fn)0x005d8e1bU)     /* FUN_005d612a inflateEnd */
+#define FW_LOADBMP ((loadbmp_fn)0x004f0c4fU)        /* FUN_004ee3ba set_image_data / BMP decoder */
+#define FW_FLUSH   ((cacheflush_fn)0x0047e09fU)     /* FUN_0047ce02 dcache clean range */
+#define FW_SETSRC  ((lv_set_src_fn)0x004a73f5U)     /* FUN_004a60c0 lv_image_set_src */
 #define FW_INVAL   ((lv_invalidate_fn)0x00440d9bU)  /* FUN_00440d9a lv_obj_invalidate */
-#define FW_SIDE    ((lens_side_fn)0x0045cfddU)       /* FUN_0045cfdc -> 2=left, 1=right */
-#define FW_BUZZ_PRESET ((buzz_preset_fn)0x00516f0bU) /* FUN_00516f0a DRV_BuzzerPlayAfterQueue(type 0..8) */
-#define FW_BUZZ_NOTE   ((buzz_note_fn)0x00516fa9U)   /* FUN_00516fa8 DRV_BuzzerPlayNote(note,tone,beat) */
-#define FW_BUZZ_RESET  ((buzz_reset_fn)0x00516e75U)  /* FUN_00516e74 buzzer stop/reset */
-#define FW_BUZZ_RAW    ((buzz_raw_fn)0x00517039U)     /* FUN_00517038 reset+power+PWM(freq,duty) */
+#define FW_SIDE    ((lens_side_fn)0x0045d35dU)       /* FUN_0045cfdc -> 2=left, 1=right */
+#define FW_BUZZ_PRESET ((buzz_preset_fn)0x005197bbU) /* FUN_00516f0a DRV_BuzzerPlayAfterQueue(type 0..8) */
+#define FW_BUZZ_NOTE   ((buzz_note_fn)0x00519859U)   /* FUN_00516fa8 DRV_BuzzerPlayNote(note,tone,beat) */
+#define FW_BUZZ_RESET  ((buzz_reset_fn)0x00519725U)  /* FUN_00516e74 buzzer stop/reset */
+#define FW_BUZZ_RAW    ((buzz_raw_fn)0x005198e9U)     /* FUN_00517038 reset+power+PWM(freq,duty) */
 #define FW_TIMER_START ((timer_start_fn)0x00442c4dU)  /* FUN_00442c4c osTimerStart(handle,ms) */
 #define FW_TIMER_NEW   ((timer_new_fn)0x00442b65U)    /* FUN_00442b64 osTimerNew(cb,type,arg,attr) */
 #define FW_TIMER_STOP  ((timer_stop_fn)0x00442c8dU)   /* FUN_00442c8c osTimerStop(handle) */
 #define FW_TIMER_DELETE ((timer_delete_fn)0x00442cf3U) /* FUN_00442cf2 osTimerDelete(handle) */
-#define FW_APP_START ((app_start_fn)0x0046a39fU)       /* FUN_0046a39e REQUEST_DISPLAY_START_UP */
-#define FW_KEEPALIVE_RESET ((keepalive_reset_fn)0x004f3d77U) /* FUN_004f3d76: EvenHub keepalive
+#define FW_APP_START ((app_start_fn)0x0046a983U)       /* FUN_0046a39e REQUEST_DISPLAY_START_UP */
+#define FW_KEEPALIVE_RESET ((keepalive_reset_fn)0x004f660bU) /* FUN_004f3d76: EvenHub keepalive
                                                      * counter (@0x20077364) = 0. This is the exact
                                                      * leaf the stock sid-0x0c heartbeat handler in
                                                      * the EvenHub UI event handler calls; it takes no args and reads
                                                      * the counter pointer from its own literal pool. */
-#define FW_LOOKUP        ((lookup_fn)0x004f3d8bU)    /* FUN_004f3d8a(id) -> spec node; state=*(node+0x10) */
-#define FW_COMPLETE_EMIT ((complete_emit_fn)0x004ebd09U) /* FUN_004ebd08: stock image-complete emitter */
-#define FW_DISPLAY_WAIT   ((display_gate_fn)0x00479483U)  /* FUN_00479482: take display semaphore */
-#define FW_DISPLAY_SIGNAL ((display_gate_fn)0x004794cfU)  /* FUN_004794ce: give display semaphore */
-#define FW_DISPLAY_QUEUE  ((display_queue_fn)0x00479d83U) /* FUN_00479d82: queue type-3 refresh */
-#define FW_DISPLAY_COPY   ((display_copy_fn)0x004708d1U)  /* FUN_004708d0: stock packed-buffer copy */
-#define FW_COMPASS_START  ((compass_control_fn)0x0055d4d7U) /* FUN_0055d4d6 StartIMUCompassFunc */
-#define FW_COMPASS_STOP   ((compass_control_fn)0x0055d55fU) /* FUN_0055d55e StopIMUCompassFunc */
-#define FW_COMPASS_CONFIG ((compass_config_fn)0x004b81d3U) /* FUN_004b81d2: FuncConfig(type,config) */
+#define FW_LOOKUP        ((lookup_fn)0x004f661fU)    /* FUN_004f3d8a(id) -> spec node; state=*(node+0x10) */
+#define FW_COMPLETE_EMIT ((complete_emit_fn)0x004ee59dU) /* FUN_004ebd08: stock image-complete emitter */
+#define FW_DISPLAY_WAIT   ((display_gate_fn)0x0047a717U)  /* FUN_00479482: take display semaphore */
+#define FW_DISPLAY_SIGNAL ((display_gate_fn)0x0047a763U)  /* FUN_004794ce: give display semaphore */
+#define FW_DISPLAY_QUEUE  ((display_queue_fn)0x0047b017U) /* FUN_00479d82: queue type-3 refresh */
+#define FW_DISPLAY_COPY   ((display_copy_fn)0x00470eb5U)  /* FUN_004708d0: stock packed-buffer copy */
+#define FW_COMPASS_START  ((compass_control_fn)0x0055fd7fU) /* FUN_0055d4d6 StartIMUCompassFunc */
+#define FW_COMPASS_STOP   ((compass_control_fn)0x0055fe07U) /* FUN_0055d55e StopIMUCompassFunc */
+#define FW_COMPASS_CONFIG ((compass_config_fn)0x004ba0b7U) /* FUN_004b81d2: FuncConfig(type,config) */
 #define FW_DISPLAY_FB     (*(uint8_t * volatile *)0x200008b4U) /* stock copier's 640x480 destination */
-#define BUZZ_TIMER_ADDR 0x200767a0U                   /* RAM: buzzer osTimer handle global */
-#define ZLIB_VER   ((const char *)0x007b75f8U)      /* "1.1.4" */
+/* 2.2.10.69: zlib 1.1.4 inflateReset (FUN_005d60ea, immediately before inflateEnd in the same
+ * translation unit: z->state check, total_in/out=0, msg=NULL, mode=nowrap?BLOCKS:METHOD,
+ * inflate_blocks_reset). Lets one stream serve every frame. */
+typedef int (*inflate_reset_fn)(void *strm);
+#define FW_INFLATE_RESET ((inflate_reset_fn)0x005d8ddbU)
+/* 2.2.10.69: the stock display gate. FUN_00479482 is xSemaphoreTake(*0x200769e4, 1000 ticks)
+ * plus a log on timeout, but it returns its saved r7 (pop {r0,pc}), so the caller cannot tell a
+ * take from a timeout. Take the same semaphore through the same FreeRTOS entry (xQueueSemaphoreTake,
+ * identical bytes in 2.2.9.22 and 2.2.10.10) and branch on pdTRUE/pdFALSE. The handle cell is a
+ * 2.2.10.10 RAM address (the profile maps RAM keys to themselves). */
+typedef int (*sem_take_fn)(void *sem, uint32_t ticks);
+#define FW_SEM_TAKE        ((sem_take_fn)0x00442389U)
+#define FW_DISPLAY_SEM     (*(void * volatile *)0x200769e4U)
+#define FW_DISPLAY_GATE_TICKS 1000u
+extern void cfw_time_calibrate(void);
+#define BUZZ_TIMER_ADDR 0x200767ecU                   /* RAM: buzzer osTimer handle global */
+#define ZLIB_VER   ((const char *)0x007bb6f8U)      /* "1.1.4" */
 
 #define PANEL_W 640u
 #define PANEL_H 480u
@@ -237,22 +253,17 @@ typedef int (*compass_config_fn)(uint32_t, const uint32_t *); /* sensor-hub Func
 #define ZS_NEXT_OUT  0x0c
 #define ZS_AVAIL_OUT 0x10
 #define ZS_TOTAL_OUT 0x14
+#define ZS_STATE     0x1c
 #define ZS_ZALLOC    0x20
 #define ZS_ZFREE     0x24
 #define ZS_OPAQUE    0x28
 #define ZS_SIZE      0x38
 
-#define RLE_CHUNK 256   /* mode-3/6 inflate scratch feeding the RLE decoder (stack) */
+#define RLE_CHUNK 1024  /* 2.2.10.50: 256->1024, fewer FW_INFLATE round-trips per frame (stack) */
 
-void *zwrap_alloc(void *opaque, uint32_t items, uint32_t size) {
-    (void)opaque;
-    return cfw_heap13_malloc(items * size);
-}
+static void *zwrap_alloc(void *opaque, uint32_t items, uint32_t size);
 
-void zwrap_free(void *opaque, void *ptr) {
-    (void)opaque;
-    cfw_heap13_free(ptr);
-}
+static void zwrap_free(void *opaque, void *ptr);
 
 /* Buzzer tone-sequence timer callback (mode-5 kind 4). Plays seq_steps[cursor],
  * advances the cursor, and re-arms this timer for that step's ms; after the final
@@ -261,7 +272,7 @@ void zwrap_free(void *opaque, void *ptr) {
  * thread — the only shared state is the singleton, guarded by magic + bounds.
  * Non-static (external linkage) so -O2 keeps it despite having no direct caller —
  * osTimerNew only ever receives it as a fn-ptr value. */
-void seq_tick(void *arg) {
+static void seq_tick(void *arg) {
     customCfwContext *ctx = (customCfwContext *)arg;
     if (ctx == 0 || ctx->magic != CFW_CTX_MAGIC) return;
     uint32_t c = ctx->seq_cursor;
@@ -345,18 +356,27 @@ static int image_worker(void *state_, uint8_t *src, uint32_t srclen) {
      * is copying it. Non-image control messages never take the gate. */
     customCfwContext *ctx = getCustomCfwContext();
     int gated = is_shadow_message(src, srclen);
+    int held = 0;
     if (gated) {
         if (ctx == 0) return -1;
-        FW_DISPLAY_WAIT();
-        if (ctx->direct_pending) return -1;          /* timed out; caller does not own gate */
+        /* 2.2.10.69: take the gate ourselves and trust only the take's own result. A timeout
+         * drops this frame (the phone's ACK path retries) instead of touching a shadow the
+         * display task may still be copying; a successful take is always paired with a give. */
+        void *sem = FW_DISPLAY_SEM;
+        if (sem != 0) {
+            held = FW_SEM_TAKE(sem, FW_DISPLAY_GATE_TICKS) != 0;
+            if (!held) { ctx->gate_timeouts++; return -1; }
+        }
+        ctx->gate_held = (uint8_t)held;
     }
 
     uint32_t t;
+    cfw_time_calibrate();                          /* worker thread: the only place we spin */
     cfw_time_start(&t);
     int r = image_dispatch((uint8_t *)state_, src, srclen, 1, &rl);
     uint32_t us = cfw_time_end(&t);
 
-    if (gated && !rl.direct_submitted) FW_DISPLAY_SIGNAL();
+    if (held && !rl.direct_submitted) { ctx->gate_held = 0; FW_DISPLAY_SIGNAL(); }
     if (ctx) ctx->last_worker_us = us;
     return r;
 }
@@ -366,6 +386,18 @@ static int image_worker(void *state_, uint8_t *src, uint32_t srclen) {
  * only mutate the shadow) and then presents once, giving an atomic multi-op update
  * (e.g. scroll = rect-copy + delta). The high bit of the mode byte is the "lenses
  * differ" flag; most modes ignore it. */
+/* 2.2.10.62: defined next to their only use so the ROPI movw/movt pair that takes their
+ * address stays within the assembler's 64 KiB PC-relative reach as the blob grows. */
+static void *zwrap_alloc(void *opaque, uint32_t items, uint32_t size) {
+    (void)opaque;
+    return cfw_heap13_malloc(items * size);
+}
+
+static void zwrap_free(void *opaque, void *ptr) {
+    (void)opaque;
+    cfw_heap13_free(ptr);
+}
+
 static int image_dispatch(uint8_t *state, const uint8_t *src, uint32_t srclen, int present, cfw_rectlist *rl) {
     if (src == 0 || srclen < 1) return load_bmp_fast(state, src, srclen);
 
@@ -608,8 +640,18 @@ static int image_dispatch(uint8_t *state, const uint8_t *src, uint32_t srclen, i
     const uint8_t *zsrc = src + 1;
     uint32_t zlen = srclen - 1;
 
-    uint8_t strm[ZS_SIZE];
-    for (uint32_t i = 0; i < ZS_SIZE; i++) strm[i] = 0;
+    /* 2.2.10.69: one persistent z_stream per session (heap 13). Its allocator callbacks and
+     * opaque are set once; the inflate state (and its 32 KiB window) is created by the first
+     * inflateInit2 and then reused through inflateReset, so a frame never allocates. */
+    customCfwContext *zctx = getCustomCfwContext();
+    if (zctx == 0) return -1;
+    if (zctx->zstrm == 0) {
+        zctx->zstrm = (uint8_t *)cfw_heap13_malloc(ZS_SIZE);
+        if (zctx->zstrm == 0) return -1;
+        for (uint32_t i = 0; i < ZS_SIZE; i++) zctx->zstrm[i] = 0;
+        zctx->zstrm_ready = 0;
+    }
+    uint8_t *strm = zctx->zstrm;
     *(const uint8_t **)(strm + ZS_NEXT_IN) = zsrc;
     *(uint32_t *)(strm + ZS_AVAIL_IN) = zlen;
     *(uint32_t *)(strm + ZS_ZALLOC) = (uint32_t)(uintptr_t)&zwrap_alloc;
@@ -707,11 +749,50 @@ static void present_shadow(uint8_t *state, uint32_t w, uint32_t h, cfw_rectlist 
     uint8_t *shadow = cfw_shadow_buffer(state);
     if (ctx == 0 || shadow == 0 || w != IMAGE_W || h != IMAGE_H) return;
 
+    /* 2.2.10.49: union this frame's updated rows into the pending dirty range so
+     * display_copy_hook copies/flushes only those rows. A pending-but-unconsumed present
+     * (direct_pending already set) means presents coalesced — union rather than replace so
+     * no earlier delta's rows are dropped. No rect list, or a rect touching row 0..top of a
+     * keyframe, degrades to the full panel. */
+    uint16_t ftop = (uint16_t)PANEL_H, fbot = 0u;
+    if (rl && rl->n) {
+        for (uint32_t i = 0; i < rl->n; i++) {
+            uint32_t rt = rl->r[i].t;
+            uint32_t rb = rt + rl->r[i].h;
+            if (rb > PANEL_H) rb = PANEL_H;
+            if (rt > PANEL_H) rt = PANEL_H;
+            if ((uint16_t)rt < ftop) ftop = (uint16_t)rt;
+            if ((uint16_t)rb > fbot) fbot = (uint16_t)rb;
+        }
+    } else {
+        ftop = 0u; fbot = (uint16_t)PANEL_H;          /* unknown region -> whole panel */
+    }
+    /* The debug overlay (cfw_draw_flags) paints the top ~12 rows every frame; when it is on,
+     * always include them so it is not left stale by a tight dirty rect. */
+    if (getCustomCfwContext() && !getCustomCfwContext()->diag_hide && ftop > 12u) ftop = 0u;
+    if (ctx->direct_pending && ctx->direct_dirty_bot != 0u) {   /* coalesced: union */
+        if (ctx->direct_dirty_top < ftop) ftop = ctx->direct_dirty_top;
+        if (ctx->direct_dirty_bot > fbot) fbot = ctx->direct_dirty_bot;
+    }
+    if (fbot <= ftop) { ftop = 0u; fbot = (uint16_t)PANEL_H; }  /* safety: never empty */
+    ctx->direct_dirty_top = ftop;
+    ctx->direct_dirty_bot = fbot;
+
     ctx->direct_shadow = shadow;
     ctx->direct_pending = 1;                          /* publish last */
-    if (FW_DISPLAY_QUEUE(0, 0, 0, 0, PANEL_W, PANEL_H) != 0) {
+    /* 2.2.10.71: refresh only the dirty rows. The six refresh words reach the panel op
+     * (+0x28, async QSPI partial reflash) unchanged; the driver clamps word 5 to 639 and
+     * word 6 to 479 and walks rows y0..y1 inclusive over bytes x0/2..x1/2, so the words are
+     * (0, 0, x0, y0, x1, y1). Stock only ever posts its 576x288 content box; the CFW used to
+     * post the whole panel every frame (~3-6 ms of QSPI per delta). Keyframes and the
+     * unknown-region fallback still refresh everything. */
+    uint32_t q_y0 = ftop, q_y1 = (uint32_t)fbot - 1u;
+    if (q_y1 >= PANEL_H) q_y1 = PANEL_H - 1u;
+    if (q_y0 > q_y1) { q_y0 = 0u; q_y1 = PANEL_H - 1u; }
+    if (FW_DISPLAY_QUEUE(0, 0, 0, q_y0, PANEL_W - 1u, q_y1) != 0) {
         ctx->direct_pending = 0;
         ctx->direct_shadow = 0;
+        ctx->direct_dirty_bot = 0u;
         return;
     }
     if (rl) rl->direct_submitted = 1;
@@ -724,10 +805,32 @@ static void present_shadow(uint8_t *state, uint32_t w, uint32_t h, cfw_rectlist 
  * ends AND the RLE stream filled the destination exactly. */
 static int inflate_rle(uint8_t *strm, uint8_t *base, uint32_t stride,
                        uint32_t rowbytes, uint32_t rows) {
-    if (FW_INIT2(strm, 15, ZLIB_VER, ZS_SIZE) != 0) { FW_END(strm); return 0; }
+    /* 2.2.10.69: init once, reset per frame. inflateInit2 allocates the inflate state and its
+     * window through zwrap_alloc; inflateReset only rewinds them. A failed init leaves the
+     * stream unready so the next frame retries; the stream is never ended. */
+    customCfwContext *zctx = getCustomCfwContext();
+    if (zctx == 0) return 0;
+    if (!zctx->zstrm_ready) {
+        if (FW_INIT2(strm, 15, ZLIB_VER, ZS_SIZE) != 0) {
+            zctx->zstrm_fail++;
+            *(uint32_t *)(strm + ZS_STATE) = 0;      /* never reuse a half-built state */
+            return 0;
+        }
+        zctx->zstrm_ready = 1;
+    } else if (FW_INFLATE_RESET(strm) != 0) {
+        zctx->zstrm_fail++;
+        zctx->zstrm_ready = 0;                       /* state gone: rebuild next frame */
+        return 0;
+    }
     rle_state rs;
     rle_init(&rs, base, stride, rowbytes, rows);
-    uint8_t chunk[RLE_CHUNK];
+    /* 2.2.10.72: the 1 KiB inflate chunk lives in the context (heap 13), not on the deferred
+     * task's stack — that task also runs the recursive mode-8 dispatch. */
+    if (zctx->rle_chunk == 0) {
+        zctx->rle_chunk = (uint8_t *)cfw_heap13_malloc(RLE_CHUNK);
+        if (zctx->rle_chunk == 0) return 0;
+    }
+    uint8_t *chunk = zctx->rle_chunk;
     int ok = 0;
     for (;;) {
         *(uint8_t **)(strm + ZS_NEXT_OUT) = chunk;
@@ -739,7 +842,8 @@ static int inflate_rle(uint8_t *strm, uint8_t *base, uint32_t stride,
         if (r == 1) { ok = (rs.left == 0 && rs.st == 0); break; }   /* Z_STREAM_END */
         if (r != 0 || got == 0) break;               /* inflate error, or no progress */
     }
-    FW_END(strm);
+    /* No inflateEnd: the stream persists and inflateReset rewinds it for the next frame. A
+     * data error mid-stream is recovered by that same reset (zlib re-enters METHOD/BLOCKS). */
     return ok;
 }
 
@@ -863,9 +967,13 @@ static int cfw_cleanup_session(void) {
     }
     FW_BUZZ_RESET();
 
-    /* Stop any CFW microphone session (capture hardware, streaming lease, and
-     * its watchdog timer) so a departing custom app cannot leave the mics on. */
-    mic_cleanup_session();
+    /* 2.2.10.55: the microphone-array session is NOT torn down by the display session
+     * cleanup any more. SybilSight sends mode 11 as part of its display lifecycle (page
+     * rebuilds) while the array is armed and then re-arms it; measured 2026-09-15 03:52 that
+     * cleanup ended the RIGHT's bring-up 5 s after CONFIGURE and the re-arm storm never
+     * recovered the codec. The array has its own 90 s streaming lease (fail-open: the phone
+     * must keep renewing), so a departing app still cannot leave the mics on. STOP (op 3)
+     * and the lease watchdog remain the only teardown paths. */
 
     /* Give the ambient light sensor back to the stock auto-brightness machine. */
     als_cleanup_session();
@@ -903,6 +1011,21 @@ static void copy_panel(uint8_t *fb, const uint8_t *shadow) {
     for (uint32_t i = 0; i < PANEL_BYTES / 4u; i++) dst[i] = src[i];
 }
 
+/* 2.2.10.49: copy only rows [top, bot) of the packed-4bpp panel (word-aligned: PANEL_STRIDE
+ * is a multiple of 4). Returns the byte offset and length copied so the caller flushes the
+ * same span from dcache instead of the whole panel. */
+static void copy_panel_rows(uint8_t *fb, const uint8_t *shadow, uint32_t top, uint32_t bot,
+                            uint32_t *out_off, uint32_t *out_len) {
+    if (bot > PANEL_H) bot = PANEL_H;
+    if (top >= bot) { *out_off = 0; *out_len = 0; return; }
+    uint32_t off = top * PANEL_STRIDE;
+    uint32_t len = (bot - top) * PANEL_STRIDE;
+    uint32_t *dst = (uint32_t *)(void *)(fb + off);
+    const uint32_t *src = (const uint32_t *)(const void *)(shadow + off);
+    for (uint32_t i = 0; i < len / 4u; i++) dst[i] = src[i];
+    *out_off = off; *out_len = len;
+}
+
 /* Replaces both display-task calls to the stock 576x288 packed-buffer copier.
  * A pending custom job copies the full 640x480 shadow straight into the
  * physical 640x480 4bpp framebuffer. Once that succeeds, unrelated stock widget
@@ -928,15 +1051,21 @@ void display_copy_hook(void) {
     uint32_t t;
     cfw_time_start(&t);
     int ok = fb != 0;
+    uint32_t fl_off = 0u, fl_len = PANEL_BYTES;
     if (ok) {
-        copy_panel(fb, shadow);
+        /* 2.2.10.49: copy + flush only the frame's updated rows. */
+        uint32_t top = ctx->direct_dirty_top, bot = ctx->direct_dirty_bot;
+        if (bot == 0u || bot > PANEL_H || top >= bot) { top = 0u; bot = PANEL_H; }
+        copy_panel_rows(fb, shadow, top, bot, &fl_off, &fl_len);
+        if (fl_len == 0u) { fl_off = 0u; fl_len = PANEL_BYTES; }  /* safety */
         cfw_draw_flags(fb, PANEL_W, PANEL_H);
     }
 
     ctx->direct_pending = 0;                         /* consume before returning gate */
     ctx->direct_shadow = 0;
+    ctx->direct_dirty_bot = 0u;                       /* range consumed */
     if (ok) {
-        uint32_t desc[2] = {(uint32_t)(uintptr_t)fb, PANEL_BYTES};
+        uint32_t desc[2] = {(uint32_t)(uintptr_t)(fb + fl_off), fl_len};
         FW_FLUSH(desc);
         ctx->direct_active = 1;
     } else {
@@ -1098,7 +1227,7 @@ int cfw_snapshot(uint8_t *state, uint32_t container_id) {
 }
 
 /* Naked shim reached by the redirected `bl FUN_0045cfdc` in 2.2.9.22's shared
- * image-completion helper (0x4ec0ee, both single- and multi-fragment paths).
+ * image-completion helper (0x004ee982, both single- and multi-fragment paths).
  * r4 = state and r6 = containerId there, so pass them to cfw_snapshot and tail-
  * branch. cfw_snapshot returns the lens id to the helper's unchanged RIGHT gate. */
 __attribute__((naked)) int snapshot_side(void) {
@@ -1109,7 +1238,7 @@ __attribute__((naked)) int snapshot_side(void) {
     );
 }
 
-/* Replaces the deferred consumer's worker call (bl at 0x4a4402, both lenses). Stock-
+/* Replaces the deferred consumer's worker call (bl at 0x004a5736, both lenses). Stock-
  * compressed updates use the stock-decoded call arguments directly. Otherwise DRAINS
  * all of this lens's pending snapshots for `state` in FIFO (seq) order, running the
  * worker on each (ignoring the live B, which may be overwritten), then releases their

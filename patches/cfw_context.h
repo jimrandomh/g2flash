@@ -117,6 +117,11 @@ typedef struct {
     uint32_t mic_frames;                    /* stream frames emitted since session start */
     uint32_t mic_lease_deadline;            /* FW_MS_TICK streaming-lease deadline; 0 = none */
     uint32_t mic_watchdog_timer;            /* one-shot osTimer tearing down a lapsed session */
+    uint32_t mic_settle_timer;              /* 2.2.10.36: one-shot osTimer completing a deferred bring-up */
+    uint32_t mic_codec_ready_tick;          /* 2.2.10.36: FW_MS_TICK after which the power-cycled codec
+                                             * has finished calibrating and may be tapped (0 = ready) */
+    uint8_t  mic_settle_stage;              /* 2.2.10.37: 0 idle, 1 = waiting for chip boot, 2 = I2S
+                                             * deinit issued, waiting to re-init on the ready chip */
     uint8_t  mic_notify_buf[32];            /* stable storage for the field-104 sid-0x09 notify */
     /* --- Ambient light sensor (mode 16, als_sensor.c). Passive mode redirects
      * the sensor-hub's ALS timer message to als_hub_handler through the RAM
@@ -129,7 +134,10 @@ typedef struct {
     uint16_t als_interval_ms;               /* passive poll period (100..5000) */
     uint16_t als_min_delta;                 /* report when |value - last reported| >= this */
     uint16_t als_heartbeat_ms;              /* also report after this many ms (0 = never) */
-    uint16_t als_reserved;
+    uint16_t mic_codec_cycled;              /* 2.2.10.35: 1 once the GX8002 voice codec has been
+                                             * power-cycled this host boot (formerly als_reserved,
+                                             * unused; same size and position). Survives BLE link
+                                             * rebuilds, reset only by a host reboot. */
     uint32_t als_orig_handler;              /* stock hub handler for message 8 (Thumb address) */
     uint32_t als_last_reported;             /* value carried by the last report */
     uint32_t als_last_report_tick;          /* FW_MS_TICK of the last report (0 = none yet) */
@@ -138,6 +146,91 @@ typedef struct {
      * field-102 notify of its own, since wake_notify_buf may still be queued
      * for a deferred double-tap wake when a tap or release follows it. */
     uint8_t  gesture_notify_buf[16];
+    /* 2.2.10.38: the context lives in reserved SRAM and survives warm resets AND firmware
+     * re-flashes, and peek validated only a fixed magic — so a context created by one candidate
+     * was reused, layout and all, by the next. ctx_size is stamped at creation and checked on
+     * every peek: any layout change recreates the context instead of reading past the old one. */
+    uint32_t ctx_size;                      /* == sizeof(customCfwContext) when this layout created it */
+    /* 2.2.10.38: host-reboot detection. The GX8002 must be power-cycled once per HOST boot
+     * (stock boot leaves it in the tap-noisy state), but the context survives warm resets, so
+     * mic_codec_cycled alone would never re-run the cycle. The OS ms tick restarts at boot, and
+     * the phone talks to the temple constantly (renew every 30 s, status, arm); if the tick is
+     * ever LOWER than at the previous control op, the host rebooted in between → clear the flag. */
+    uint32_t mic_last_seen_tick;            /* FW_MS_TICK at the last mic control op */
+    uint32_t mic_layout_rev;                /* bump to force a fresh context after a re-flash whose
+                                             * struct size happens to match the old one. NOTE: the
+                                             * OS tick does not reset across the OTA reboot, so the
+                                             * tick-backwards host-reboot detector never fires and
+                                             * the once-per-boot gate stays stuck after the first
+                                             * cycle; bumping the layout each candidate is the
+                                             * reliable way to re-run the cycle in testing. A
+                                             * production once-per-boot reset needs a real
+                                             * cold-boot signal (a startup hook), filed separately. */
+    uint32_t mic_layout_rev2;               /* 2.2.10.47: layout bump */
+    uint32_t mic_layout_rev3;               /* 2.2.10.48: layout bump (fresh context) */
+    /* 2.2.10.49: dirty-rectangle present. present_shadow records the union of the frame's
+     * updated rows here; display_copy_hook copies and cache-flushes only [dirty_top,dirty_bot)
+     * of the 640x480 4bpp panel instead of all 153,600 bytes every frame. Unioned across
+     * coalesced presents (direct_pending still set) so no updated row is missed. */
+    uint16_t direct_dirty_top;              /* first updated panel row (inclusive) */
+    uint16_t direct_dirty_bot;              /* last updated panel row + 1 (exclusive); 0 = none yet */
+    uint32_t mic_layout_rev4;               /* 2.2.10.50: layout bump (fresh context) */
+    uint32_t mic_peer_sync_ignored;         /* 2.2.10.51: peer 0x010C frames dropped on the armed RIGHT */
+    uint32_t mic_layout_rev5;               /* 2.2.10.51: layout bump (fresh context) */
+    uint32_t mic_layout_rev6;               /* 2.2.10.52: layout bump (fresh context) */
+    uint32_t mic_last_tap_tick;             /* 2.2.10.53: FW_MS_TICK of the last emitted array frame */
+    uint32_t mic_stage_deadline_tick;       /* 2.2.10.53: when the pending settle stage must have fired by */
+    uint32_t mic_armed_tick;                /* 2.2.10.53: FW_MS_TICK of the session start */
+    uint32_t mic_recoveries;                /* 2.2.10.53: stale/dead-session recoveries (host reboot mid-session) */
+    uint32_t mic_layout_rev7;               /* 2.2.10.53: layout bump (fresh context) */
+    uint32_t mic_layout_rev8;               /* 2.2.10.54: layout bump (fresh context) */
+    uint32_t mic_layout_rev9;               /* 2.2.10.55: layout bump (fresh context) */
+    uint32_t mic_layout_rev11;              /* 2.2.10.57: layout bump (fresh context) */
+    uint32_t mic_layout_rev13;              /* 2.2.10.59: layout bump (fresh context) */
+    uint32_t mic_stock_releases;            /* 2.2.10.60: stock audio-manager slots released while armed */
+    uint32_t mic_layout_rev14;              /* 2.2.10.60: layout bump (fresh context) */
+    uint32_t mic_layout_rev15;              /* 2.2.10.61: layout bump (fresh context) */
+    /* 2.2.10.62: inter-temple LC3 relay (RIGHT -> LEFT over the common-data link, LEFT -> phone
+     * as one 4-channel LC3 stream). Buffers live in heap 13; all pointers 0 until first use. */
+    void    *relay_enc[2];                  /* SVC_Lc3EncodeMono contexts (0x1c header + encoder) */
+    uint8_t *relay_ring;                    /* LEFT: RELAY_RING_N entries of RIGHT chunks */
+    uint8_t *relay_out;                     /* packet / notify assembly buffer */
+    uint32_t relay_start_tick;              /* LEFT: when START was last sent; RIGHT: tick offset base */
+    int32_t  relay_offset_ticks;            /* RIGHT: left_tick = FW_MS_TICK + offset */
+    uint16_t relay_seq;                     /* RIGHT: chunk counter since START */
+    uint8_t  relay_started;                 /* RIGHT: START received; LEFT: ACK received */
+    uint8_t  relay_fbytes;                  /* LC3 bytes per channel frame in use */
+    uint16_t relay_tx_pkts, relay_rx_pkts, relay_paired, relay_missing, relay_enc_fail, relay_bad_len;
+    int16_t  relay_last_offset_ms;          /* LEFT: RIGHT chunk time minus own chunk time */
+    uint32_t relay_ctl_rx;                  /* 2.2.10.63: relay control/audio packets received */
+    uint32_t relay_hook_calls;              /* 2.2.10.63: total 0x010C common-data dispatches seen */
+    uint32_t relay_stat_ctr;                /* 2.2.10.63: tap counter driving both-side RS emission */
+    uint32_t relay_tx_ctl;                  /* 2.2.10.64: control sends attempted */
+    uint32_t relay_tx_ctl_ok;               /* 2.2.10.64: control sends returning 0 */
+    uint8_t  relay_last_rx[4];              /* 2.2.10.64: first 4 bytes of last hook payload */
+    uint16_t relay_last_rx_len;             /* 2.2.10.64: length of last hook payload */
+    uint32_t mic_layout_rev18;              /* 2.2.10.64: layout bump (fresh context) */
+    uint32_t mic_layout_rev19;              /* 2.2.10.65: layout bump (fresh context) */
+    uint32_t mic_layout_rev20;              /* 2.2.10.66: layout bump (fresh context) */
+    uint32_t mic_layout_rev21;              /* 2.2.10.67: layout bump (fresh context) */
+    uint32_t mic_layout_rev22;              /* 2.2.10.68: layout bump (fresh context) */
+    /* 2.2.10.69: display-path efficiency. One zlib inflate stream lives for the whole session
+     * (inflateInit2 once, inflateReset per frame) instead of a 34-40 KB window alloc/free per
+     * frame through the stock heap; the display gate is taken directly on the stock semaphore
+     * so ownership is known from the take's return value, never inferred. */
+    uint8_t *zstrm;                         /* zlib 1.1.4 z_stream (0x38 bytes) in heap 13 */
+    uint8_t  zstrm_ready;                   /* 1 once inflateInit2 succeeded on zstrm */
+    uint8_t  gate_held;                     /* diagnostic: worker currently owns the display gate */
+    uint16_t zstrm_fail;                    /* inflateInit2/inflateReset failures (sticky count) */
+    uint32_t gate_timeouts;                 /* display-gate takes that timed out (frame dropped) */
+    uint32_t mic_dle_requests;              /* HciLeSetDataLen requests issued on the phone link */
+    uint32_t mic_layout_rev23;              /* 2.2.10.69: layout bump (fresh context) */
+    uint32_t mic_layout_rev24;              /* 2.2.10.70: layout bump (fresh context) */
+    uint32_t mic_layout_rev25;              /* 2.2.10.71: layout bump (fresh context) */
+    uint8_t *rle_chunk;                     /* 2.2.10.72: RLE_CHUNK-byte inflate output chunk (heap 13) */
+    uint16_t relay_notify_skipped;          /* 2.2.10.72: relay notifies withheld for queue back-pressure */
+    uint16_t relay_notify_pad;
+    uint32_t mic_layout_rev26;              /* 2.2.10.72: layout bump (fresh context) */
 } customCfwContext;
 
 #define CFW_CTX_SLOT  0x2029f4a8U    /* first word of the CFW-reserved TLSF tail */
@@ -148,7 +241,7 @@ typedef struct {
 // Does not need updating.
 #define CFW_CTX_MAGIC 0xC0FFEE6AU
 
-#define FW_MS_TICK  (*(volatile uint32_t *)0x20076d80U)  /* firmware 1 ms OS tick (SysTick chain) */
+#define FW_MS_TICK  (*(volatile uint32_t *)0x20076de0U)  /* firmware 1 ms OS tick (SysTick chain) */
 
 static customCfwContext *peekCustomCfwContext(void);
 static customCfwContext *getCustomCfwContext(void);
