@@ -920,6 +920,7 @@ void display_copy_hook(void) {
             ctx->direct_active = 0;                       /* fail open to the stock compositor */
         }
         FW_DISPLAY_COPY();
+        connection_status_overlay(FW_DISPLAY_FB);
         return;
     }
 

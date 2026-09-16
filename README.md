@@ -36,6 +36,14 @@ missing any.
 
 ## Modifications
 
+This branch adds an app-independent dashboard phone-link indicator:
+`Connected from: AA:BB:CC:DD:EE:FF`, with separate L/R rows. It uses the
+current connected host's Bluetooth address because no reliable host-name cache
+was identified. See [connection-status behavior, ABI evidence, and validation](patches/connection_status.md).
+The bottom 52 dashboard rows are reserved for the indicator. This addition is
+software-tested; hardware readability, power behavior, and OTA qualification
+remain unverified.
+
 This firmware reworks how images and screen updates work in EvenHub. The
 intended usage is that you create a layout with a single 576x288 image
 container, which is used as a message target (but the EvenHub layout system is

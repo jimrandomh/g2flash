@@ -10,7 +10,9 @@
  * removed from the top of the stock primary TLSF arena by patch_compress.py. The
  * stock arena is [0x202728a8,0x2029f8a8); the patched size is 0x2cc00, reserving
  * [0x2029f4a8,0x2029f8a8) for CFW. Its first word holds the context pointer and
- * its second holds a magic-guarded sticky allocation-failure diagnostic. This is
+ * its second holds a magic-guarded sticky allocation-failure diagnostic.
+ * Bytes +8..+19 hold the display task's connection-status snapshot (see
+ * connection_status.c); the remaining reserved tail is unused. This is
  * deliberately carved out rather than
  * inferred padding: 0x20003ffc, used before EVENCFW/11, is actually the +0 callback
  * of the BLE-RX lifecycle object and stock code can BLX through it. The struct's

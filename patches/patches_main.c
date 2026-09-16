@@ -25,6 +25,7 @@
 #include "malloc.c"
 #include "draw.c"
 #include "cfw_context.c"
+#include "connection_status.c"
 #include "rle.c"
 #include "texture_cache.c"
 #include "zlib_glue.c"
