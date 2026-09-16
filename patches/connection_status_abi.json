@@ -1,0 +1,119 @@
+{
+  "firmware": "G2 2.2.9.22",
+  "base_sha256": "a03fbea9f68a9de6bc271daabb9f3a41c59053d1086622c76a4e990f829cc561",
+  "file_to_mram_delta": "0x379bfe",
+  "reserved_state": {
+    "address": "0x2029f4b0",
+    "size": 12
+  },
+  "guards": [
+    {
+      "name": "local phone ID getter",
+      "address": "0x4745c4",
+      "size": 10,
+      "sha256": "b742734d1ad9cb4049304322a732e7e00cdc4d808a1f44afcf00c5781c63a7c8"
+    },
+    {
+      "name": "controller pointer literal",
+      "address": "0x4747c8",
+      "size": 4,
+      "sha256": "058c4b89ad9c80f646f51ebdb75848aef8429e9fbcab08661c59b8f16c4da88c"
+    },
+    {
+      "name": "Cordio in-use/type/address getters",
+      "address": "0x4cb3ae",
+      "size": 52,
+      "sha256": "450d0126fbee45571e6bd9ad894742c85d6d44ef7493772ee33069aae40c899f"
+    },
+    {
+      "name": "Cordio role getter",
+      "address": "0x4cb956",
+      "size": 36,
+      "sha256": "aa08098f8c152a022a9e29fe6b36a3f1b9369f5a2e41944aa9a45bde69147b74"
+    },
+    {
+      "name": "Cordio table literal",
+      "address": "0x4cb9c0",
+      "size": 4,
+      "sha256": "a60e9c26cb5930e1edb436de2d857248744e998f567fb2fc306ab700ba536390"
+    },
+    {
+      "name": "display active getter",
+      "address": "0x444ff8",
+      "size": 18,
+      "sha256": "b3ba3080a20d9d8166cc792f1fef9494abef55288fdd9d69ecacdf74e8836cc8"
+    },
+    {
+      "name": "running application selector",
+      "address": "0x445074",
+      "size": 390,
+      "sha256": "6648cc5f347078fff0f108213a5e22560f6fd50c64880641970c6bad0b9791b0"
+    },
+    {
+      "name": "application globals",
+      "address": "0x445220",
+      "size": 8,
+      "sha256": "5f98b38de46e41a51fb1fed96988eb23e8804a989c13e5f2e87233545bb7cea2"
+    },
+    {
+      "name": "display status and app ID literals",
+      "address": "0x445280",
+      "size": 8,
+      "sha256": "c702d619920340eced0a6ff5ea052c55c3b27a9d23caa8a0f8aabde592c260ea"
+    },
+    {
+      "name": "lens side getter",
+      "address": "0x45cfdc",
+      "size": 8,
+      "sha256": "f8e10755ec18538f58f38957f3e1e3228589c41d2f0acfe18060a11f59b1a581"
+    },
+    {
+      "name": "lens side literal",
+      "address": "0x45dbf0",
+      "size": 4,
+      "sha256": "92571aced1d30e271c7fe61d6d24fb6facd9672dcc26a0cb6e4c139c2e4d97a0"
+    },
+    {
+      "name": "stock framebuffer copy",
+      "address": "0x4708d0",
+      "size": 90,
+      "sha256": "f15cff89278eb38fca96988c0bc9bfd363567705bf1a14b205882f5516158dbd"
+    },
+    {
+      "name": "framebuffer copy literals",
+      "address": "0x470970",
+      "size": 24,
+      "sha256": "0dfdb4a33424323defb4f47b9d96e028a24371259ff7a62c18b87fdd8404ec44"
+    },
+    {
+      "name": "stock display buffer lock",
+      "address": "0x479482",
+      "size": 74,
+      "sha256": "77946f4cf965a3a9117058e14b08e5059666a9b0a76f90ef5396a07a86078f7d"
+    },
+    {
+      "name": "display semaphore literal",
+      "address": "0x479570",
+      "size": 4,
+      "sha256": "633f66aefce2d531669234a18e06784c30451d30d42bc3e769659c6385cb05dc"
+    },
+    {
+      "name": "queue receive timeout return",
+      "address": "0x443370",
+      "size": 32,
+      "sha256": "c8e24cd4fbe6ffd2e60a3b149c34b35b65f898bffa6ef73fea8c1025ece9d49a"
+    },
+    {
+      "name": "semaphore nonblocking take",
+      "address": "0x442388",
+      "size": 358,
+      "sha256": "f995f45982b151bdf8e70f4d5b858b48e4f10f6487dc4be7eb68c788d39ef9de"
+    },
+    {
+      "name": "display receive and copy sequence",
+      "address": "0x4798c6",
+      "size": 52,
+      "sha256": "764531cd97098fbaa07143c51ccc51272f579ea7431ce2b4cb4af994c2922a8c"
+    }
+  ]
+}

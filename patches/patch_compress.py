@@ -60,7 +60,7 @@ independent (see build.py) and needs no load address at build time, so it compil
 in a single pass. A hard MRAM-ceiling check (duplicating g2flash.py's
 check_mainapp_fits_mram) refuses an oversized image.
 """
-import sys, os, struct, zlib, json, subprocess
+import sys, os, struct, zlib, json, subprocess, hashlib
 
 DELTA = 0x379BFE  # file_off = ghidra_addr - DELTA  (OTA mainApp component, 2.2.9.22)
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -193,6 +193,9 @@ GESTURE_RELEASE_SITE    = (0x444d36, "1d f0 d9 fa") # bl FUN_004622ec -> gesture
 # reproduces the overwritten push/mov and suppresses START only under Faceclaw's
 # volatile lease; with no lease it resumes at 0x4f515a byte-for-byte stock.
 EVENAI_ENTRY_SITE      = (0x4f5156, "7f b5 06 00")
+# Poll only the display task's queue; the wrapper preserves real messages.
+CONNECTION_STATUS_QUEUE_SITE = (0x4798e0, "c9 f7 19 fd")  # osMessageQueueGet
+
 # The display task copies the composed 576x288 A4 buffer into the physical
 # 640x480 framebuffer at two switch cases. Redirect both calls through
 # display_copy_hook: ordinary refreshes pass through, while a pending Faceclaw
@@ -287,11 +290,24 @@ def validate_ring_battery_stock(img):
         if bytes(img[g2f(address):g2f(address) + len(expected)]) != expected:
             raise ValueError(f"ring battery stock ABI mismatch: {description} at {address:#x}")
 
+def validate_connection_status_stock(img):
+    """Reject unsupported firmware before compiling code with fixed SRAM/ABI pins."""
+    with open(os.path.join(SCRIPT_DIR, "connection_status_abi.json")) as f:
+        abi = json.load(f)
+    for guard in abi["guards"]:
+        off = g2f(int(guard["address"], 0))
+        actual = hashlib.sha256(img[off:off + guard["size"]]).hexdigest()
+        if actual != guard["sha256"]:
+            raise ValueError("connection-status ABI mismatch: " + guard["name"])
+    if hashlib.sha256(img).hexdigest() != abi["base_sha256"]:
+        raise ValueError("connection-status requires the pinned stock G2 2.2.9.22 image")
+
 def layout(img):
     """Compile the single injected code blob (patches_main.c, which #includes every
     patch source) and append it at the tail of the main-app payload. Returns
     (append_bytes, in_place_patches, mainapp=(idx,off,old_ps)). Enforces the MRAM
     ceiling (duplicate of g2flash.check_mainapp_fits_mram)."""
+    validate_connection_status_stock(img)
     validate_ring_battery_stock(img)
     idx, comp_off, old_ps = find_mainapp(img)
 
@@ -348,6 +364,7 @@ def layout(img):
     short_long_addr = base + _fn(built, "gesture_short_long")["offset"]
     release_addr   = base + _fn(built, "gesture_release")["offset"]
     display_copy_addr = base + _fn(built, "display_copy_hook")["offset"]
+    connection_queue_addr = base + _fn(built, "connection_status_queue_get")["offset"]
     wear_notify_addr = base + _fn(built, "faceclaw_send_wear_event")["offset"]
     compass_decode_addr = base + _fn(built, "compass_decode_capture")["offset"]
     compass_report_addr = base + _fn(built, "compass_report_event")["offset"]
@@ -377,6 +394,9 @@ def layout(img):
 
     # --- in-place live-code edits + bl retargets (targets are the appended addrs) ---
     in_place = [
+        (g2f(CONNECTION_STATUS_QUEUE_SITE[0]), CONNECTION_STATUS_QUEUE_SITE[1],
+         enc_bl(CONNECTION_STATUS_QUEUE_SITE[0], connection_queue_addr),
+         "display queue receive: dashboard-only phone-link status polling"),
         (g2f(BLE_2M_SITE[0]), BLE_2M_SITE[1], "7d 20",
          "Set Local Feature: enable LE 2M bit 8"),
         (g2f(BLE_FAST_INTERVAL_SITE[0]), BLE_FAST_INTERVAL_SITE[1], "06 00 06 00",
