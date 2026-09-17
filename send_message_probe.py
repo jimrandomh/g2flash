@@ -65,16 +65,33 @@ def make_packets(messages, mtu=23, sequence=7, options=3, *, max_write=None):
             for index, offset in enumerate(range(0, len(stream), capacity))]
 
 
-def parse_ack(frame):
-    """Return (stream ID, message ordinal, lens bit, size, payload CRC), or None."""
-    if (len(frame) != 19 or frame[:2] != b'\xaa\x12' or frame[3] != 11
+def parse_acks(frame):
+    """Return explicit (stream, ordinal, lens, size, CRC) entries, or None.
+
+    The first entry is current; the remaining entries are preceding successes.
+    NACKs retain their single-entry format (kind 3).
+    """
+    if (not 19 <= len(frame) <= 40 or (len(frame) - 19) % 7
+            or frame[:2] != b'\xaa\x12' or frame[3] != len(frame) - 8
             or frame[4:8] != bytes((1, 1, 0xf0, 0))):
         return None
     body = frame[8:-2]
-    if crc16(body) != frame[-2:] or body[0] not in (1, 3) or body[4] not in (1, 2):
+    if (crc16(body) != frame[-2:] or body[0] not in (1, 3) or body[4] not in (1, 2)
+            or (body[0] == 3 and len(body) != 9)):
         return None
-    return (body[1], int.from_bytes(body[2:4], 'little'), body[4],
-            int.from_bytes(body[5:7], 'little'), int.from_bytes(body[7:9], 'little'))
+    entries = [(body[1], int.from_bytes(body[2:4], 'little'), body[4],
+                int.from_bytes(body[5:7], 'little'), int.from_bytes(body[7:9], 'little'))]
+    for offset in range(9, len(body), 7):
+        entries.append((body[offset], int.from_bytes(body[offset+1:offset+3], 'little'), body[4],
+                        int.from_bytes(body[offset+3:offset+5], 'little'),
+                        int.from_bytes(body[offset+5:offset+7], 'little')))
+    return entries
+
+
+def parse_ack(frame):
+    """Compatibility helper returning the primary entry only."""
+    entries = parse_acks(frame)
+    return None if entries is None else entries[0]
 
 
 def send_probe(transport, messages, mtu=23, ack_timeout=10, sequence=7, options=3):
@@ -119,19 +136,19 @@ def send_probe(transport, messages, mtu=23, ack_timeout=10, sequence=7, options=
     def receive_ack(characteristic, frame):
         if characteristic.lower() != CTRL[2]:
             return
-        ack = parse_ack(frame)
-        if ack is None:
+        acks = parse_acks(frame)
+        if acks is None:
             return
-        stream_id, message_id, lens, size, checksum = ack
-        if frame[8] == 3 and stream_id == sequence and (message_id, lens) in pending:
-            raise RuntimeError(f"NACK: stream {stream_id}, message {message_id}, lens {lens}; reset context before retry")
-        key = (message_id, lens)
-        if stream_id != sequence or pending.get(key) != (size, checksum):
-            return
-        del pending[key]
-        name = 'left' if lens == 1 else 'right'
-        print(f"  {name} ACK: stream {stream_id}, message {message_id}, size {size}, "
-              f"CRC {checksum:04X}, {(time.monotonic() - start) * 1000:.1f} ms")
+        for stream_id, message_id, lens, size, checksum in acks:
+            if frame[8] == 3 and stream_id == sequence and (message_id, lens) in pending:
+                raise RuntimeError(f"NACK: stream {stream_id}, message {message_id}, lens {lens}; reset context before retry")
+            key = (message_id, lens)
+            if stream_id != sequence or pending.get(key) != (size, checksum):
+                continue
+            del pending[key]
+            name = 'left' if lens == 1 else 'right'
+            print(f"  {name} ACK: stream {stream_id}, message {message_id}, size {size}, "
+                  f"CRC {checksum:04X}, {(time.monotonic() - start) * 1000:.1f} ms")
 
     for packet in packets:
         transport.write(CTRL[0], CTRL[1], packet.hex(), 1)

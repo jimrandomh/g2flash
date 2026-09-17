@@ -460,6 +460,7 @@ __attribute__((naked)) void faceclaw_evenai_display_entry(void) {
 //        image modes retain RLE but no longer contain their own zlib streams.
 //  11 -> immediate NACK for incomplete records and handler failures, preventing
 //         silent drops from occupying the phone window until ACK timeout.
+//  12 -> successful ACKs repeat up to three preceding processed messages.
 //
 // The string is a normal rodata literal now that build.py emits/relocates .rodata
 // (earlier this had to be spelled out byte-by-byte to avoid a rodata section).
@@ -467,7 +468,7 @@ __attribute__((naked)) void faceclaw_evenai_display_entry(void) {
 
 int settings_send_wrapper(int type, int sid, unsigned char *buf, unsigned len) {
     if (sid == 9) {
-        static const char caps[] = "Faceclaw/11";
+        static const char caps[] = "Faceclaw/12";
         len = pb_append_bytes_field(buf, len, SETTINGS_RESPONSE_CAPACITY,
                                     100u, (const unsigned char *)caps,
                                     (unsigned)sizeof(caps) - 1u);

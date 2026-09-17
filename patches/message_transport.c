@@ -14,6 +14,7 @@
 #define CFW_BRIDGE_REQUEST 1u
 #define CFW_BRIDGE_RETURN 2u
 #define CFW_ACK_SIZE 9u
+#define CFW_ACK_MAX_SIZE (CFW_ACK_SIZE + CFW_ACK_HISTORY * CFW_ACK_ENTRY_SIZE)
 
 #ifndef CFW_STREAM_STATE
 static cfw_message_stream *cfw_message_state(uint8_t origin) {
@@ -73,12 +74,30 @@ static void cfw_message_discard(cfw_message_stream *stream) {
 
 static int cfw_message_reply(cfw_message_stream *stream, uint8_t here,
                              uint8_t origin, uint8_t kind, uint16_t size) {
-    uint8_t reply[CFW_ACK_SIZE] = {kind, stream->stream_id,
+    uint8_t reply[CFW_ACK_MAX_SIZE] = {kind, stream->stream_id,
         (uint8_t)stream->message_id, (uint8_t)(stream->message_id >> 8), here,
         (uint8_t)size, (uint8_t)(size >> 8),
         (uint8_t)stream->checksum, (uint8_t)(stream->checksum >> 8)};
-    return here == origin ? CFW_BLE_SEND(1, CFW_MESSAGE_SID, reply, sizeof(reply)) :
-        cfw_message_bridge_send(CFW_BRIDGE_RETURN, origin, reply, sizeof(reply));
+    uint16_t length = CFW_ACK_SIZE;
+    if (kind == CFW_MESSAGE_ACK) {
+        /* Explicit successes, newest first; never imply success across a gap.
+         * Remember processing even if enqueueing this reply fails, so a later
+         * reply can repair that loss without executing the command again. */
+        unsigned count = (stream->ack_capacity - CFW_ACK_SIZE) / CFW_ACK_ENTRY_SIZE;
+        if (count > stream->ack_count) count = stream->ack_count;
+        length += count * CFW_ACK_ENTRY_SIZE;
+        memcpy(reply + CFW_ACK_SIZE, stream->ack_history,
+               count * CFW_ACK_ENTRY_SIZE);
+        for (unsigned i = CFW_ACK_HISTORY - 1; i > 0; --i)
+            memcpy(stream->ack_history[i], stream->ack_history[i - 1], CFW_ACK_ENTRY_SIZE);
+        memcpy(stream->ack_history[0], reply + 1, 3);
+        memcpy(stream->ack_history[0] + 3, reply + 5, 4);
+        if (stream->ack_count < CFW_ACK_HISTORY) ++stream->ack_count;
+    } else {
+        stream->ack_count = 0;
+    }
+    return here == origin ? CFW_BLE_SEND(1, CFW_MESSAGE_SID, reply, length) :
+        cfw_message_bridge_send(CFW_BRIDGE_RETURN, origin, reply, length);
 }
 
 /* An incomplete record will never reach the decoded-CRC check. Report the
@@ -104,8 +123,13 @@ static uint32_t cfw_message_complete(cfw_message_stream *stream, uint8_t here,
         && (stream->flags & CFW_MESSAGE_BOTH) == stream->options;
     if (stream->flags & CFW_MESSAGE_RESET_CONTEXT) {
         cfw_inflate_reset(stream);
+        /* Also bounds history across reconnects, retries and target changes. */
+        stream->ack_count = 0;
+        stream->ack_capacity = stream->packet_capacity;
         stream->context_valid = 1;
     }
+    if (stream->ack_capacity < stream->packet_capacity)
+        stream->ack_capacity = stream->packet_capacity;
     valid = valid && stream->context_valid;
     if (stream->flags & CFW_MESSAGE_COMPRESSED) {
         decoded = CFW_MESSAGE_MALLOC(CFW_MESSAGE_MAX + 1u);
@@ -143,6 +167,7 @@ static uint32_t cfw_message_process(const uint8_t *packet, uint16_t length,
         stream->next_sequence = stream->stream_id = packet[2];
         stream->message_id = 0;
         stream->options = options;
+        stream->packet_capacity = CFW_ACK_SIZE;
     }
     if (!stream->active || stream->next_sequence != packet[2] || stream->options != options) {
         cfw_message_abort(stream, here, origin);
@@ -150,6 +175,14 @@ static uint32_t cfw_message_process(const uint8_t *packet, uint16_t length,
         return 0xau;
     }
     ++stream->next_sequence; /* uint8 wrap is intentional. */
+    /* Replies must still fit one ATT notification, including on MTU 23 links.
+     * An observed request proves the ingress can carry that many bytes. Track
+     * this per compression context (reset on reconnect), capped at 40 bytes
+     * including the reply envelope. The bridge sees the same request sizes. */
+    /* Stock TPL reserves 11 bytes per fragment, including its CRC allowance. */
+    unsigned capacity = length - 11;
+    if (capacity > CFW_ACK_MAX_SIZE) capacity = CFW_ACK_MAX_SIZE;
+    if (capacity > stream->packet_capacity) stream->packet_capacity = capacity;
     uint32_t status = 0;
     uint16_t end = length - 2, cursor = 9;
     while (cursor < end) {
@@ -236,9 +269,11 @@ uint32_t cfw_message_bridge_received(uint32_t app_id, const uint8_t *data,
     }
     if (data[0] == CFW_BRIDGE_RETURN) {
         if (here != origin) return 0;
-        if (length != CFW_ACK_SIZE + 2) return 0xbu;
+        if (length < CFW_ACK_SIZE + 2 || length > CFW_ACK_MAX_SIZE + 2 ||
+            (length - CFW_ACK_SIZE - 2) % CFW_ACK_ENTRY_SIZE != 0) return 0xbu;
         if ((data[2] != CFW_MESSAGE_ACK && data[2] != CFW_MESSAGE_NACK) || data[6] != (origin ^ CFW_MESSAGE_BOTH)) return 0xau;
-        return CFW_BLE_SEND(1, CFW_MESSAGE_SID, data + 2, CFW_ACK_SIZE) == 0 ? 0 : 6;
+        if (data[2] == CFW_MESSAGE_NACK && length != CFW_ACK_SIZE + 2) return 0xbu;
+        return CFW_BLE_SEND(1, CFW_MESSAGE_SID, data + 2, length - 2) == 0 ? 0 : 6;
     }
     return 0xau;
 }
