@@ -4,8 +4,8 @@
 /* ---- RLE over 4bpp pixels (the inner layer of modes 3 and 6) ----------------
  *
  * See the RLE paragraph at the top of the file for the token format. The decoder is a
- * byte-at-a-time state machine so it can be driven straight from inflate's output in
- * small chunks (a token may straddle a chunk boundary), writing pixels into a
+ * byte-at-a-time state machine that consumes the image handler's RLE payload,
+ * writing pixels into a
  * rectangular 4bpp destination: `rows` rows of `rowbytes` bytes, row r at
  * base + r*stride. For mode 6 that's the whole shadow; for mode 3 it's the box within
  * it (rowbytes < stride). Runs cross rows freely — the nibble stream is the wire

@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include "memory.h"
 #include "cfw_context.h"
 #include "malloc.h"
 #include "protobuf.h"
@@ -260,7 +261,7 @@ __attribute__((used, noinline)) void mic_pcm_tap(uint32_t source, const void *pc
     f[15] = (uint8_t)angle; f[16] = (uint8_t)((uint16_t)angle >> 8);
     f[17] = (uint8_t)ssr;   f[18] = (uint8_t)((uint16_t)ssr >> 8);
     f[19] = (uint8_t)pay;   f[20] = (uint8_t)(pay >> 8);
-    for (uint32_t i = 0; i < pay; i++) f[MIC_STREAM_HDR_BYTES + i] = ((const uint8_t *)pcm)[i];
+    memcpy(f + MIC_STREAM_HDR_BYTES, pcm, pay);
 
     FW_AUDIO_NOTIFY(f, MIC_STREAM_HDR_BYTES + pay);
     ctx->mic_frames++;

@@ -128,7 +128,7 @@ typedef struct {
 // Marker used to validate that the CFW context pointer hasn't been clobbered.
 // Does not need updating.
 // Layout revision: reject stale contexts with the removed snapshot FIFO.
-#define CFW_CTX_MAGIC 0xC0FFEE6BU
+#define CFW_CTX_MAGIC 0xC0FFEE6CU
 
 #define FW_MS_TICK  (*(volatile uint32_t *)0x20076d80U)  /* firmware 1 ms OS tick (SysTick chain) */
 

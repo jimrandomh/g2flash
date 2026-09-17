@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Send a private CFW message through one lens and verify each target lens ACK.
 
-Requires Faceclaw/7 on both lenses; the default payload is a mode-7 no-op. See docs/message-transport.md.
+Requires Faceclaw/10 on both lenses; the default payload is a mode-7 no-op. See docs/message-transport.md.
 """
 import argparse
 import math
@@ -11,6 +11,7 @@ from pathlib import Path
 import secrets
 import sys
 import time
+import zlib
 
 from g2flash import (Bridge, CTRL, DroidBridgeTransport, LocalBleTransport,
                      crc16, parse_connection_string)
@@ -39,7 +40,20 @@ def make_packets(messages, mtu=23, sequence=7, options=3, *, max_write=None):
         raise ValueError("send 1..65536 messages per stream")
     if any(len(message) > 65535 for message in messages):
         raise ValueError("each message must fit its two-byte length tag (0..65535 bytes)")
-    stream = b''.join(len(message).to_bytes(2, 'little') + message for message in messages)
+    compressor = zlib.compressobj()
+    records = []
+    reset_context = True
+    for message in messages:
+        compressed = compressor.compress(message) + compressor.flush(zlib.Z_SYNC_FLUSH)
+        flags = options | 4 | (8 if reset_context else 0)
+        reset_context = False
+        if len(compressed) > 65535:
+            compressed = message
+            flags = options | 8
+            compressor = zlib.compressobj()
+            reset_context = True
+        records.append(bytes((flags,)) + len(compressed).to_bytes(2, 'little') + crc16(message) + compressed)
+    stream = b''.join(records)
     write_limit = mtu - 3 if max_write is None else min(mtu - 3, max_write)
     capacity = min(252, write_limit - 11)
     if capacity < 1:
@@ -57,7 +71,7 @@ def parse_ack(frame):
             or frame[4:8] != bytes((1, 1, 0xf0, 0))):
         return None
     body = frame[8:-2]
-    if crc16(body) != frame[-2:] or body[0] != 1 or body[4] not in (1, 2):
+    if crc16(body) != frame[-2:] or body[0] not in (1, 3) or body[4] not in (1, 2):
         return None
     return (body[1], int.from_bytes(body[2:4], 'little'), body[4],
             int.from_bytes(body[5:7], 'little'), int.from_bytes(body[7:9], 'little'))
@@ -109,6 +123,8 @@ def send_probe(transport, messages, mtu=23, ack_timeout=10, sequence=7, options=
         if ack is None:
             return
         stream_id, message_id, lens, size, checksum = ack
+        if frame[8] == 3 and stream_id == sequence and (message_id, lens) in pending:
+            raise RuntimeError(f"NACK: stream {stream_id}, message {message_id}, lens {lens}; reset context before retry")
         key = (message_id, lens)
         if stream_id != sequence or pending.get(key) != (size, checksum):
             return

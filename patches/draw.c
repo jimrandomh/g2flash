@@ -1,4 +1,5 @@
 #include "draw.h"
+#include "memory.h"
 /* ---- Terminus 6x12 bitmap font + text overlay ------------------------------
  *
  * Printable ASCII 32..126 from faceclaw/app/fonts/terminus/ter-u12n.bdf, indexed
@@ -175,8 +176,7 @@ static void rect_copy_4bpp(uint8_t *buf, uint32_t stride, uint32_t sL, uint32_t 
             uint32_t y = rev_y ? (bh - 1 - i) : i;
             uint8_t *srow = buf + (sT + y) * stride + (sL >> 1);
             uint8_t *drow = buf + (dT + y) * stride + (dL >> 1);
-            if (rev_x) { for (uint32_t x = bytes; x-- > 0; ) drow[x] = srow[x]; }
-            else       { for (uint32_t x = 0; x < bytes; x++) drow[x] = srow[x]; }
+            memmove(drow, srow, bytes);
         }
     } else {
         for (uint32_t i = 0; i < bh; i++) {

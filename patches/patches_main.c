@@ -20,6 +20,7 @@
  * turn those into absolute relocations that build.py rejects.
  */
 
+#include "memory.c"
 #include "utils.c"
 #include "protobuf.c"
 #include "malloc.c"

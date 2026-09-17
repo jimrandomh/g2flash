@@ -456,6 +456,10 @@ __attribute__((naked)) void faceclaw_evenai_display_entry(void) {
 //   7 -> private messages dispatch image modes with NULL EvenHub state;
 //        framebuffer shadow and legacy snapshots use owned heap allocations.
 //   8 -> stock EvenHub image handling restored; custom commands use SID-f0 only.
+//  10 -> persistent transport zlib, decoded CRC, and sequenced NACK recovery;
+//        image modes retain RLE but no longer contain their own zlib streams.
+//  11 -> immediate NACK for incomplete records and handler failures, preventing
+//         silent drops from occupying the phone window until ACK timeout.
 //
 // The string is a normal rodata literal now that build.py emits/relocates .rodata
 // (earlier this had to be spelled out byte-by-byte to avoid a rodata section).
@@ -463,7 +467,7 @@ __attribute__((naked)) void faceclaw_evenai_display_entry(void) {
 
 int settings_send_wrapper(int type, int sid, unsigned char *buf, unsigned len) {
     if (sid == 9) {
-        static const char caps[] = "Faceclaw/8";
+        static const char caps[] = "Faceclaw/11";
         len = pb_append_bytes_field(buf, len, SETTINGS_RESPONSE_CAPACITY,
                                     100u, (const unsigned char *)caps,
                                     (unsigned)sizeof(caps) - 1u);

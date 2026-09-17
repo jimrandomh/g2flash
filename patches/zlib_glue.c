@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include "memory.h"
 #include "cfw_context.h"
 #include "rle.h"
 #include "debug.h"
@@ -15,11 +16,11 @@ int cfw_message_received(const uint8_t *data, uint16_t size, uint16_t checksum) 
 }
 
 /*
- * zlib (DEFLATE) image support for the G2 CFW — multi-mode load wrapper.
+ * Image/control handlers for the G2 CFW. DEFLATE is handled by the transport.
  *
  * Entered only through private SID-f0 messages. The stock EvenHub image path
  * is unmodified. Dispatch on the first byte of the reconstructed message:
- *   3           -> [3][l/4][t/2][w/4][h/2][fid16][zlib(rle)]  bounding-box delta: composite a
+ *   3           -> [3][l/4][t/2][w/4][h/2][fid16][rle]  bounding-box delta: composite a
  *                              tight-4bpp rectangle onto the persistent 640x480
  *                              shadow, then queue a direct physical-framebuffer
  *                              refresh. Box origin/size is quantized (left/width *4,
@@ -54,7 +55,7 @@ int cfw_message_received(const uint8_t *data, uint16_t size, uint16_t checksum) 
  *                              raw-tone entry drives the low-level PWM start and
  *                              arms that same osTimer for auto-stop. None spin or
  *                              block here. Returns 0 (success).
- *   6           -> [6][zlib(rle)]  headerless 4bpp full frame: inflate + RLE-decode the
+ *   6           -> [6][rle]  headerless 4bpp full frame: RLE-decode the
  *                              tightly packed 640x480 pixels into the persistent CFW
  *                              shadow (seeding it for mode-3 deltas), then queue a
  *                              direct physical-framebuffer refresh.
@@ -107,20 +108,17 @@ int cfw_message_received(const uint8_t *data, uint16_t size, uint16_t checksum) 
  *   anything else / too short  -> reject the custom message.
  *
  * The HIGH BIT of the mode byte is a "lenses differ" flag; most modes ignore it. For
- * mode 3 it carries two boxes (left then right, same size) sharing one zlib payload —
+ * mode 3 it carries two boxes (left then right, same size) sharing one RLE payload —
  * a stereo shift without duplicating pixels; each lens draws at its own box. For mode 9
  * it carries two rect-sets (left then right); each lens uses its own.
  *
  * Custom modes 3/6/8/9/13/14/15 use a lazily allocated 153600-byte CFW
  * framebuffer shadow, independent of EvenHub containers.
  *
- * RLE (modes 3 and 6 only): those two modes do not deflate the packed 4bpp bytes
- * directly — the pixels are first run-length encoded and the RLE STREAM is what gets
- * deflated, so the on-wire payload is zlib(rle(pixels)) and the firmware inflates then
- * RLE-decodes. RLE runs over the pixel NIBBLES of the tightly packed rows in wire
- * order (high nibble = left pixel), including the pad nibble that ends each row when
- * the width is odd — i.e. exactly the byte buffer that used to be deflated, read as
- * 2*len nibbles. One token is:
+ * RLE (modes 3 and 6 only): message bodies contain run-length encoded pixels.
+ * Transport DEFLATE wraps the entire message (including mode and image headers).
+ * RLE runs over the pixel NIBBLES of tightly packed rows in wire order (high nibble
+ * first), including each odd-width row's padding nibble. One token is:
  *
  *   [cnt4|color4]                       cnt 1..15   (1 byte)
  *   [0|color4][cnt8]                    cnt 1..255  (2 bytes)
@@ -128,9 +126,9 @@ int cfw_message_received(const uint8_t *data, uint16_t size, uint16_t checksum) 
  *
  * The low nibble is always the 4bpp color; the high nibble is the repeat count, and 0
  * escapes to the wider forms. 65535 is the longest single run — an encoder splits
- * anything longer into consecutive tokens. A run may cross row boundaries. Decoding is
- * streamed straight out of inflate through a small stack chunk (no scratch allocation,
- * tokens may straddle chunk boundaries), and same-color pixel pairs are written as
+ * anything longer into consecutive tokens. A run may cross row boundaries. Tokens
+ * are decoded directly from the validated message without image scratch allocation,
+ * and same-color pixel pairs are written as
  * whole bytes (color*0x11) rather than nibble at a time. A stream that decodes to
  * anything other than exactly rows*rowbytes*2 nibbles is rejected and the previous
  * frame is left on screen.
@@ -152,9 +150,6 @@ int cfw_message_received(const uint8_t *data, uint16_t size, uint16_t checksum) 
  * address at build time and stays correct wherever the blob is placed.
  */
 
-typedef int (*inflateInit2_fn)(void *strm, int windowBits, const char *ver, int ssize);
-typedef int (*inflate_fn)(void *strm, int flush);
-typedef int (*inflateEnd_fn)(void *strm);
 typedef void (*cacheflush_fn)(void *desc);          /* desc = uint32[2]{ptr,size} */
 typedef uint32_t (*lens_side_fn)(void);             /* 2 = LEFT lens, 1 = RIGHT lens */
 typedef void (*buzz_preset_fn)(uint32_t type);      /* DRV_BuzzerPlayAfterQueue */
@@ -174,9 +169,6 @@ typedef int (*compass_control_fn)(void);              /* stock Start/StopIMUComp
 typedef int (*compass_config_fn)(uint32_t, const uint32_t *); /* sensor-hub FuncConfig */
 
 /* firmware entry points (Thumb bit set for blx via constant pointer) */
-#define FW_INIT2   ((inflateInit2_fn)0x005d6167U)   /* FUN_005d6166 inflateInit2_ */
-#define FW_INFLATE ((inflate_fn)0x005d6235U)        /* FUN_005d6234 inflate */
-#define FW_END     ((inflateEnd_fn)0x005d612bU)     /* FUN_005d612a inflateEnd */
 #define FW_FLUSH   ((cacheflush_fn)0x0047ce03U)     /* FUN_0047ce02 dcache clean range */
 #define FW_SIDE    ((lens_side_fn)0x0045cfddU)       /* FUN_0045cfdc -> 2=left, 1=right */
 #define FW_BUZZ_PRESET ((buzz_preset_fn)0x00516f0bU) /* FUN_00516f0a DRV_BuzzerPlayAfterQueue(type 0..8) */
@@ -202,7 +194,6 @@ typedef int (*compass_config_fn)(uint32_t, const uint32_t *); /* sensor-hub Func
 #define FW_COMPASS_CONFIG ((compass_config_fn)0x004b81d3U) /* FUN_004b81d2: FuncConfig(type,config) */
 #define FW_DISPLAY_FB     (*(uint8_t * volatile *)0x200008b4U) /* stock copier's 640x480 destination */
 #define BUZZ_TIMER_ADDR 0x200767a0U                   /* RAM: buzzer osTimer handle global */
-#define ZLIB_VER   ((const char *)0x007b75f8U)      /* "1.1.4" */
 
 #define PANEL_W 640u
 #define PANEL_H 480u
@@ -212,29 +203,6 @@ typedef int (*compass_config_fn)(uint32_t, const uint32_t *); /* sensor-hub Func
 #define IMAGE_H PANEL_H
 #define IMAGE_X 0u
 #define IMAGE_Y 0u
-
-/* z_stream (zlib 1.1.4, sizeof = 0x38) field offsets */
-#define ZS_NEXT_IN   0x00
-#define ZS_AVAIL_IN  0x04
-#define ZS_NEXT_OUT  0x0c
-#define ZS_AVAIL_OUT 0x10
-#define ZS_TOTAL_OUT 0x14
-#define ZS_ZALLOC    0x20
-#define ZS_ZFREE     0x24
-#define ZS_OPAQUE    0x28
-#define ZS_SIZE      0x38
-
-#define RLE_CHUNK 256   /* mode-3/6 inflate scratch feeding the RLE decoder (stack) */
-
-void *zwrap_alloc(void *opaque, uint32_t items, uint32_t size) {
-    (void)opaque;
-    return cfw_heap13_malloc(items * size);
-}
-
-void zwrap_free(void *opaque, void *ptr) {
-    (void)opaque;
-    cfw_heap13_free(ptr);
-}
 
 /* Buzzer tone-sequence timer callback (mode-5 kind 4). Plays seq_steps[cursor],
  * advances the cursor, and re-arms this timer for that step's ms; after the final
@@ -280,7 +248,7 @@ static void als_cleanup_session(void);   /* als_sensor.c (same TU): passive ALS 
 int ring_battery_control(const uint8_t *src, uint32_t srclen); /* mode 17 */
 int als_control(const uint8_t *src, uint32_t srclen); /* als_sensor.c: mode 16 */
 
-static int inflate_rle(uint8_t *strm, uint8_t *base, uint32_t stride, uint32_t rowbytes, uint32_t rows);
+static int decode_image_rle(const uint8_t *src, uint32_t size, uint8_t *base, uint32_t stride, uint32_t rowbytes, uint32_t rows);
 static void present_shadow(uint32_t w, uint32_t h, cfw_rectlist *rl);
 static int image_dispatch(const uint8_t *src, uint32_t srclen, int present, cfw_rectlist *rl);
 
@@ -430,7 +398,7 @@ static int image_dispatch(const uint8_t *src, uint32_t srclen, int present, cfw_
             uint32_t n = src[2];
             if (n > avail) n = avail;
             if (n > CFW_SEQ_MAX) n = CFW_SEQ_MAX;
-            for (uint32_t i = 0; i < n * 5; i++) ctx->seq_steps[i] = src[3 + i];
+            memcpy(ctx->seq_steps, src + 3, n * 5);
             ctx->seq_count = (uint8_t)n;
             ctx->seq_cursor = 0;
             if (n) {
@@ -611,19 +579,8 @@ static int image_dispatch(const uint8_t *src, uint32_t srclen, int present, cfw_
     if ((mode != 3 && mode != 6) || srclen < 3)
         return -1;
 
-    const uint8_t *zsrc = src + 1;
-    uint32_t zlen = srclen - 1;
-
-    uint8_t strm[ZS_SIZE];
-    for (uint32_t i = 0; i < ZS_SIZE; i++) strm[i] = 0;
-    *(const uint8_t **)(strm + ZS_NEXT_IN) = zsrc;
-    *(uint32_t *)(strm + ZS_AVAIL_IN) = zlen;
-    *(uint32_t *)(strm + ZS_ZALLOC) = (uint32_t)(uintptr_t)&zwrap_alloc;
-    *(uint32_t *)(strm + ZS_ZFREE) = (uint32_t)(uintptr_t)&zwrap_free;
-    *(uint32_t *)(strm + ZS_OPAQUE) = 0;
-
     if (mode == 6) {
-        /* Full headerless 4bpp frame. Inflate + RLE-decode it into the persistent
+        /* Full headerless 4bpp frame. RLE-decode it into the persistent
          * CFW-owned shadow that mode-3 deltas composite
          * onto, so a mode-6 keyframe seeds a stable base, then present (unless
          * deferred by a multi-segment wrapper). */
@@ -631,7 +588,7 @@ static int image_dispatch(const uint8_t *src, uint32_t srclen, int present, cfw_
         uint32_t stride = (w + 1) >> 1;                          /* tight 4bpp */
         uint8_t *dst = cfw_shadow_buffer();
         if (dst == 0) return -1;                      /* no shadow allocation -> can't proceed */
-        if (!inflate_rle(strm, dst, stride, stride, h)) return -1;
+        if (!decode_image_rle(src + 1, srclen - 1, dst, stride, stride, h)) return -1;
         rl_add(rl, 0, 0, w, h);                       /* keyframe updates the whole screen */
         if (present) present_shadow(w, h, rl);
         return 0;
@@ -645,25 +602,25 @@ static int image_dispatch(const uint8_t *src, uint32_t srclen, int present, cfw_
          * Messages arrive in stream order and the parser owns their input until
          * this handler returns.
          *
-         *   [3][left/4][top/2][width/4][height/2][fid_lo][fid_hi][zlib(rle(box pixels))]
+         *   [3][left/4][top/2][width/4][height/2][fid_lo][fid_hi][rle(box pixels)]
          * left/width are *4 (=> multiples of 4 => even) so left>>1 and bw>>1 are whole
          * byte offsets: each box row lands in the 4bpp shadow as a plain byte run, no
          * nibble shifting. fid is a uint16 per-frame counter (diagnostics). Rejected
          * (old frame kept) if the box isn't wholly in bounds. The sender must have sent
          * a mode-6 keyframe before/among deltas.
          *
-         * lenses-differ variant: [3|80][Lbox 4][Rbox 4][fid 2][shared zlib]. Both boxes
+         * lenses-differ variant: [3|80][Lbox 4][Rbox 4][fid 2][shared RLE]. Both boxes
          * must be the same size; each lens draws the SAME decompressed pixels at its own
          * box — a stereo shift (e.g. a raised dialog) with the pixel data sent once. */
         uint32_t box_off, fid_off, z_off;
         if (lenses_differ) {
-            if (srclen < 12) return -1;               /* mode + 2 boxes + fid + some zlib */
+            if (srclen < 12) return -1;               /* mode + 2 boxes + fid + some RLE */
             if (src[3] != src[7] || src[4] != src[8]) return -1;   /* boxes must match size */
             box_off = (FW_SIDE() == 2) ? 1 : 5;       /* left set / right set */
             fid_off = 9;
             z_off   = 11;
         } else {
-            if (srclen < 8) return -1;                /* 4 box hdr + 2 fid + some zlib */
+            if (srclen < 8) return -1;                /* 4 box hdr + 2 fid + some RLE */
             box_off = 1;
             fid_off = 5;
             z_off   = 7;
@@ -684,12 +641,10 @@ static int image_dispatch(const uint8_t *src, uint32_t srclen, int present, cfw_
         if (shadow == 0) return -1;                   /* no stable base -> keyframe resyncs */
         uint32_t rowbytes = bw >> 1;                  /* whole bytes (bw even) */
 
-        *(const uint8_t **)(strm + ZS_NEXT_IN) = src + z_off;   /* zlib past box(es) + fid */
-        *(uint32_t *)(strm + ZS_AVAIL_IN) = srclen - z_off;
         /* Decode the box straight into its slot in the shadow: rows of rowbytes bytes
          * at the shadow's stride. left/bw are multiples of 4 so every row starts (and
          * ends) on a byte boundary. */
-        if (!inflate_rle(strm, shadow + top * sstride + (left >> 1), sstride, rowbytes, bh))
+        if (!decode_image_rle(src + z_off, srclen - z_off, shadow + top * sstride + (left >> 1), sstride, rowbytes, bh))
             return -1;                                /* leave the old frame on screen */
 
         rl_add(rl, left, top, bw, bh);                /* updated region = this lens's box */
@@ -725,29 +680,14 @@ static void present_shadow(uint32_t w, uint32_t h, cfw_rectlist *rl) {
 }
 
 
-/* Inflate an already-primed z_stream (NEXT_IN/AVAIL_IN set by the caller) and RLE-decode
- * its output into the rectangular 4bpp destination, streaming through a stack chunk so
- * no scratch buffer is allocated for either layer. Returns 1 only when the zlib stream
- * ends AND the RLE stream filled the destination exactly. */
-static int inflate_rle(uint8_t *strm, uint8_t *base, uint32_t stride,
-                       uint32_t rowbytes, uint32_t rows) {
-    if (FW_INIT2(strm, 15, ZLIB_VER, ZS_SIZE) != 0) { FW_END(strm); return 0; }
+/* Transport has already inflated and checked the message CRC. RLE remains
+ * local to image handlers, including nested mode-8 segments. */
+static int decode_image_rle(const uint8_t *src, uint32_t size, uint8_t *base,
+                            uint32_t stride, uint32_t rowbytes, uint32_t rows) {
     rle_state rs;
     rle_init(&rs, base, stride, rowbytes, rows);
-    uint8_t chunk[RLE_CHUNK];
-    int ok = 0;
-    for (;;) {
-        *(uint8_t **)(strm + ZS_NEXT_OUT) = chunk;
-        *(uint32_t *)(strm + ZS_AVAIL_OUT) = RLE_CHUNK;
-        int r = FW_INFLATE(strm, 0);                 /* Z_NO_FLUSH */
-        uint32_t got = (uint32_t)(*(uint8_t **)(strm + ZS_NEXT_OUT) - chunk);
-        rle_feed(&rs, chunk, got);
-        if (rs.err) break;                           /* malformed RLE */
-        if (r == 1) { ok = (rs.left == 0 && rs.st == 0); break; }   /* Z_STREAM_END */
-        if (r != 0 || got == 0) break;               /* inflate error, or no progress */
-    }
-    FW_END(strm);
-    return ok;
+    rle_feed(&rs, src, size);
+    return !rs.err && rs.left == 0 && rs.st == 0;
 }
 
 /* Return the singleton to its stock-compatible idle state without freeing it.
@@ -807,12 +747,6 @@ static int cfw_cleanup_session(void) {
     return 0;
 }
 
-static void copy_panel(uint8_t *fb, const uint8_t *shadow) {
-    uint32_t *dst = (uint32_t *)(void *)fb;
-    const uint32_t *src = (const uint32_t *)(const void *)shadow;
-    for (uint32_t i = 0; i < PANEL_BYTES / 4u; i++) dst[i] = src[i];
-}
-
 /* Replaces both display-task calls to the stock 576x288 packed-buffer copier.
  * A pending custom job copies the full 640x480 shadow straight into the
  * physical 640x480 4bpp framebuffer. Once that succeeds, unrelated stock widget
@@ -838,7 +772,7 @@ void display_copy_hook(void) {
     cfw_time_start(&t);
     int ok = fb != 0;
     if (ok) {
-        copy_panel(fb, shadow);
+        memcpy(fb, shadow, PANEL_BYTES);
         cfw_draw_flags(fb, PANEL_W, PANEL_H);
     }
 

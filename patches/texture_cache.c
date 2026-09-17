@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include "memory.h"
 #include "cfw_context.h"
 #include "debug.h"
 #include "texture_cache.h"
@@ -254,8 +255,7 @@ static int cfw_texture_cache_update(const uint8_t *src, uint32_t len) {
         uint32_t offset = rd16(src + pos);
         uint32_t entry_len = rd16(src + pos + 2u);
         pos += 4u;
-        for (uint32_t i = 0; i < entry_len; i++)
-            ctx->texture_cache[offset + i] = src[pos + i];
+        memcpy(ctx->texture_cache + offset, src + pos, entry_len);
         pos += entry_len;
     }
     return 0;

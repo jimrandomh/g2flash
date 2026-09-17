@@ -1,4 +1,5 @@
 #include "protobuf.h"
+#include "memory.h"
 
 /* Minimal protobuf helpers for appending length-delimited extension fields to
  * an existing message. All capacity checks happen before the buffer is touched.
@@ -44,7 +45,6 @@ static unsigned pb_append_bytes_field(unsigned char *buf, unsigned len,
     unsigned char *p = buf + len;
     p += pb_write_varint(p, tag);
     p += pb_write_varint(p, data_len);
-    for (unsigned i = 0; i < data_len; i++) p[i] = data[i];
+    memcpy(p, data, data_len);
     return len + tag_size + len_size + data_len;
 }
-
