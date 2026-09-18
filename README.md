@@ -109,7 +109,10 @@ fully documented):
    while the framebuffer lease is held, suppress its incompatible stock Menu path
  * Play sound effects with the piezo buzzer
  * Receive on-head detection wear/unwear events, to trigger a lock-screen
- * Use the magnetometer as a compass
+ * Use the magnetometer as a compass. Faceclaw/14 preserves the current magnetic
+   calibration accuracy across IMU reconfiguration while the Faceclaw framebuffer
+   lease is valid, including compass stop/start cycles. See
+   [calibration preservation](docs/compass-calibration.md).
  * Read the ambient light sensor (a TI OPT3001 on the master temple) and,
    optionally, run it in a "passive" mode where the firmware polls the sensor
    for the phone but the stock auto-brightness adjuster never steps the panel,

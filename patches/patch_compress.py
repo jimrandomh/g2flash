@@ -13,7 +13,8 @@ Build a CFW image for g2_2.2.9.22 with:
       framebuffer, and
   (7) stock wear-state notifications outside onboarding plus a current-state query, and
   (8) Faceclaw compass heading + sample diagnostics from the sensor hub while
-      image-handler mode 10 is enabled, and
+      image-handler mode 10 is enabled, with magnetic calibration retained
+      across IMU reconfiguration under the framebuffer lease, and
   (9) a lease-scoped 256 KiB texture cache plus cached-image/cached-string drawing
       through image-handler modes 18, 19, and 20,
       and built-in-font mode 15, and
@@ -57,7 +58,7 @@ independent (see build.py) and needs no load address at build time, so it compil
 in a single pass. A hard MRAM-ceiling check (duplicating g2flash.py's
 check_mainapp_fits_mram) refuses an oversized image.
 """
-import sys, os, struct, zlib, json, subprocess
+import sys, os, struct, zlib, json, subprocess, hashlib
 
 DELTA = 0x379BFE  # file_off = ghidra_addr - DELTA  (OTA mainApp component, 2.2.9.22)
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -193,6 +194,9 @@ WEAR_NOTIFY_BL_SITES = {
 # matching record diagnostics at the sensor-hub heading report call.
 COMPASS_DECODE_BL_SITE = (0x4b6922, "65 f0 af fd")  # bl GAF decode, before output is cleared
 COMPASS_REPORT_BL_SITE = (0x4b632e, "ff f7 59 fc")  # bl DRV_IMUSendUIEvent(9,heading)
+# Inline accuracy reset immediately before the stock cached-mag-bias setter.
+# The helper returns the accuracy pointer in r0; the following ldrb supplies r2.
+COMPASS_ACCURACY_RESET_SITE = (0x4b4c76, "00 21 01 70")
 
 def enc_bl(pc, target):
     """Encode a Thumb-2 BL (T1) from instruction address `pc` to `target`."""
@@ -295,6 +299,28 @@ def validate_message_transport_stock(img):
             raise ValueError(f"message transport stock ABI mismatch at {address:#x}")
 
 
+def validate_compass_calibration_stock(img):
+    """Pin the inline hook ABI, cached bias/accuracy, and vendor restore code."""
+    for address, expected in (
+        # Prologue saves LR and keeps SP 8-byte aligned at the injected call.
+        (0x4b4450, "2de9f04fcdb0"),
+        (0x4b4c72, "dff85809002101700278dff85019280067f0a0f804430df18d03"),
+        (0x4b55cc, "80730720e8610720"),
+    ):
+        expected = bytes.fromhex(expected)
+        if bytes(img[g2f(address):g2f(address) + len(expected)]) != expected:
+            raise ValueError(f"compass calibration stock ABI mismatch at {address:#x}")
+    # The complete vendor setter restores bias, accuracy, covariance, and
+    # scaled internal bias. The FIFO block updates the cached bias/accuracy
+    # together and still owns anomaly/ready handling. Neither is patched.
+    for address, size, digest in (
+        (0x51bdc6, 190, "ddcdc7b2c82e92c65bc200de218dfea0fb94bd5398f3b34353c957d6fd331428"),
+        (0x4b6936, 116, "84f348f853d5868a76e6b97f93d27feedacd87aca86ef3b3d9354e88d24b2fa7"),
+    ):
+        if hashlib.sha256(img[g2f(address):g2f(address) + size]).hexdigest() != digest:
+            raise ValueError(f"compass calibration stock ABI mismatch at {address:#x}")
+
+
 def layout(img):
     """Compile the single injected code blob (patches_main.c, which #includes every
     patch source) and append it at the tail of the main-app payload. Returns
@@ -302,6 +328,7 @@ def layout(img):
     ceiling (duplicate of g2flash.check_mainapp_fits_mram)."""
     validate_ring_battery_stock(img)
     validate_message_transport_stock(img)
+    validate_compass_calibration_stock(img)
     idx, comp_off, old_ps = find_mainapp(img)
 
     # This reservation is safe only if the stock image has no absolute pointer
@@ -360,6 +387,7 @@ def layout(img):
     wear_notify_addr = base + _fn(built, "faceclaw_send_wear_event")["offset"]
     compass_decode_addr = base + _fn(built, "compass_decode_capture")["offset"]
     compass_report_addr = base + _fn(built, "compass_report_event")["offset"]
+    compass_accuracy_addr = base + _fn(built, "compass_preserve_accuracy")["offset"]
 
     # --- assemble the appended payload bytes (old_ps .. end) ---
     pad = blob_off - old_ps                     # alignment gap before the blob
@@ -441,6 +469,9 @@ def layout(img):
         (g2f(COMPASS_REPORT_BL_SITE[0]), COMPASS_REPORT_BL_SITE[1],
          enc_bl(COMPASS_REPORT_BL_SITE[0], compass_report_addr),
          "bl compass_report_event (stock UI + heading with diagnostics over BLE)"),
+        (g2f(COMPASS_ACCURACY_RESET_SITE[0]), COMPASS_ACCURACY_RESET_SITE[1],
+         enc_bl(COMPASS_ACCURACY_RESET_SITE[0], compass_accuracy_addr),
+         "bl compass_preserve_accuracy (retain magnetic calibration under Faceclaw framebuffer lease)"),
     ]
     return bytes(append), in_place, (idx, comp_off, old_ps)
 

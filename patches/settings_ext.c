@@ -463,6 +463,8 @@ __attribute__((naked)) void faceclaw_evenai_display_entry(void) {
 //  12 -> successful ACKs repeat up to three preceding processed messages.
 //  13 -> 256 KiB EvenHub texture cache; modes 18/19/20 use uint32 offsets.
 //         Legacy texture commands 12/13/14 are retired.
+//  14 -> preserve magnetic calibration accuracy on IMU reconfiguration while
+//         the Faceclaw framebuffer lease is valid; compass start/stop unchanged.
 //
 // The string is a normal rodata literal now that build.py emits/relocates .rodata
 // (earlier this had to be spelled out byte-by-byte to avoid a rodata section).
@@ -470,7 +472,7 @@ __attribute__((naked)) void faceclaw_evenai_display_entry(void) {
 
 int settings_send_wrapper(int type, int sid, unsigned char *buf, unsigned len) {
     if (sid == 9) {
-        static const char caps[] = "Faceclaw/13";
+        static const char caps[] = "Faceclaw/14";
         len = pb_append_bytes_field(buf, len, SETTINGS_RESPONSE_CAPACITY,
                                     100u, (const unsigned char *)caps,
                                     (unsigned)sizeof(caps) - 1u);

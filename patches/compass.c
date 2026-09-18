@@ -34,6 +34,31 @@
 #define COMPASS_ANOMALIES (*(volatile uint8_t *)0x2007737fU)
 #endif
 
+/* DRV_IMUSetSensorParameters, 2.2.9.22, at 0x4b4c76:
+ *   movs r1,#0; strb r1,[r0]
+ * r0 points at the driver's magnetic accuracy byte (0x20077380). The next
+ * instructions reload it into r2 and call the vendor bias-restoration API
+ * with the driver's cached bias. That API restores covariance as well as bias.
+ *
+ * Replace only this reset with a BL. Return the pointer in r0; r1/r2/r3 are
+ * overwritten before use, flags are dead, and LR is saved by the stock prologue.
+ * Preserve the current accuracy, including zero/downgrades, rather than a
+ * historical maximum. The stock FIFO parser continues updating bias/accuracy.
+ *
+ * Read the framebuffer (session) lease without cfw_fb_lease_active(): its
+ * expiration path frees display resources, which this sensor-task hook must
+ * not do. No allocation, sensor I/O, or state restoration occurs here. A missing
+ * context, released/expired lease, or invalid accuracy uses the stock reset.
+ * Do not gate on compass_forward: stopping reports may itself reconfigure IMU.
+ */
+volatile uint8_t *compass_preserve_accuracy(volatile uint8_t *accuracy) {
+    customCfwContext *ctx = peekCustomCfwContext();
+    uint32_t deadline = ctx ? __atomic_load_n(&ctx->direct_lease_deadline, __ATOMIC_RELAXED) : 0;
+    if (!deadline || (int32_t)(deadline - FW_MS_TICK) <= 0 || *accuracy > 3)
+        *accuracy = 0;
+    return accuracy;
+}
+
 int compass_decode_capture(void *device, const void *sensor0, const void *sensor1, uint8_t *gaf) {
     int result = COMPASS_DECODE(device, sensor0, sensor1, gaf);
     customCfwContext *ctx = peekCustomCfwContext();
