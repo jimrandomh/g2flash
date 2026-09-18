@@ -14,8 +14,9 @@ Build a CFW image for g2_2.2.9.22 with:
   (7) stock wear-state notifications outside onboarding plus a current-state query, and
   (8) Faceclaw compass heading + sample diagnostics from the sensor hub while
       image-handler mode 10 is enabled, and
-  (9) a lease-scoped 64 KiB texture cache plus cached-image/cached-string drawing
-      through image-handler modes 12, 13, and 14, and built-in-font mode 15, and
+  (9) a lease-scoped 256 KiB texture cache plus cached-image/cached-string drawing
+      through image-handler modes 18, 19, and 20,
+      and built-in-font mode 15, and
   (10) a phone-controlled microphone configuration + multi-channel audio streaming
       channel (settings fields 103/104 + the 'SM' stream frame) riding the
       already-hooked sid-0x09 settings seams -- no new patch sites; see

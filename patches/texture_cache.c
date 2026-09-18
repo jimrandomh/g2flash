@@ -11,7 +11,7 @@
  * RLE uses the same tokens as modes 3/6, but covers exactly width*height
  * pixels (there is no packed-row pad nibble). Since an image has no encoded
  * byte length, a valid stream ends at the first token that completes that
- * pixel count. The scanner never reads past the 64 KiB cache. */
+ * pixel count. The scanner never reads past the 256 KiB cache. */
 typedef struct {
     const uint8_t *rle;
     uint32_t rle_len;
@@ -212,28 +212,29 @@ static void cfw_texture_add_rect(cfw_rectlist *rl, int32_t x, int32_t y,
 }
 
 /* Clear the published pointer before freeing so repeated release/cleanup is
- * harmless. The heap coordinator serializes against other heap-13 users. */
+ * harmless. The stock EvenHub allocator serializes access to its TLSF heap. */
 static void cfw_texture_cache_release(customCfwContext *ctx) {
     if (ctx && ctx->texture_cache) {
         uint8_t *cache = ctx->texture_cache;
         ctx->texture_cache = 0;
-        cfw_heap13_free(cache);
+        FW_FREE(cache);
     }
 }
 
-/* Mode 12 payload: a list of [offset:u16][length:u16][data...] entries. Validate
+/* Mode 18 payload: a list of [offset:u32][length:u16][data...] entries. Validate
  * the complete list before allocating or writing, then lazily allocate and zero
- * the 64 KiB phone-owned region on the first nonempty write. */
+ * the 256 KiB phone-owned region on the EvenHub heap on the first nonempty write. */
 static int cfw_texture_cache_update(const uint8_t *src, uint32_t len) {
     if (src == 0) return -1;
     uint32_t pos = 0;
     int has_data = 0;
     while (pos < len) {
-        if (len - pos < 4u) return -1;
-        uint32_t offset = rd16(src + pos);
-        uint32_t entry_len = rd16(src + pos + 2u);
-        pos += 4u;
-        if (entry_len > len - pos || offset + entry_len > CFW_TEXTURE_CACHE_SIZE)
+        if (len - pos < 6u) return -1;
+        uint32_t offset = rd32(src + pos);
+        uint32_t entry_len = rd16(src + pos + 4u);
+        pos += 6u;
+        if (entry_len > len - pos || offset > CFW_TEXTURE_CACHE_SIZE ||
+            entry_len > CFW_TEXTURE_CACHE_SIZE - offset)
             return -1;
         if (entry_len) has_data = 1;
         pos += entry_len;
@@ -244,7 +245,7 @@ static int cfw_texture_cache_update(const uint8_t *src, uint32_t len) {
     customCfwContext *ctx = getCustomCfwContext();
     if (ctx == 0) return -1;
     if (ctx->texture_cache == 0) {
-        uint8_t *cache = (uint8_t *)cfw_heap13_malloc(CFW_TEXTURE_CACHE_SIZE);
+        uint8_t *cache = (uint8_t *)cfw_malloc(CFW_TEXTURE_CACHE_SIZE);
         if (cache == 0) return -1;
         bzero(cache, CFW_TEXTURE_CACHE_SIZE);
         ctx->texture_cache = cache;
@@ -252,27 +253,27 @@ static int cfw_texture_cache_update(const uint8_t *src, uint32_t len) {
 
     pos = 0;
     while (pos < len) {
-        uint32_t offset = rd16(src + pos);
-        uint32_t entry_len = rd16(src + pos + 2u);
-        pos += 4u;
+        uint32_t offset = rd32(src + pos);
+        uint32_t entry_len = rd16(src + pos + 4u);
+        pos += 6u;
         memcpy(ctx->texture_cache + offset, src + pos, entry_len);
         pos += entry_len;
     }
     return 0;
 }
 
-/* Mode 13 payload: [offset:u16][x:u16][y:u16][options:u8]. */
+/* Mode 19 payload: [offset:u32][x:u16][y:u16][options:u8]. */
 static int cfw_texture_draw_image(uint8_t *shadow, uint32_t stride,
                                   uint32_t panel_w, uint32_t panel_h,
                                   const uint8_t *src, uint32_t len,
                                   cfw_rectlist *rl) {
-    if (shadow == 0 || src == 0 || len != 7u || !cfw_fb_lease_active()) return -1;
+    if (shadow == 0 || src == 0 || len != 9u || !cfw_fb_lease_active()) return -1;
     customCfwContext *ctx = getCustomCfwContext();
     cfw_cached_image image;
-    if (!cfw_texture_image_at(ctx, rd16(src), &image)) return -1;
-    int32_t x = (int32_t)rd16(src + 2);
-    int32_t y = (int32_t)rd16(src + 4);
-    uint8_t options = src[6];
+    if (!cfw_texture_image_at(ctx, rd32(src), &image)) return -1;
+    int32_t x = (int32_t)rd16(src + 4u);
+    int32_t y = (int32_t)rd16(src + 6u);
+    uint8_t options = src[8];
     uint8_t lut[16];
     cfw_texture_make_lut(options, lut);
     cfw_texture_render(shadow, stride, panel_w, panel_h, x, y, &image,
@@ -281,27 +282,27 @@ static int cfw_texture_draw_image(uint8_t *shadow, uint32_t stride,
     return 0;
 }
 
-/* Mode 14 payload: [font-offset:u16][x:u16][y:u16][options:u8][strlen:u8][string].
- * The font starts with 96 little-endian uint16 image offsets for characters
+/* Mode 20 payload: [font-offset:u32][x:u16][y:u16][options:u8][strlen:u8][string].
+ * The font starts with 96 little-endian uint32 image offsets for characters
  * 32..127. Bytes 1..31 adjust x by -10..20; byte 0 and bytes >127 are invalid. */
 static int cfw_texture_draw_string(uint8_t *shadow, uint32_t stride,
                                    uint32_t panel_w, uint32_t panel_h,
                                    const uint8_t *src, uint32_t len,
                                    cfw_rectlist *rl) {
-    if (shadow == 0 || src == 0 || len < 8u || !cfw_fb_lease_active()) return -1;
-    uint32_t font_offset = rd16(src);
-    uint8_t options = src[6];
-    uint32_t string_len = src[7];
-    if (len != 8u + string_len ||
-        font_offset > CFW_TEXTURE_CACHE_SIZE - 96u * 2u)
+    if (shadow == 0 || src == 0 || len < 10u || !cfw_fb_lease_active()) return -1;
+    uint32_t font_offset = rd32(src);
+    uint8_t options = src[8];
+    uint32_t string_len = src[9u];
+    if (len != 10u + string_len ||
+        font_offset > CFW_TEXTURE_CACHE_SIZE - 96u * 4u)
         return -1;
 
     customCfwContext *ctx = getCustomCfwContext();
     if (ctx == 0 || ctx->texture_cache == 0) return -1;
     const uint8_t *table = ctx->texture_cache + font_offset;
-    const uint8_t *string = src + 8;
-    int32_t x = (int32_t)rd16(src + 2);
-    int32_t y = (int32_t)rd16(src + 4);
+    const uint8_t *string = src + 10u;
+    int32_t x = (int32_t)rd16(src + 4u);
+    int32_t y = (int32_t)rd16(src + 6u);
 
     /* Validate every character/table entry/RLE stream before drawing any glyph. */
     int32_t scan_x = x;
@@ -315,7 +316,7 @@ static int cfw_texture_draw_string(uint8_t *shadow, uint32_t stride,
             continue;
         }
         if (ch < 32u || ch > 127u) return -1;
-        uint32_t image_offset = rd16(table + (ch - 32u) * 2u);
+        uint32_t image_offset = rd32(table + (ch - 32u) * 4u);
         cfw_cached_image image;
         if (!cfw_texture_image_at(ctx, image_offset, &image)) return -1;
         scan_x += (int32_t)image.width;
@@ -328,7 +329,7 @@ static int cfw_texture_draw_string(uint8_t *shadow, uint32_t stride,
             x += (int32_t)ch - 11;
             continue;
         }
-        uint32_t image_offset = rd16(table + (ch - 32u) * 2u);
+        uint32_t image_offset = rd32(table + (ch - 32u) * 4u);
         cfw_cached_image image;
         /* Already validated above; cache contents cannot change in this handler. */
         if (!cfw_texture_image_at(ctx, image_offset, &image)) return -1;
@@ -432,7 +433,7 @@ static int cfw_builtin_glyph(const uint8_t *font, uint32_t letter,
 
 /* Mode 15 payload: [x:u16][y:u16][options:u8][strlen:u8][UTF-8 string].
  * It draws through the stock background 20 px font chain. Bytes 1..31 retain
- * mode 14's inline x adjustments (-10..20); all other text is strict UTF-8.
+ * mode 20's inline x adjustments (-10..20); all other text is strict UTF-8.
  * Supplying the next real glyph to LVGL applies the built-in default kerning. */
 static int cfw_builtin_draw_string(uint8_t *shadow, uint32_t stride,
                                    uint32_t panel_w, uint32_t panel_h,

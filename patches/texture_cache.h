@@ -1,7 +1,7 @@
 #pragma once
 #include <stdint.h>
 
-#define CFW_TEXTURE_CACHE_SIZE 65536u
+#define CFW_TEXTURE_CACHE_SIZE (256u * 1024u)
 
 static void cfw_texture_cache_release(customCfwContext *ctx);
 static int cfw_texture_cache_update(const uint8_t *src, uint32_t len);

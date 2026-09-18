@@ -5,6 +5,8 @@ typedef void (*free_fn)(void *);
 typedef void *(*heap_malloc_fn)(uint32_t descriptor, uint32_t size);
 typedef void (*heap_free_fn)(uint32_t descriptor, void *ptr);
 
+/* Stock mutex-protected EvenHub TLSF wrappers. Both load the arena pointer
+ * from 0x20076e08 (arena 0x202020a8, size 0x70800 in firmware 2.2.9.22). */
 #define FW_MALLOC  ((malloc_fn)0x00458383U)         /* FUN_00458382 malloc(size) */
 #define FW_FREE    ((free_fn)0x004583c7U)           /* FUN_004583c6 free(ptr) */
 #define FW_HEAP_MALLOC ((heap_malloc_fn)0x0048c1e9U) /* FUN_0048c1e8 generic heap malloc */

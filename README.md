@@ -60,10 +60,13 @@ updating the whole screen at once, and you can send messages which perform
 rect-to-rect copies for low-bandwidth scroll animations. Because this mode
 writes directly to the framebuffer without going through EvenHub's
 screen-update functions, stock containers do not contribute visible content
-while the direct framebuffer lease is held. A lease-scoped 64 KiB texture cache lets the phone upload RLE
+while the direct framebuffer lease is held. A lease-scoped 256 KiB texture cache lets the phone upload RLE
 icons and glyphs once, then draw cached images and strings with small update
-messages. The cache is allocated and zeroed on its first write and released
-when the Faceclaw framebuffer lease ends. Cached draw commands carry an options
+messages. The cache is allocated on the EvenHub heap and zeroed on its first write and released
+when the Faceclaw framebuffer lease ends. Firmware revision 13 adds modes
+18/19/20 with 32-bit cache offsets (including glyph-table entries) for the
+full 256 KiB; legacy modes 12/13/14 are no longer accepted. Upload lengths
+remain 16-bit. Cached draw commands carry an options
 byte whose low nibble selects the top output color; bit 4 makes source color 0
 transparent, and bit 5 reverses the proportional 16-entry color ramp.
 Image-handler mode 15 draws a length-prefixed UTF-8 string with the glasses'

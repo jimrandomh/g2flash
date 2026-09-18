@@ -81,22 +81,11 @@ int cfw_message_received(const uint8_t *data, uint16_t size, uint16_t checksum) 
  *                              CFW timers, stop custom buzzer/compass activity, release
  *                              owned framebuffer shadow, and restore stock behavior. The
  *                              singleton CFW context and sticky allocation flag remain.
- *   12          -> [12][offset16][length16][data]... update the lazily allocated,
- *                              zero-initialized 64 KiB phone-owned texture cache.
- *                              Every entry is validated before any bytes are written.
- *   13          -> [13][offset16][x16][y16][options8] draw a cached image. At offset:
- *                              [width8][height8][4bpp RLE], decoded directly into
- *                              the full-panel shadow with clipping.
- *   14          -> [14][font-offset16][x16][y16][options8][strlen8][string]
- *                              draw cached glyphs. Options contains a low-nibble
- *                              top color plus transparency (bit 4) and inverse (bit 5).
- *                              The font is a 96-entry uint16 image-offset table for
- *                              characters 32..127. Bytes 1..31 adjust x by -10..20;
- *                              each glyph advances x by its cached image width.
+ *   12/13/14    -> retired (rejected).
  *   15          -> [15][x16][y16][options8][strlen8][UTF-8 string] draw with the
  *                              stock background 20 px font chain and its default
  *                              pair kerning. Bytes 1..31 adjust x by -10..20 as in
- *                              mode 14; options and clipping also match mode 14.
+ *                              mode 20; options and clipping also match mode 20.
  *   16          -> [16][op]... ambient light sensor (no display change; master lens
  *                              only, see als_sensor.c). op 0 = QUERY one report; op 1
  *                              [flags][interval16][min-delta16][heartbeat16] = PASSIVE
@@ -105,6 +94,18 @@ int cfw_message_received(const uint8_t *data, uint16_t size, uint16_t checksum) 
  *                              PASSIVE STOP. Reports arrive as sid-0x09 field 105.
  *   17          -> [17][0] query cached R1 battery (no display change).
  *                              Master replies on sid-0x09 field 106; see ring_battery.c.
+ *   18          -> [18][offset32][length16][data]... update the lazily allocated,
+ *                              zero-initialized 256 KiB phone-owned texture cache.
+ *                              Every entry is validated before any bytes are written.
+ *   19          -> [19][offset32][x16][y16][options8] draw a cached image. At offset:
+ *                              [width8][height8][4bpp RLE], decoded directly into
+ *                              the full-panel shadow with clipping.
+ *   20          -> [20][font-offset32][x16][y16][options8][strlen8][string]
+ *                              draw cached glyphs. Options contains a low-nibble
+ *                              top color plus transparency (bit 4) and inverse (bit 5).
+ *                              The font is a 96-entry uint32 image-offset table for
+ *                              characters 32..127. Bytes 1..31 adjust x by -10..20;
+ *                              each glyph advances x by its cached image width.
  *   anything else / too short  -> reject the custom message.
  *
  * The HIGH BIT of the mode byte is a "lenses differ" flag; most modes ignore it. For
@@ -112,7 +113,7 @@ int cfw_message_received(const uint8_t *data, uint16_t size, uint16_t checksum) 
  * a stereo shift without duplicating pixels; each lens draws at its own box. For mode 9
  * it carries two rect-sets (left then right); each lens uses its own.
  *
- * Custom modes 3/6/8/9/13/14/15 use a lazily allocated 153600-byte CFW
+ * Custom modes 3/6/8/9/15/19/20 use a lazily allocated 153600-byte CFW
  * framebuffer shadow, independent of EvenHub containers.
  *
  * RLE (modes 3 and 6 only): message bodies contain run-length encoded pixels.
@@ -260,7 +261,7 @@ static int is_shadow_message(const uint8_t *src, uint32_t srclen) {
     if (src == 0 || srclen == 0) return 0;
     uint8_t mode = src[0] & 0x7fu;
     return mode == 3 || mode == 6 || mode == 8 || mode == 9 || mode == 11 ||
-           mode == 13 || mode == 14 || mode == 15;
+           mode == 15 || mode == 19 || mode == 20;
 }
 
 /* Commands can arrive on both BLE and bridge receive tasks.
@@ -499,7 +500,7 @@ static int image_dispatch(const uint8_t *src, uint32_t srclen, int present, cfw_
         return cfw_cleanup_session();
     }
 
-    if (mode == 12) {
+    if (mode == 18) {
         /* Cache update is not a shadow mutation and therefore does not hold the
          * display gate. The helper validates the entire entry list first. */
         return cfw_texture_cache_update(src + 1, srclen - 1);
@@ -509,14 +510,14 @@ static int image_dispatch(const uint8_t *src, uint32_t srclen, int present, cfw_
     uint32_t w = IMAGE_W;
     uint32_t h = IMAGE_H;
 
-    if (mode == 13 || mode == 14 || mode == 15) {
+    if (mode == 15 || mode == 19 || mode == 20) {
         uint8_t *shadow = cfw_shadow_buffer();
         if (shadow == 0) return -1;
         int r;
-        if (mode == 13)
+        if (mode == 19)
             r = cfw_texture_draw_image(shadow, (w + 1u) >> 1, w, h,
                                        src + 1, srclen - 1, rl);
-        else if (mode == 14)
+        else if (mode == 20)
             r = cfw_texture_draw_string(shadow, (w + 1u) >> 1, w, h,
                                         src + 1, srclen - 1, rl);
         else
@@ -533,7 +534,7 @@ static int image_dispatch(const uint8_t *src, uint32_t srclen, int present, cfw_
          * multi-op update (e.g. scroll = rect-copy + delta, no intermediate flash).
          * Bounded by the private message length; no nesting
          * (a sub-message may not itself be a multi-segment message). Only shadow
-         * operations (modes 3/6/9/13/14/15) are accepted. */
+         * operations (modes 3/6/9/15/19/20) are accepted. */
         if (!present) return -1;                       /* only valid at top level */
         if (srclen < 2) return -1;
         uint32_t count = src[1];
@@ -545,7 +546,8 @@ static int image_dispatch(const uint8_t *src, uint32_t srclen, int present, cfw_
             if (seglen < 1 || pos + seglen > srclen) return -1;
             uint8_t submode = src[pos] & 0x7fu;
             if (submode != 3 && submode != 6 && submode != 9 &&
-                submode != 13 && submode != 14 && submode != 15) return -1;
+                submode != 15 &&
+                submode != 19 && submode != 20) return -1;
             if (image_dispatch(src + pos, seglen, 0, rl) != 0) return -1;
             pos += seglen;
         }

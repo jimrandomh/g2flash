@@ -69,9 +69,9 @@ typedef struct {
     uint8_t direct_failed;
     uint8_t direct_active;                    /* physical framebuffer currently owns the image */
     uint32_t direct_lease_deadline;            /* fail-open repaint-guard deadline */
-    /* Phone-owned texture data, allocated lazily on the first mode-12 write and
+    /* Phone-owned texture data, allocated lazily on the first mode-18 write and
      * released with the Faceclaw framebuffer lease. Protocol references into
-     * this block are uint16 offsets. */
+     * this block are uint32 offsets. */
     uint8_t *texture_cache;
     /* --- Microphone control + multi-channel routing (SybilSight "glasses ->
      * microphones"). See the contract comment in mic_control.c; the stock-entry
