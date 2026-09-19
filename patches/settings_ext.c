@@ -466,13 +466,17 @@ __attribute__((naked)) void faceclaw_evenai_display_entry(void) {
 //  14 -> preserve magnetic calibration accuracy on IMU reconfiguration while
 //         the Faceclaw framebuffer lease is valid; compass start/stop unchanged.
 //
+//  15 -> connection-bound ANCS relay with live CP access for the iOS UI.
+//
+//  16 -> route real ANCS write completions and drain CCC writes on restore.
+//
 // The string is a normal rodata literal now that build.py emits/relocates .rodata
 // (earlier this had to be spelled out byte-by-byte to avoid a rodata section).
 #define SETTINGS_RESPONSE_CAPACITY 256u
 
 int settings_send_wrapper(int type, int sid, unsigned char *buf, unsigned len) {
     if (sid == 9) {
-        static const char caps[] = "Faceclaw/14";
+        static const char caps[] = "Faceclaw/16";
         len = pb_append_bytes_field(buf, len, SETTINGS_RESPONSE_CAPACITY,
                                     100u, (const unsigned char *)caps,
                                     (unsigned)sizeof(caps) - 1u);

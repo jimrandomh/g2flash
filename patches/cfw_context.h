@@ -119,6 +119,9 @@ typedef struct {
     uint32_t image_mutex; /* serializes commands from BLE and bridge */
     uint8_t *framebuffer_shadow; /* owned 640x480 packed 4bpp; released by mode 11 */
     cfw_message_stream message_streams[2]; /* index = BLE ingress lens bit - 1 */
+    uint8_t ancs_connection, ancs_stage;
+    uint16_t ancs_sequence;
+    uint32_t ancs_token;
 } customCfwContext;
 
 #define CFW_CTX_SLOT  0x2029f4a8U    /* first word of the CFW-reserved TLSF tail */
@@ -127,7 +130,6 @@ typedef struct {
 
 // Marker used to validate that the CFW context pointer hasn't been clobbered.
 // Does not need updating.
-// Layout revision: reject stale contexts with the removed snapshot FIFO.
 #define CFW_CTX_MAGIC 0xC0FFEE6CU
 
 #define FW_MS_TICK  (*(volatile uint32_t *)0x20076d80U)  /* firmware 1 ms OS tick (SysTick chain) */

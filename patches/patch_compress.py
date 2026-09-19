@@ -414,6 +414,18 @@ def layout(img):
 
     # --- in-place live-code edits + bl retargets (targets are the appended addrs) ---
     in_place = [
+        # Stock profile_ancc_process_msg branches both WRITE_RSP (9) and
+        # WRITE_CMD_RSP (10) to 0x4d4f1e, which formerly skipped the gate.
+        # Redirect that two-byte branch to the existing r0=event / BL gate path.
+        (g2f(0x4d4f1e), "15e0", "fae7", "route ANCS write completions through relay event hook"),
+        *[(g2f(site), old, enc_bl(site, base + _fn(built, name)["offset"]), name)
+          for site, old, name in [
+            (0x4d4f18, "fff7cefa", "cfw_ancs_event"),
+            (0x4d4f34, "fef770ff", "cfw_ancs_open"),
+            (0x4d4f46, "fef76fff", "cfw_ancs_close")]],
+        (g2f(0x4c9b78), "51334d00",
+         struct.pack("<I", base + _fn(built, "cfw_ancs_write")["offset"] + 1).hex(),
+         "connection-bound ANCS EUS write callback"),
         *[(g2f(site), old, enc_bl(site, message_bridge_addr),
            "bl cfw_message_bridge_received (ordered private bridge delivery before worker pool)")
           for site, old in MESSAGE_BRIDGE_BL_SITES],
@@ -502,6 +514,10 @@ def build_patch_ops(img):
 
     Only offsets whose bytes actually change are recorded, so the per-component
     checksum fixups collapse to just the (changed) main-app component."""
+    # ANCS uses fixed stock SRAM and Cordio ABIs as well as patched call sites.
+    # Authenticate the complete base, not just four-byte hook instructions.
+    if hashlib.sha256(img).hexdigest() != "a03fbea9f68a9de6bc271daabb9f3a41c59053d1086622c76a4e990f829cc561":
+        raise ValueError("ANCS relay requires the exact audited G2 2.2.9.22 image")
     append, in_place, (idx, comp_off, old_ps) = layout(img)
 
     data = bytearray(img)
