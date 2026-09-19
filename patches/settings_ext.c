@@ -23,11 +23,11 @@
 // Tag 100 is far above the stock message's fields (1..19), so stock decoders and
 // the phone bridge skip it as an unknown field -- fully backward compatible.
 //
-// HOOK: the 2.2.9.22 settings responder ends with
-//     r0=type(1) r1=sid(9) r2=buf r3=len ; bl FUN_0047d808   ; aa21 send
+// HOOK: the 2.3.0.24 settings responder ends with
+//     r0=type(1) r1=sid(9) r2=buf r3=len ; bl FUN_0047ef04   ; aa21 send
 // We retarget that one `bl` to settings_send_wrapper. The 4 send args are already
 // in r0..r3, so the wrapper appends to `buf` (a 256-byte static response buffer
-// at 0x20072080 that only uses ~40 B) and tail-calls the real sender with the
+// at 0x20072f48 that only uses ~40 B) and tail-calls the real sender with the
 // grown length. Only this call site is redirected, but we still guard on sid==9.
 
 // The same sid remains subscribed while EvenHub is shut down, so field 101 is
@@ -75,13 +75,13 @@ void mic_apply_control(const uint8_t *data, uint32_t len);
 unsigned mic_append_status(unsigned char *buf, unsigned len, unsigned capacity);
 typedef void (*display_start_fn)(unsigned app_id, void *arg, unsigned arg_len, void *cb);
 
-#define FW_SEND 0x0047d809 /* FUN_0047d808 | thumb bit */
-#define FW_NOTIFY_SEND 0x0047d90fu /* FUN_0047d90e | thumb bit */
-#define FW_PB_DECODE ((pb_decode_fn)0x0049da09u)       /* FUN_0049da08 */
-#define FW_DISPLAY_START ((display_start_fn)0x0046a39fu) /* FUN_0046a39e */
-#define FW_SIDE_ID ((lens_side_fn)0x0045cfddu)         /* 1=right, 2=left */
+#define FW_SEND 0x0047ef05 /* FUN_0047ef04 | thumb bit */
+#define FW_NOTIFY_SEND 0x0047f025u /* FUN_0047f024 | thumb bit */
+#define FW_PB_DECODE ((pb_decode_fn)0x0049f1a5u)       /* FUN_0049f1a4 */
+#define FW_DISPLAY_START ((display_start_fn)0x0046a673u) /* FUN_0046a672 */
+#define FW_SIDE_ID ((lens_side_fn)0x00465d4du)         /* 1=right, 2=left */
 typedef unsigned (*wear_status_fn)(void);
-#define FW_WEAR_STATUS ((wear_status_fn)0x004ac333u)   /* cached WearDetect status: 1=off, 2=on */
+#define FW_WEAR_STATUS ((wear_status_fn)0x004adddbu)   /* cached WearDetect status: 1=off, 2=on */
 
 #define FACECLAW_PROTO_VERSION 1u
 #define FACECLAW_CONTROL_FIELD 101u
@@ -201,7 +201,7 @@ static void faceclaw_send_gesture_event(customCfwContext *ctx, unsigned event, u
 }
 
 /* Idle-input forwarding. With no app on screen, the display thread's touch
- * branch (FUN_0045eb44, message type 7, after the idle gate FUN_0046f136
+ * branch (FUN_004678a4, message type 7, after the idle gate FUN_0046f402
  * returned 1) launches the dashboard on a double tap (subtype 1) or a head-up
  * (6), the Menu on tap-then-long (0x11), and frees every other record
  * unhandled. Faceclaw's Glanceboard wants three of the dropped ones -- single
@@ -210,37 +210,24 @@ static void faceclaw_send_gesture_event(customCfwContext *ctx, unsigned event, u
  * so unlike the double-tap wake there is no CLAIM/fallback handshake, and the
  * stock branch still runs (and frees the record) exactly as before.
  *
- * HOOK: 0x45f01a `bl FUN_0045e6e8` (the mode check right after the idle gate)
- * is retargeted to faceclaw_idle_input_gate. r4 holds the input record there:
+ * 2.3.0 removed the old mode check. headup_gate_impl now calls this helper
+ * only when the stock idle gate returns 1, before the record is freed:
  * u16 raw source at +2 (0/1 = temple touchpads, 4 = ring), u32 gesture subtype
  * at +4 -- the same record the UI dispatcher reads (from +2) while an app is
- * running. The shim passes r4 as the C argument; the impl returns the stock
- * mode result unchanged and only forwards in the mode where the stock code
- * would have launched the dashboard on a double tap (mode != 1). */
-typedef int (*idle_mode_fn)(void);
-#define FW_IDLE_MODE ((idle_mode_fn)0x0045e6e9u) /* FUN_0045e6e8 */
+ * running. The caller preserves the stock gate result and register state. */
 #define IDLE_GESTURE_TAP     0u
 #define IDLE_GESTURE_LONG    3u
 #define IDLE_GESTURE_RELEASE 0xeu
 
-int faceclaw_idle_input_gate_impl(const unsigned char *record) {
-    int mode = FW_IDLE_MODE();
-    if (mode == 1 || !record) return mode;
+void faceclaw_idle_input_forward(const unsigned char *record) {
+    if (!record) return;
     uint32_t subtype = (uint32_t)record[4] | ((uint32_t)record[5] << 8) |
                        ((uint32_t)record[6] << 16) | ((uint32_t)record[7] << 24);
     unsigned event = subtype == IDLE_GESTURE_TAP ? FACECLAW_EVENT_TAP
                    : subtype == IDLE_GESTURE_LONG ? FACECLAW_EVENT_LONG
                    : subtype == IDLE_GESTURE_RELEASE ? FACECLAW_EVENT_RELEASE : 0u;
-    if (event == 0u || !cfw_wake_lease_active()) return mode;
+    if (event == 0u || !cfw_wake_lease_active()) return;
     faceclaw_send_gesture_event(faceclaw_context_if_valid(), event, record[2]);
-    return mode;
-}
-
-/* r4 (the input record) is outside the stock no-argument ABI of the replaced
- * call; hand it over as the C argument and tail-branch so the stock caller's
- * return address and its use of r0 are untouched. */
-__attribute__((naked)) int faceclaw_idle_input_gate(void) {
-    __asm volatile("mov r0, r4\n\tb faceclaw_idle_input_gate_impl");
 }
 
 /* Send the stock OnboardingDataPackage EVENT/GLS_WEAR_STATUS wire shape
@@ -265,7 +252,7 @@ __attribute__((used, noinline)) void faceclaw_send_wear_event(unsigned wearing) 
 }
 
 /* Replaces the two dashboard-start BLs in the idle policy: the double-tap site
- * (0x45f146) through faceclaw_display_start and the head-up site (0x45f206)
+ * (0x467d68) through faceclaw_display_start and the head-up site (0x467e28)
  * through faceclaw_display_start_headup, so the phone learns which gesture
  * woke it. A second double tap while a wake is pending is an emergency
  * stock-dashboard override; a head-up while one is pending is not (a head
@@ -413,7 +400,7 @@ int settings_decode_wrapper(void *stream, const void *fields, void *dest) {
 /* Entry trampoline for even_ai_display_ctrl. The first four stock bytes
  * (`push {r0-r6,lr}; mov r6,r0`) are replaced by a B.W here. Reproduce them,
  * suppress only START while a valid Faceclaw lease exists, and otherwise
- * resume the stock function at 0x004f515a with every argument restored. */
+ * resume the stock function at 0x004f919a with every argument restored. */
 __attribute__((naked)) void faceclaw_evenai_display_entry(void) {
     __asm volatile(
         "push {r0-r6, lr}\n"
@@ -426,7 +413,7 @@ __attribute__((naked)) void faceclaw_evenai_display_entry(void) {
         "ldmia sp, {r0-r3}\n"
         "mov r6, r0\n"
         "1:\n"
-        "movw r12, #0x515b\n"   /* 0x004f515a | Thumb bit; BX needs bit 0 set */
+        "movw r12, #0x919b\n"   /* 0x004f919a | Thumb bit; BX needs bit 0 set */
         "movt r12, #0x004f\n"
         "bx r12\n"
         "2:\n"
@@ -470,13 +457,15 @@ __attribute__((naked)) void faceclaw_evenai_display_entry(void) {
 //
 //  16 -> route real ANCS write completions and drain CCC writes on restore.
 //
+//  17 -> rebase to 2.3.0.24; idle forwarding shares the stock idle gate.
+//
 // The string is a normal rodata literal now that build.py emits/relocates .rodata
 // (earlier this had to be spelled out byte-by-byte to avoid a rodata section).
 #define SETTINGS_RESPONSE_CAPACITY 256u
 
 int settings_send_wrapper(int type, int sid, unsigned char *buf, unsigned len) {
     if (sid == 9) {
-        static const char caps[] = "Faceclaw/16";
+        static const char caps[] = "Faceclaw/17";
         len = pb_append_bytes_field(buf, len, SETTINGS_RESPONSE_CAPACITY,
                                     100u, (const unsigned char *)caps,
                                     (unsigned)sizeof(caps) - 1u);

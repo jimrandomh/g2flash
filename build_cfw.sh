@@ -4,7 +4,7 @@
 #
 # Does everything needed to go from a fresh clone to a flashable image:
 #   1. creates a Python virtualenv (./venv) and installs the flasher's deps
-#   2. downloads the stock G2 2.2.9.22 firmware from Even's CDN
+#   2. downloads the stock G2 2.3.0.24 firmware from Even's CDN
 #   3. verifies the download hashes as expected (refuses to proceed otherwise)
 #   4. applies the committed patch set (patches/cfw_patches.json) to the stock
 #      image to produce the CFW image
@@ -40,14 +40,14 @@
 set -euo pipefail
 
 # ---- config (pinned) -------------------------------------------------------
-FW_URL="https://cdn.evenreal.co/firmware/fc250b05e98a9ff998b4b68f5f99f994.bin"
-BASE="g2_2.2.9.22.bin"            # stock image (downloaded)
-OUT="g2_2.2.9.22_cfw.bin"         # patched image (produced)
+FW_URL="https://cdn.evenreal.co/firmware/1dbdf37b03a1169c384945e94d671371.bin"
+BASE="g2_2.3.0.24.bin"            # stock image (downloaded)
+OUT="g2_2.3.0.24_cfw.bin"         # patched image (produced)
 PATCH_JSON="patches/cfw_patches.json"   # committed patch set (applied to produce OUT)
 GEN="patches/gen_patches.py"      # clang: (re)generate the patch set
 APPLY="patches/apply_patches.py"  # no clang: replay the patch set onto BASE
-BASE_SHA256="a03fbea9f68a9de6bc271daabb9f3a41c59053d1086622c76a4e990f829cc561"
-OUT_SHA256="b856094899d7da6e2e4446a2c11fb3f026cecfa9f8e1a4f05e61f607a63994ad"
+BASE_SHA256="187ccf2bcc5c17a212106e8a376745511e8289c4232b634a7ea94b9bf25a0979"
+OUT_SHA256="76aa372aa2b20859c83a47e7a91302ef120b58d6ba3d9466a8a5722f776673bd"
 
 SKIP_VENV=0
 FORCE_DOWNLOAD=0
@@ -136,7 +136,7 @@ fi
 if [ "$FORCE_DOWNLOAD" -eq 0 ] && [ -f "$BASE" ] && [ "$(sha256 "$BASE")" = "$BASE_SHA256" ]; then
   say "stock image already present and verified ($BASE)"
 else
-  say "downloading stock G2 2.2.9.22 firmware from Even's CDN"
+  say "downloading stock G2 2.3.0.24 firmware from Even's CDN"
   download "$FW_URL" "$BASE"
   verify "$BASE" "$BASE_SHA256" "stock firmware"
   ok "stock image verified ($BASE)"

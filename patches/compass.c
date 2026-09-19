@@ -2,16 +2,19 @@
 #include "cfw_context.h"
 #include "protobuf.h"
 
-/* 2.2.9.22: capture the GAF output before DRV_IMUDataParserCallback clears it.
+/* 2.3.0.24: capture the GAF output before DRV_IMUDataParserCallback clears it.
  * The stock parser can select GRV, GMRV, or RV into the same quaternion slot.
  * Keep a timestamp-keyed sidecar for each of its 20 records; sampling and report
  * selection both run on the sensor-hub task. Never infer the source later from
  * a global that may already describe a newer sample.
  *
- * Replace the heading-report call at 0x4b632e, preserving its stock UI event,
+ * Replace the heading-report call at 0x4b90ce, preserving its stock UI event,
  * and send one sid-8 command-15 notification directly. This replaces the old
  * CFW global-display forwarding hook (it must not also emit a second heading).
  * Stock Navigation remains untouched. The sender copies its stack payload.
+ * 2.3.0 filters centidegrees before this call, which still receives whole
+ * degrees. Diagnostics describe the latest captured input to that filter;
+ * the heading itself can incorporate older samples through stock filtering.
  *
  * Root protobuf field 100 is an optional 12-byte diagnostic extension:
  *   'C','M',1, accuracy, anomalies, source, flags,0, sample_ms_LE32.
@@ -22,21 +25,21 @@
  * Magnetic flags otherwise carry the driver's last known values.
  */
 #ifndef COMPASS_HOST_TEST
-#define COMPASS_DECODE ((int (*)(void *, const void *, const void *, uint8_t *))0x0051c485U)
-#define COMPASS_STOCK_EVENT ((int (*)(uint32_t, int32_t))0x004b5be5U)
+#define COMPASS_DECODE ((int (*)(void *, const void *, const void *, uint8_t *))0x00521531U)
+#define COMPASS_STOCK_EVENT ((int (*)(uint32_t, int32_t))0x004b8865U)
 /* Thread_MsgPbNotifyByBle, as called by stock navigation at 0x59f58c.
- * MsgPbTxByBle (0x47d808, used by ALS replies) gives the wrong frame flag. */
-#define COMPASS_SEND ((int (*)(int, int, const uint8_t *, unsigned))0x0047d90fU)
-#define COMPASS_SIDE ((int (*)(void))0x0045cfddU)
-#define COMPASS_RING ((volatile uint8_t *)0x200652e0U)
-#define COMPASS_MAG_SEEN (*(volatile uint8_t *)0x2007737eU)
-#define COMPASS_ACCURACY (*(volatile uint8_t *)0x20077380U)
-#define COMPASS_ANOMALIES (*(volatile uint8_t *)0x2007737fU)
+ * MsgPbTxByBle (0x47ef04, used by ALS replies) gives the wrong frame flag. */
+#define COMPASS_SEND ((int (*)(int, int, const uint8_t *, unsigned))0x0047f025U)
+#define COMPASS_SIDE ((int (*)(void))0x00465d4dU)
+#define COMPASS_RING ((volatile uint8_t *)0x20066650U)
+#define COMPASS_MAG_SEEN (*(volatile uint8_t *)0x20078473U)
+#define COMPASS_ACCURACY (*(volatile uint8_t *)0x20078475U)
+#define COMPASS_ANOMALIES (*(volatile uint8_t *)0x20078474U)
 #endif
 
-/* DRV_IMUSetSensorParameters, 2.2.9.22, at 0x4b4c76:
+/* DRV_IMUSetSensorParameters, 2.3.0.24, at 0x4b75be:
  *   movs r1,#0; strb r1,[r0]
- * r0 points at the driver's magnetic accuracy byte (0x20077380). The next
+ * r0 points at the driver's magnetic accuracy byte (0x20078475). The next
  * instructions reload it into r2 and call the vendor bias-restoration API
  * with the driver's cached bias. That API restores covariance as well as bias.
  *

@@ -27,7 +27,7 @@ __attribute__((noinline)) static void *cfw_malloc(uint32_t size) {
     return p;
 }
 
-/* Allocate from the independent 820 KiB TLSF arena at 0x201350a8. Go through
+/* Allocate from the independent 820 KiB TLSF arena at 0x2013519c. Go through
  * the stock generic heap coordinator rather than calling TLSF directly so the
  * descriptor's mutex, current-byte counter, and peak-byte counter stay valid. */
 __attribute__((noinline)) static void *cfw_heap13_malloc(uint32_t size) {
@@ -47,11 +47,11 @@ __attribute__((noinline)) static void cfw_heap13_free(void *ptr) {
 #define CFW_HEAP_READ32(addr) (*(volatile uint32_t *)(uintptr_t)(addr))
 #endif
 
-/* Stock mapping_search (0x49ae8e) rounds requests up to a TLSF bin;
- * mapping_insert (0x49ae60) rounds free blocks down. There are 32 bins per
+/* Stock mapping_search (0x49c626) rounds requests up to a TLSF bin;
+ * mapping_insert (0x49c5f8) rounds free blocks down. There are 32 bins per
  * power of two, with 4-byte bins below 128 bytes. A request above the lower
  * edge of the largest occupied bin skips that bin, even if its block fits.
- * Generic heap malloc (0x48c1e8) adds no per-request header of its own. */
+ * Generic heap malloc (0x48d980) adds no per-request header of its own. */
 static uint32_t tlsf_max_request(uint32_t block_size) {
     uint32_t step = 4u;
     for (uint32_t n = block_size; n >= 256u; n >>= 1) step <<= 1;

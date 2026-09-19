@@ -4,50 +4,50 @@
 /*
  * als_sensor.c — ambient light sensor access for the G2 CFW (image-handler mode 16).
  *
- * WHAT THE STOCK FIRMWARE DOES (2.2.9.22, recovered from the [sensor_als] driver)
+ * WHAT THE STOCK FIRMWARE DOES (2.3.0.24, recovered from the [sensor_als] driver)
  *
  * The G2 carries a TI OPT3001 ambient light sensor (manufacturer id 0x5449,
  * device id 0x3001, I2C address 0x45). It is owned by the sensor-hub task and is
  * only ever opened on the master lens, and only while the user's auto-brightness
  * setting is on:
  *
- *   auto on  -> FUN_0046fe70 -> FUN_004b80ee(4)  hub "FuncOpen"  type 4 -> FUN_004bf520 (ALS open)
- *   auto off -> FUN_0046ff40 -> FUN_004b8160(4)  hub "FuncClose" type 4 -> FUN_004bf634 (ALS close)
+ *   auto on  -> FUN_00470050 -> FUN_004baf06(4)  hub "FuncOpen"  type 4 -> FUN_004c2440 (ALS open)
+ *   auto off -> FUN_00470118 -> FUN_004baf80(4)  hub "FuncClose" type 4 -> FUN_004c2554 (ALS close)
  *
- * ALS open resets the driver state, then arms a hub osTimer (handle @0x20076c48,
- * FUN_004b7b28(ms) start / FUN_004b7b38 stop). The timer callback (FUN_004b7b0c)
- * posts hub message id 8, and the hub task dispatches that through an 8-entry
- * {uint16 id, fn} table at 0x20003d08 (FUN_004b7a82 "HUB_MessageProcesser") to the
- * ALS state machine FUN_004bfb60:
+ * ALS open resets the driver state, then arms a hub osTimer (handle @0x20077cf8,
+ * FUN_004ba8e8(ms) start / FUN_004ba8f8 stop). The timer callback (FUN_004ba8cc)
+ * posts hub message id 8, and the hub task dispatches that through a 10-entry
+ * {uint16 id, fn} table at 0x20004484 (FUN_004ba842 "HUB_MessageProcesser") to the
+ * ALS state machine FUN_004c2a80:
  *
- *   status 1 (start read)  FUN_004bf6e4: read, seed peak/target, APPLY target
+ *   status 1 (start read)  FUN_004c2604: read, seed peak/target, APPLY target
  *                          brightness immediately unless a manual level was set,
  *                          then status 3 / 1000 ms.
- *   status 3 (polling)     FUN_004bf980: read every 1000 ms, keep a 5-sample ring,
+ *   status 3 (polling)     FUN_004c28a0: read every 1000 ms, keep a 5-sample ring,
  *                          peak = max of ring, target = curve(peak) * scale_q10.
  *                          While a manual level is "locked" (settings+4 != 0) it
  *                          does nothing unless the ring spread exceeds 300 or the
  *                          lock is ~12 h old; otherwise target != current flips to
  *                          status 2 / 200 ms.
- *   status 2 (adjust)      FUN_004bf844: step the level by 2 (5 when far off)
- *                          toward target every 200 ms through FUN_004bf2ee ->
- *                          FUN_004beda2 -> message 0x10e to the UI task, which
+ *   status 2 (adjust)      FUN_004c2764: step the level by 2 (5 when far off)
+ *                          toward target every 200 ms through FUN_004c220e ->
+ *                          FUN_004c1cc2 -> message 0x10e to the UI task, which
  *                          reprograms the panel. THIS is the visible stepping /
  *                          flicker of stock auto-brightness.
  *
- * The reading (FUN_004bf482) converts the OPT3001 result register (mantissa <<
+ * The reading (FUN_004c23a2) converts the OPT3001 result register (mantissa <<
  * exponent = lux * 100) into the stock "als value": raw * lux_base / 1e6 when a
- * production lux_base calibration exists in NV (@0x20004014+0x28), else raw / 10.
+ * production lux_base calibration exists in NV (@0x2000478c+0x28), else raw / 10.
  * Either way it is roughly tenths of a lux. Readings taken while the IMU pitch is
  * below -30 degrees are discarded (the previous value is reused). The stock
- * brightness curve is a 6-row table @0x755358 of {als threshold, level}:
+ * brightness curve is a 6-row table @0x760cf8 of {als threshold, level}:
  * <=10 -> 35, <=200 -> 50, <=400 -> 70, <=1000 -> 70, <=1300 -> 100, else 100,
  * scaled by scale_q10 (learned from the user's manual adjustments, 0x266..0x59a).
  *
  * Driver globals (all on the master lens, all written only by the hub task):
- *   0x200763d4 opened      0x200763d8 status     0x200763f0 als value
- *   0x200763f4 peak        0x200763f8 gear       0x20076400 target level
- *   0x20000068 scale_q10   0x20074c80 settings: +1 brightness level, +2 auto on
+ *   0x20077448 opened      0x2007744c status     0x20077464 als value
+ *   0x20077468 peak        0x2007746c gear       0x20077474 target level
+ *   0x20000068 scale_q10   0x20075e08 settings: +1 brightness level, +2 auto on
  *
  * WHAT THIS EXTENSION ADDS
  *
@@ -93,43 +93,43 @@
  * so the report is built on the stack.
  *
  * The state machine pointer only exists in RAM (the dispatch table is initialised
- * from IAR-compressed .data, so 0x4bfb61 appears nowhere in flash); that is why
+ * from IAR-compressed .data, so 0x4c2a81 appears nowhere in flash); that is why
  * this is a runtime hook instead of a flash patch site. The entry is located by
  * id (8) at install time and restored only if it still holds our handler.
  */
 
-typedef int      (*als_read_fn)(uint32_t *out);        /* FUN_004bf482: 0 = ok */
-typedef void     (*als_ring_push_fn)(uint32_t v);      /* FUN_004bedec: 5-sample ring */
-typedef uint32_t (*als_ring_peak_fn)(void);            /* FUN_004bef4a: max of ring */
-typedef void     (*als_target_fn)(uint32_t peak);      /* FUN_004bf176: gear/target globals */
-typedef void     (*als_timer_start_fn)(uint32_t ms);   /* FUN_004b7b28: hub ALS osTimer */
-typedef int      (*als_hub_func_fn)(uint32_t func_id); /* FUN_004b80ee open / FUN_004b8160 close */
+typedef int      (*als_read_fn)(uint32_t *out);        /* FUN_004c23a2: 0 = ok */
+typedef void     (*als_ring_push_fn)(uint32_t v);      /* FUN_004c1d0c: 5-sample ring */
+typedef uint32_t (*als_ring_peak_fn)(void);            /* FUN_004c1e6a: max of ring */
+typedef void     (*als_target_fn)(uint32_t peak);      /* FUN_004c2096: gear/target globals */
+typedef void     (*als_timer_start_fn)(uint32_t ms);   /* FUN_004ba8e8: hub ALS osTimer */
+typedef int      (*als_hub_func_fn)(uint32_t func_id); /* FUN_004baf06 open / FUN_004baf80 close */
 typedef int      (*als_send_fn)(int type, int sid, unsigned char *buf, unsigned len);
 typedef void     (*als_hub_handler_fn)(void *msg);
 
-#define ALS_FW_READ        ((als_read_fn)0x004bf483U)
-#define ALS_FW_RING_PUSH   ((als_ring_push_fn)0x004bededU)
-#define ALS_FW_RING_PEAK   ((als_ring_peak_fn)0x004bef4bU)
-#define ALS_FW_TARGET      ((als_target_fn)0x004bf177U)
-#define ALS_FW_TIMER_START ((als_timer_start_fn)0x004b7b29U)
-#define ALS_FW_FUNC_OPEN   ((als_hub_func_fn)0x004b80efU)
-#define ALS_FW_FUNC_CLOSE  ((als_hub_func_fn)0x004b8161U)
-#define ALS_FW_SEND        ((als_send_fn)0x0047d809U)   /* FUN_0047d808 aa21 send */
-#define ALS_FW_SIDE        ((lens_side_fn)0x0045cfddU)  /* 1 = master lens */
+#define ALS_FW_READ        ((als_read_fn)0x004c23a3U)
+#define ALS_FW_RING_PUSH   ((als_ring_push_fn)0x004c1d0dU)
+#define ALS_FW_RING_PEAK   ((als_ring_peak_fn)0x004c1e6bU)
+#define ALS_FW_TARGET      ((als_target_fn)0x004c2097U)
+#define ALS_FW_TIMER_START ((als_timer_start_fn)0x004ba8e9U)
+#define ALS_FW_FUNC_OPEN   ((als_hub_func_fn)0x004baf07U)
+#define ALS_FW_FUNC_CLOSE  ((als_hub_func_fn)0x004baf81U)
+#define ALS_FW_SEND        ((als_send_fn)0x0047ef05U)   /* FUN_0047ef04 aa21 send */
+#define ALS_FW_SIDE        ((lens_side_fn)0x00465d4dU)  /* 1 = master lens */
 
 #define ALS_HUB_FUNC_ID    4u          /* sensor-hub FuncOpen/FuncClose type for the ALS */
 #define ALS_HUB_MSG_ID     8u          /* hub message posted by the ALS timer */
-#define ALS_HUB_TABLE      0x20003d08U /* 8 x {uint16 id, pad, fn} — hub struct + 0x24 */
-#define ALS_HUB_TABLE_N    8u
+#define ALS_HUB_TABLE      0x20004484U /* 10 x {uint16 id, pad, fn} — hub struct + 0x24 */
+#define ALS_HUB_TABLE_N    10u
 
-#define ALS_OPENED     (*(volatile uint32_t *)0x200763d4U)
-#define ALS_STATUS     (*(volatile uint32_t *)0x200763d8U)
-#define ALS_VALUE      (*(volatile uint32_t *)0x200763f0U)
-#define ALS_PEAK       (*(volatile uint32_t *)0x200763f4U)
-#define ALS_GEAR       (*(volatile uint32_t *)0x200763f8U)
-#define ALS_TARGET     (*(volatile uint32_t *)0x20076400U)
+#define ALS_OPENED     (*(volatile uint32_t *)0x20077448U)
+#define ALS_STATUS     (*(volatile uint32_t *)0x2007744cU)
+#define ALS_VALUE      (*(volatile uint32_t *)0x20077464U)
+#define ALS_PEAK       (*(volatile uint32_t *)0x20077468U)
+#define ALS_GEAR       (*(volatile uint32_t *)0x2007746cU)
+#define ALS_TARGET     (*(volatile uint32_t *)0x20077474U)
 #define ALS_SCALE_Q10  (*(volatile uint32_t *)0x20000068U)
-#define ALS_SETTINGS   ((volatile uint8_t *)0x20074c80U) /* +1 level, +2 auto-brightness */
+#define ALS_SETTINGS   ((volatile uint8_t *)0x20075e08U) /* +1 level, +2 auto-brightness */
 
 #define ALS_STATUS_POLLING 3u
 #define ALS_INTERVAL_MIN   100u
@@ -153,7 +153,7 @@ static void als_wr32(unsigned char *p, uint32_t v) {
 }
 
 /* Locate the hub dispatch entry for the ALS timer message. Returns the address of
- * its fn word, or 0 if the table does not look the way 2.2.9.22 lays it out. */
+ * its fn word, or 0 if the table does not look the way 2.3.0.24 lays it out. */
 static volatile uint32_t *als_hub_entry(void) {
     for (uint32_t i = 0; i < ALS_HUB_TABLE_N; i++) {
         volatile uint8_t *e = (volatile uint8_t *)(ALS_HUB_TABLE + i * 8u);

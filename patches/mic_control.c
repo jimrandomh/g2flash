@@ -18,15 +18,15 @@
  * fused with the compass + IMU heading it already receives) itself.
  *
  * STOCK PIPELINE (openCFW recovery of the original g2_2.2.6.10 image; every
- * callable entry below was re-matched against g2_2.2.9.22 by its complete
+ * callable entry below was re-matched against g2_2.3.0.24 by its complete
  * normalized function body). The behavior is pinned by the manifests in
  * evenRealities-openCFW/g2/tools/manifests/g2-service-audio-*.tsv,
  * g2-service-algo-*.tsv, and g2-production-mic-*.tsv, with the narrative in
  * g2/docs/research/g2-service-audio-recovery.md, g2-service-algo-recovery.md,
  * and g2-production-mic-recovery.md):
- *   service_audio.c          0x005930F8...             two PCM app slots + LC3
- *   service_algo_process     0x005AB2F0                per-frame SSR + TDOA angle
- *   production mic init      0x005A8CA2...0x005A8E6E codec/PDM, mono/stereo
+ *   service_audio.c          0x00599288...             two PCM app slots + LC3
+ *   service_algo_process     0x005b1580                per-frame SSR + TDOA angle
+ *   production mic init      0x005aef32...0x005A8E6E codec/PDM, mono/stereo
  *   drv_pdm_production.c      follows service_audio    Ambiq PDM capture driver
  * The stock two-channel capture already exists (codec front end, stereo callback,
  * source slot 0), and service_algo_process already returns a signed
@@ -135,21 +135,21 @@ typedef int  (*pcm_unregister_fn)(uint32_t slot, uint32_t app_id);
 /* service_algo_process(interleaved2ch16, &ssr, &angle) — recovery: "preprocesses
  * one frame and returns SSR and angle results through two shorts". */
 typedef void (*algo_process_fn)(const void *pcm, int16_t *ssr, int16_t *angle);
-/* Thread_MsgStreamingNotifyByBle @ 0x0047DA6C — the facade the stock fallback
+/* Thread_MsgStreamingNotifyByBle @ 0x0047f17c — the facade the stock fallback
  * path forwards its completed LC3 packet through ("transport-one subtype-one
  * wrapper"). ABI inferred as (buf, len). */
 typedef int  (*audio_notify_fn)(const void *buf, uint32_t len);
 typedef uint32_t (*lens_side_fn2)(void);
 
-#define FW_CODEC_MIC_INIT    ((mic_sel_fn)0x005A8CA3U)      /* production_codec_mic_func_init  */
-#define FW_CODEC_MIC_DEINIT  ((mic_void_fn)0x005A8D53U)     /* production_codec_mic_func_deinit */
-#define FW_PDM_MIC_INIT      ((mic_sel_fn)0x005A8DB9U)      /* production_pdm_mic_func_init    */
-#define FW_PDM_MIC_DEINIT    ((mic_void_fn)0x005A8E0FU)     /* production_pdm_mic_func_deinit  */
-#define FW_PCM_REGISTER      ((pcm_register_fn)0x00593371U) /* SVC_PcmAppRegister   (ABI inferred) */
-#define FW_PCM_UNREGISTER    ((pcm_unregister_fn)0x005934C9U)/* SVC_PcmAppUnregister (ABI inferred) */
-#define FW_ALGO_PROCESS      ((algo_process_fn)0x005AB2F1U) /* service_algo_process (ABI inferred) */
-#define FW_AUDIO_NOTIFY      ((audio_notify_fn)0x0047DA6DU) /* streaming notify     (ABI inferred) */
-#define FW_MIC_SIDE          ((lens_side_fn2)0x0045CFDDU)   /* 1 = right temple, 2 = left temple */
+#define FW_CODEC_MIC_INIT    ((mic_sel_fn)0x005aef33U)      /* production_codec_mic_func_init  */
+#define FW_CODEC_MIC_DEINIT  ((mic_void_fn)0x005aefe3U)     /* production_codec_mic_func_deinit */
+#define FW_PDM_MIC_INIT      ((mic_sel_fn)0x005af049U)      /* production_pdm_mic_func_init    */
+#define FW_PDM_MIC_DEINIT    ((mic_void_fn)0x005af09fU)     /* production_pdm_mic_func_deinit  */
+#define FW_PCM_REGISTER      ((pcm_register_fn)0x00599501U) /* SVC_PcmAppRegister   (ABI inferred) */
+#define FW_PCM_UNREGISTER    ((pcm_unregister_fn)0x00599659U)/* SVC_PcmAppUnregister (ABI inferred) */
+#define FW_ALGO_PROCESS      ((algo_process_fn)0x005b1581U) /* service_algo_process (ABI inferred) */
+#define FW_AUDIO_NOTIFY      ((audio_notify_fn)0x0047f17dU) /* streaming notify     (ABI inferred) */
+#define FW_MIC_SIDE          ((lens_side_fn2)0x00465d4dU)   /* 1 = right temple, 2 = left temple */
 /* Future validation-gate seam, unused until its ABI is confirmed: on-device LC3
  * (SVC_Lc3EncodeMono, "encodes one or more mono or interleaved PCM
  * frames through liblc3") would let codec=LC3 honor mic_bitrate_100. */

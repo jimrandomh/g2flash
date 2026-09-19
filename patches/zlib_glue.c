@@ -170,31 +170,31 @@ typedef int (*compass_control_fn)(void);              /* stock Start/StopIMUComp
 typedef int (*compass_config_fn)(uint32_t, const uint32_t *); /* sensor-hub FuncConfig */
 
 /* firmware entry points (Thumb bit set for blx via constant pointer) */
-#define FW_FLUSH   ((cacheflush_fn)0x0047ce03U)     /* FUN_0047ce02 dcache clean range */
-#define FW_SIDE    ((lens_side_fn)0x0045cfddU)       /* FUN_0045cfdc -> 2=left, 1=right */
-#define FW_BUZZ_PRESET ((buzz_preset_fn)0x00516f0bU) /* FUN_00516f0a DRV_BuzzerPlayAfterQueue(type 0..8) */
-#define FW_BUZZ_NOTE   ((buzz_note_fn)0x00516fa9U)   /* FUN_00516fa8 DRV_BuzzerPlayNote(note,tone,beat) */
-#define FW_BUZZ_RESET  ((buzz_reset_fn)0x00516e75U)  /* FUN_00516e74 buzzer stop/reset */
-#define FW_BUZZ_RAW    ((buzz_raw_fn)0x00517039U)     /* FUN_00517038 reset+power+PWM(freq,duty) */
+#define FW_FLUSH   ((cacheflush_fn)0x0047e317U)     /* FUN_0047e316 dcache clean range */
+#define FW_SIDE    ((lens_side_fn)0x00465d4dU)       /* FUN_00465d4c -> 2=left, 1=right */
+#define FW_BUZZ_PRESET ((buzz_preset_fn)0x0051bccfU) /* FUN_0051bcce DRV_BuzzerPlayAfterQueue(type 0..8) */
+#define FW_BUZZ_NOTE   ((buzz_note_fn)0x0051bd6dU)   /* FUN_0051bd6c DRV_BuzzerPlayNote(note,tone,beat) */
+#define FW_BUZZ_RESET  ((buzz_reset_fn)0x0051bc39U)  /* FUN_0051bc38 buzzer stop/reset */
+#define FW_BUZZ_RAW    ((buzz_raw_fn)0x0051bdfdU)     /* FUN_0051bdfc reset+power+PWM(freq,duty) */
 #define FW_TIMER_START ((timer_start_fn)0x00442c4dU)  /* FUN_00442c4c osTimerStart(handle,ms) */
 #define FW_TIMER_NEW   ((timer_new_fn)0x00442b65U)    /* FUN_00442b64 osTimerNew(cb,type,arg,attr) */
 #define FW_TIMER_STOP  ((timer_stop_fn)0x00442c8dU)   /* FUN_00442c8c osTimerStop(handle) */
 #define FW_TIMER_DELETE ((timer_delete_fn)0x00442cf3U) /* FUN_00442cf2 osTimerDelete(handle) */
-#define FW_APP_START ((app_start_fn)0x0046a39fU)       /* FUN_0046a39e REQUEST_DISPLAY_START_UP */
-#define FW_KEEPALIVE_RESET ((keepalive_reset_fn)0x004f3d77U) /* FUN_004f3d76: EvenHub keepalive
-                                                     * counter (@0x20077364) = 0. This is the exact
+#define FW_APP_START ((app_start_fn)0x0046a673U)       /* FUN_0046a672 REQUEST_DISPLAY_START_UP */
+#define FW_KEEPALIVE_RESET ((keepalive_reset_fn)0x004f7cdfU) /* FUN_004f7cde: EvenHub keepalive
+                                                     * counter (@0x20078454) = 0. This is the exact
                                                      * leaf the stock sid-0x0c heartbeat handler in
                                                      * the EvenHub UI event handler calls; it takes no args and reads
                                                      * the counter pointer from its own literal pool. */
-#define FW_DISPLAY_WAIT   ((display_gate_fn)0x00479483U)  /* FUN_00479482: take display semaphore */
-#define FW_DISPLAY_SIGNAL ((display_gate_fn)0x004794cfU)  /* FUN_004794ce: give display semaphore */
-#define FW_DISPLAY_QUEUE  ((display_queue_fn)0x00479d83U) /* FUN_00479d82: queue type-3 refresh */
-#define FW_DISPLAY_COPY   ((display_copy_fn)0x004708d1U)  /* FUN_004708d0: stock packed-buffer copy */
-#define FW_COMPASS_START  ((compass_control_fn)0x0055d4d7U) /* FUN_0055d4d6 StartIMUCompassFunc */
-#define FW_COMPASS_STOP   ((compass_control_fn)0x0055d55fU) /* FUN_0055d55e StopIMUCompassFunc */
-#define FW_COMPASS_CONFIG ((compass_config_fn)0x004b81d3U) /* FUN_004b81d2: FuncConfig(type,config) */
-#define FW_DISPLAY_FB     (*(uint8_t * volatile *)0x200008b4U) /* stock copier's 640x480 destination */
-#define BUZZ_TIMER_ADDR 0x200767a0U                   /* RAM: buzzer osTimer handle global */
+#define FW_DISPLAY_WAIT   ((display_gate_fn)0x0047a31fU)  /* FUN_0047a31e: take display semaphore */
+#define FW_DISPLAY_SIGNAL ((display_gate_fn)0x0047a36bU)  /* FUN_0047a36a: give display semaphore */
+#define FW_DISPLAY_QUEUE  ((display_queue_fn)0x0047ac1fU) /* FUN_0047ac1e: queue type-3 refresh */
+#define FW_DISPLAY_COPY   ((display_copy_fn)0x00470aa1U)  /* FUN_00470aa0: stock packed-buffer copy */
+#define FW_COMPASS_START  ((compass_control_fn)0x0056311bU) /* FUN_0056311a StartIMUCompassFunc */
+#define FW_COMPASS_STOP   ((compass_control_fn)0x005631a3U) /* FUN_005631a2 StopIMUCompassFunc */
+#define FW_COMPASS_CONFIG ((compass_config_fn)0x004bb011U) /* FUN_004bb010: FuncConfig(type,config) */
+#define FW_DISPLAY_FB     (*(uint8_t * volatile *)0x200008b8U) /* stock copier's 640x480 destination */
+#define BUZZ_TIMER_ADDR 0x20077834U                   /* RAM: buzzer osTimer handle global */
 
 #define PANEL_W 640u
 #define PANEL_H 480u
@@ -297,7 +297,7 @@ static int image_worker(const uint8_t *src, uint32_t size) {
 static int image_worker_locked(const uint8_t *src, uint32_t srclen) {
     /* An inbound image message proves the phone is still connected, so kick the
      * EvenHub keepalive back to life exactly as the stock heartbeat handler does.
-     * Stock firmware resets the ticks-since-last-heartbeat counter (@0x20077364)
+     * Stock firmware resets the ticks-since-last-heartbeat counter (@0x20078454)
      * ONLY on the sid-0x0c heartbeat message; the periodic evenhub_ui_event_handler
      * periodic EvenHub event handler increments it every tick and, once it passes 899,
      * fires the display auto-reflash heartbeat-timeout path, which closes the

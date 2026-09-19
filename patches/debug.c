@@ -7,10 +7,10 @@
  * then (2) set DEMCR.TRCENA and DWT->CTRL.CYCCNTENA. We re-assert all three cheaply per
  * measurement (only the idle SWO-trace block touches DEMCR).
  *
- * To convert cycles->us we need the core clock. The guessed global 0x2007646c reads 0
+ * To convert cycles->us we need the core clock. The guessed global 0x200774e0 reads 0
  * on hardware (it's only written on a DVFS event, if ever), so instead we CALIBRATE:
  * measure how many CYCCNT cycles elapse across one edge of the firmware's 1 ms OS tick
- * (RAM 0x20076d80, SysTick chain) — that IS cycles-per-ms. Cached in the ctx; a bounded
+ * (RAM 0x20077e4c, SysTick chain) — that IS cycles-per-ms. Cached in the ctx; a bounded
  * spin falls back to 250 MHz if the tick never advances. All divides are 32-bit
  * (hardware UDIV) — a 64-bit divide would emit an external __aeabi_uldivmod build.py
  * rejects. (Limitation: cached across DVFS; a clock switch makes the figure ~stale.) */
@@ -18,7 +18,7 @@
 #define DWT_LAR     (*(volatile uint32_t *)0xE0001FB0U)  /* DWT CoreSight Lock Access Reg */
 #define DWT_CTRL    (*(volatile uint32_t *)0xE0001000U)  /* DWT->CTRL (CYCCNTENA bit0) */
 #define DWT_CYCCNT  (*(volatile uint32_t *)0xE0001004U)  /* DWT->CYCCNT (core cycles) */
-#define FW_CORE_HZ  (*(volatile uint32_t *)0x2007646cU)  /* guessed core-clock global (reads 0 on hw) */
+#define FW_CORE_HZ  (*(volatile uint32_t *)0x200774e0U)  /* guessed core-clock global (reads 0 on hw) */
 #define DWT_UNLOCK_KEY 0xC5ACCE55U
 
 
@@ -166,13 +166,13 @@ static void cfw_draw_flags(uint8_t *disp, uint32_t w, uint32_t h) {
     strlcat(line, hex, sizeof(line));
     draw_string(disp, w, h, IMAGE_X + 2, IMAGE_Y + 14, line, 15, 0);
 
-    cfw_heap_stats heap_13 = heap_object_stats(0x20000358u, 0x201350a8u, 0x000cd000u);
+    cfw_heap_stats heap_13 = heap_object_stats(0x20000358u, 0x2013519cu, 0x000cd000u);
     cfw_heap_stats heap_20 = {TLSF_FREE_INVALID, TLSF_FREE_INVALID};
-    if (CFW_HEAP_READ32(0x20076e08u) == 0x202020a8u)
-        heap_20 = tlsf_arena_stats(0x202020a8u, 0x00070800u);
+    if (CFW_HEAP_READ32(0x20077ed0u) == 0x2020219cu)
+        heap_20 = tlsf_arena_stats(0x2020219cu, 0x00070800u);
     /* Stock heap 27 is reduced from 0x2d000 to 0x2cc00, reserving the final
      * 1 KiB for CFW state. These are the LVGL, EvenHub, and other heaps. */
-    cfw_heap_stats heap_27 = heap_object_stats(0x2000033cu, 0x202728a8u, 0x0002cc00u);
+    cfw_heap_stats heap_27 = heap_object_stats(0x2000033cu, 0x2027299cu, 0x0002cc00u);
     strlcpy(line, "free/max KiB: LVGL ", sizeof(line));
     append_heap_kib(line, heap_13, sizeof(line));
     strlcat(line, " EvenHub ", sizeof(line));

@@ -194,11 +194,11 @@ push custom firmware (a patched `*_cfw.bin` image) onto the device.
 ```bash
 cd g2flash
 ./build_cfw.sh                       # set up venv, download stock fw, patch, verify
-./venv/bin/python g2flash.py -c g2://local -f g2_2.2.9.22_cfw.bin
+./venv/bin/python g2flash.py -c g2://local -f g2_2.3.0.24_cfw.bin
 ```
 
 `build_cfw.sh` does the whole build: it creates `./venv` with the flasher's
-dependencies, downloads the stock **G2 2.2.9.22** firmware from Even's CDN,
+dependencies, downloads the stock **G2 2.3.0.24** firmware from Even's CDN,
 applies the patches in `patches/`, and verifies that both the download and the
 patched result match pinned SHA-256 hashes (so a clean run proves you got
 exactly the reviewed image). Run `./build_cfw.sh --help` for options
@@ -218,19 +218,22 @@ exactly the reviewed image). Run `./build_cfw.sh --help` for options
     This is what `build_cfw.sh` uses to produce the image.
   - `gen_patches.py` — compiles the injected code with **clang** and (re)generates
     `cfw_patches.json`. Run it after editing the patch sources:
-    `python3 patches/gen_patches.py g2_2.2.9.22.bin patches/cfw_patches.json`
+    `python3 patches/gen_patches.py g2_2.3.0.24.bin patches/cfw_patches.json`
     (or `./build_cfw.sh --update-patches`), then commit the JSON.
   - `patch_compress.py` — the all-in-one patcher (576 carrier lift + image
     compression + direct framebuffer presentation + capability field);
     `gen_patches.py` calls it to build the ops.
-    Holds every stock-firmware address the patches depend on; see
-    `../notes/fw-2.2.9.22-cfw-rebase.md` for how they were derived.
+    Defines live patch sites; stock function and RAM references also live in
+    the C sources. `audit_stock.py` checks their reviewed inventory and stock
+    byte guards in `stock_abi_230.json` before generation. See the
+    [2.3.0.24 rebase review](docs/firmware-rebase-2.3.0.md) for every migrated
+    site, nearby behavior changes, and validation of Faceclaw/17.
   - `build.py`, `*.c` — the C→position-independent-Thumb pipeline and sources
     for the injected firmware code (compiled by `gen_patches.py`; the resulting
     machine code lands in `cfw_patches.json`).
 - `requirements.txt` — the flasher's Python dependencies.
 
-Firmware images (`g2_2.2.9.22*.bin`) are **not** checked in — they are Even's
+Firmware images (`g2_2.3.0.24*.bin`) are **not** checked in — they are Even's
 firmware, so you build them locally with `build_cfw.sh`.
 
 ## Requirements
@@ -320,15 +323,15 @@ otherwise the glasses reject the component on END with status 7 (CHECK_FAIL).
 # dry run: connect to both arms over the local radio and stop before any write
 python g2flash.py \
   -c 'g2://local?left=AA:BB:CC:11:22:33&right=AA:BB:CC:44:55:66&addressType=public' \
-  -f g2_2.2.9.22.bin --stop-before flash
+  -f g2_2.3.0.24.bin --stop-before flash
 
 # fix checksums after patching, no device needed
-python g2flash.py --recompute-checksums g2_2.2.9.22_cfw.bin
+python g2flash.py --recompute-checksums g2_2.3.0.24_cfw.bin
 
 # flash the custom firmware to both arms via DroidBridge
 python g2flash.py \
   -c 'g2://droidbridge?phone=192.168.1.50&port=8080&token=secret&left=AA:BB:CC:11:22:33&right=AA:BB:CC:44:55:66' \
-  -f g2_2.2.9.22_cfw.bin
+  -f g2_2.3.0.24_cfw.bin
 ```
 
 ## How it works (brief)

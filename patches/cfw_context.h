@@ -5,7 +5,7 @@
 /* Persistent CFW-owned state, independent of EvenHub image containers. The
  * full-panel shadow is an owned heap allocation. This context is anchored in
  * the 1 KiB SRAM region explicitly
- * removed from the stock primary TLSF arena: [0x2029f4a8,0x2029f8a8). The first
+ * removed from the stock primary TLSF arena: [0x2029f59c,0x2029f99c). The first
  * word holds the pointer; the second holds a sticky allocation diagnostic. */
 
 #define CFW_FID_RING  16     /* recent mode-3 frame ids kept for diagnostics */
@@ -124,15 +124,15 @@ typedef struct {
     uint32_t ancs_token;
 } customCfwContext;
 
-#define CFW_CTX_SLOT  0x2029f4a8U    /* first word of the CFW-reserved TLSF tail */
-#define CFW_ALLOC_DIAG_SLOT 0x2029f4acU /* second word: magic | sticky failure bit */
+#define CFW_CTX_SLOT  0x2029f59cU    /* first word of the CFW-reserved TLSF tail */
+#define CFW_ALLOC_DIAG_SLOT 0x2029f5a0U /* second word: magic | sticky failure bit */
 #define CFW_ALLOC_DIAG_MAGIC 0xA110CA7EU
 
 // Marker used to validate that the CFW context pointer hasn't been clobbered.
 // Does not need updating.
 #define CFW_CTX_MAGIC 0xC0FFEE6CU
 
-#define FW_MS_TICK  (*(volatile uint32_t *)0x20076d80U)  /* firmware 1 ms OS tick (SysTick chain) */
+#define FW_MS_TICK  (*(volatile uint32_t *)0x20077e4cU)  /* firmware 1 ms OS tick (SysTick chain) */
 
 static customCfwContext *peekCustomCfwContext(void);
 static customCfwContext *getCustomCfwContext(void);

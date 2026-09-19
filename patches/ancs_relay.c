@@ -3,7 +3,7 @@
  * the Cordio task. Submit directly to the ATT consumer on that task: the stock
  * AttsHandleValueNtf queue stores only a reusable connection ID, NOT a generation.
  * Never put sensitive data on that queue.
- * G2 2.2.9.22 addresses are authenticated by patch_compress.py. */
+ * G2 2.3.0.24 addresses are authenticated by patch_compress.py. */
 #include <stdint.h>
 #include "cfw_context.h"
 
@@ -19,16 +19,16 @@ enum { ANCS_WRITE_RSP = 9, ANCS_WRITE_CMD_RSP = 10,
 enum { ANCS_DISABLING = 1, ANCS_ENABLING, ANCS_ACTIVE,
        ANCS_RESTORE_DISABLE, ANCS_RESTORE_ENABLE, ANCS_RESTORE_FAILED };
 #ifndef ANCS_STOCK_GATE
-#define ANCS_STOCK_GATE ((void (*)(ancs_att_event *))0x004d44b9u)
-#define ANCS_STOCK_OPEN ((void (*)(uint8_t, uint16_t *))0x004d3e19u)
-#define ANCS_STOCK_CLOSE ((void (*)(void))0x004d3e29u)
-#define ANCS_STOCK_WRITE ((uint8_t (*)(uint8_t,uint16_t,uint8_t,uint16_t,uint16_t,const uint8_t *,const void *))0x004d3351u)
-#define ANCS_WRITE ((void (*)(uint8_t,uint16_t,uint16_t,const uint8_t *))0x004c76adu)
+#define ANCS_STOCK_GATE ((void (*)(ancs_att_event *))0x004d7bedu)
+#define ANCS_STOCK_OPEN ((void (*)(uint8_t, uint16_t *))0x004d74c9u)
+#define ANCS_STOCK_CLOSE ((void (*)(void))0x004d74d9u)
+#define ANCS_STOCK_WRITE ((uint8_t (*)(uint8_t,uint16_t,uint8_t,uint16_t,uint16_t,const uint8_t *,const void *))0x004d6939u)
+#define ANCS_WRITE ((void (*)(uint8_t,uint16_t,uint16_t,const uint8_t *))0x004ca6bdu)
 /* Same packet ABI and allocator used by AttsHandleValueNtf, but synchronous
  * submission avoids its unsafe ID-only WSF queue. The consumer transfers packet
  * ownership to L2CAP on this connection, or frees it when flow control rejects. */
 static void ancs_notify_now(uint8_t connection, uint16_t handle, uint16_t length, const uint8_t *data) {
-    uint8_t *packet = ((uint8_t *(*)(uint16_t))0x004c6fbdu)(11 + length);
+    uint8_t *packet = ((uint8_t *(*)(uint16_t))0x004c9fcdu)(11 + length);
     if (!packet) return;
     for (unsigned i=0; i<11+length; ++i) packet[i] = 0;
     packet[0] = length+3; packet[1] = (length+3)>>8;
@@ -38,19 +38,19 @@ static void ancs_notify_now(uint8_t connection, uint16_t handle, uint16_t length
     struct { uint16_t connection; uint8_t event, status; uint8_t *packet; uint8_t slot, reserved[3]; }
         message = {connection,0x21,0,packet,0,{0,0,0}};
     _Static_assert(sizeof(message) == 12, "ATT message ABI");
-    ((void (*)(void *))0x0054d8f5u)(&message);
+    ((void (*)(void *))0x0055353du)(&message);
 }
 #define ANCS_NOTIFY ancs_notify_now
 static uint16_t ancs_mtu(uint8_t id) {
     /* attsGetConnCb(id, bearer 0); +16 is pMainCcb, whose first halfword
-     * is bearer[0].mtu. Verified against stock 0x54d9b4..0x54d9c0. */
-    uint8_t *connection = ((uint8_t *(*)(uint8_t,uint8_t))0x0054ac29u)(id,0);
+     * is bearer[0].mtu. Verified against stock 0x5535fc..0x553608. */
+    uint8_t *connection = ((uint8_t *(*)(uint8_t,uint8_t))0x00550865u)(id,0);
     return connection ? **(uint16_t **)(connection + 16) : 0;
 }
 #define ANCS_MTU ancs_mtu
-#define ANCS_CCC ((uint8_t (*)(uint8_t,uint8_t))0x005426ebu)
-#define ANCS_CONNECTION (*(volatile uint8_t *)0x20068c18u)
-#define ANCS_HANDLES (*(uint16_t *volatile *)0x20068c1cu)
+#define ANCS_CCC ((uint8_t (*)(uint8_t,uint8_t))0x00548327u)
+#define ANCS_CONNECTION (*(volatile uint8_t *)0x20065cf0u)
+#define ANCS_HANDLES (*(uint16_t *volatile *)0x20065cf4u)
 #define ANCS_CONTEXT() peekCustomCfwContext()
 #define ANCS_ALLOC() getCustomCfwContext()
 #define ANCS_LEASE(ctx) ((ctx)->direct_lease_deadline &&     (int32_t)((ctx)->direct_lease_deadline - FW_MS_TICK) > 0)
@@ -124,7 +124,9 @@ static void ancs_restored(customCfwContext *ctx) {
  * the existing SID-f0 hook) remains intact for every non-ANCS command. */
 uint8_t cfw_ancs_write(uint8_t connection, uint16_t handle, uint8_t operation,
     uint16_t offset, uint16_t length, const uint8_t *value, const void *attribute) {
-    if (!value || length < 2 || value[0] != 'A' || value[1] != 'N')
+    /* 2.3.0's new security characteristic shares this callback. Its writes
+     * must always retain the stock handle-specific behavior. */
+    if (handle == 0x847 || !value || length < 2 || value[0] != 'A' || value[1] != 'N')
         return ANCS_STOCK_WRITE(connection,handle,operation,offset,length,value,attribute);
     if ((operation != 0x12 && operation != 0x52) || offset || length < 8 || value[2] != 1 || value[3] > 2) return 0x0d;
     /* Never accept app-supplied connection/peer identifiers. This check also

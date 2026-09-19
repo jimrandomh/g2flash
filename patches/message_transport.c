@@ -2,13 +2,13 @@
 #include "memory.h"
 
 #ifndef CFW_STOCK_RECEIVE
-#define CFW_STOCK_RECEIVE ((uint32_t (*)(uint8_t, const uint8_t *, uint16_t))0x004cf3e9u)
-#define CFW_STOCK_BRIDGE_RECEIVE ((uint32_t (*)(uint32_t, const uint8_t *, uint32_t, uint16_t))0x0045d1a1u)
-#define CFW_LENS_SIDE ((uint32_t (*)(void))0x0045cfddu)
+#define CFW_STOCK_RECEIVE ((uint32_t (*)(uint8_t, const uint8_t *, uint16_t))0x004cf471u)
+#define CFW_STOCK_BRIDGE_RECEIVE ((uint32_t (*)(uint32_t, const uint8_t *, uint32_t, uint16_t))0x00465f11u)
+#define CFW_LENS_SIDE ((uint32_t (*)(void))0x00465d4du)
 /* Both APIs copy the supplied bytes into owned queue storage before returning.
  * SendDataToBoth also delivers a local echo; origin tags below suppress it. */
-#define CFW_BRIDGE_SEND ((int (*)(uint16_t, const uint8_t *, uint16_t, void *))0x0046a58du)
-#define CFW_BLE_SEND ((int (*)(uint8_t, uint8_t, const uint8_t *, uint16_t))0x0047d72du)
+#define CFW_BRIDGE_SEND ((int (*)(uint16_t, const uint8_t *, uint16_t, void *))0x0046a861u)
+#define CFW_BLE_SEND ((int (*)(uint8_t, uint8_t, const uint8_t *, uint16_t))0x0047ee0bu)
 #endif
 
 #define CFW_BRIDGE_REQUEST 1u
