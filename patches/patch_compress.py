@@ -388,7 +388,7 @@ def layout(img):
     # `bl` targets, so they stay even -- a bl keeps the core in Thumb state and needs no
     # Thumb bit (unlike a fn-ptr consumed by blx, which the C code forms via `&fn`).
     message_rx_addr = base + _fn(built, "cfw_receive_packet")["offset"]
-    message_bridge_addr = base + _fn(built, "cfw_message_bridge_received")["offset"]
+    message_bridge_addr = base + _fn(built, "faceclaw_input_bridge_received")["offset"]
     settings_addr  = base + _fn(built, "settings_send_wrapper")["offset"]
     settings_decode_addr = base + _fn(built, "settings_decode_wrapper")["offset"]
     display_start_addrs = {name: base + _fn(built, name)["offset"]
@@ -432,6 +432,9 @@ def layout(img):
 
     # --- in-place live-code edits + bl retargets (targets are the appended addrs) ---
     in_place = [
+        (g2f(0x47911a), "38b584b0",
+         enc_bw(0x47911a, base + _fn(built, "faceclaw_ring_receive")["offset"]),
+         "ring receiver entry: timestamped unfiltered reports under framebuffer lease"),
         # Stock profile_ancc_process_msg branches both WRITE_RSP (9) and
         # WRITE_CMD_RSP (10) to 0x4d8cde, which formerly skipped the gate.
         # Redirect that two-byte branch to the existing r0=event / BL gate path.
@@ -445,7 +448,7 @@ def layout(img):
          struct.pack("<I", base + _fn(built, "cfw_ancs_write")["offset"] + 1).hex(),
          "connection-bound ANCS EUS write callback"),
         *[(g2f(site), old, enc_bl(site, message_bridge_addr),
-           "bl cfw_message_bridge_received (ordered private bridge delivery before worker pool)")
+           "bl faceclaw_input_bridge_received (ring relay and ordered private transport before worker pool)")
           for site, old in MESSAGE_BRIDGE_BL_SITES],
         (g2f(MESSAGE_RX_BL_SITE[0]), MESSAGE_RX_BL_SITE[1],
          enc_bl(MESSAGE_RX_BL_SITE[0], message_rx_addr),

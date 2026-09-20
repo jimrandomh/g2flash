@@ -122,6 +122,7 @@ typedef struct {
     uint8_t ancs_connection, ancs_stage;
     uint16_t ancs_sequence;
     uint32_t ancs_token;
+    uint8_t  ring_notify_buf[25]; /* atomic timestamped R1 SysEvent */
 } customCfwContext;
 
 #define CFW_CTX_SLOT  0x2029f59cU    /* first word of the CFW-reserved TLSF tail */

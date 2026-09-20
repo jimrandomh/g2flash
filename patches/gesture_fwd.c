@@ -139,3 +139,101 @@ __attribute__((naked)) int headup_gate(void)
         "pop {r4, pc}"
         ::: "memory");
 }
+
+/* Faceclaw/19: preserve each complete R1 report BEFORE the stock 100-tick
+ * suppression at 0x47913e. While the framebuffer lease is held, these reports
+ * go to the phone once, through the right lens. Left ingress relays the raw
+ * report across the existing ordered frame bridge before phone serialization.
+ * No lease (including expiry), legacy reports and other packet families replay
+ * the exact original receiver. Nothing changes before Faceclaw takes ownership.
+ *
+ * EvenHub SysEvent field 100 is a 12-byte private extension:
+ *   "RI", version=1, flags=1, wireType, aux, speed, reserved=0, tick LE32.
+ * Tick is the original ring clock, NOT a glasses/phone epoch. Unknown wire
+ * types use SysEvent 127: visible to diagnostics and useful for reproducing
+ * stock suppression, but never interpreted as a click or system exit.
+ */
+#define FACECLAW_BRIDGE_RING_REPORT 3u
+
+__attribute__((used, noinline)) static int faceclaw_ring_report(
+    const unsigned char *report, unsigned length)
+{
+    if (!report || (uint16_t)length != 11 || report[0] != 0 ||
+        report[1] != 9 || report[2] != 0x61 || report[3] != 0 ||
+        !cfw_fb_lease_active()) return 0;
+    /* The R1 may be connected to the LEFT lens. Stock INPM_EventSend uses
+     * SendDataToBoth (service 0x108); bypassing it must retain that peer hop.
+     * Only the right lens may use the phone protobuf notifier. The bridge
+     * copies these bytes, and its local echo is ignored by the receiver below.
+     * If enqueue fails, replay stock input rather than consuming the report. */
+    unsigned side = FW_SIDE_ID();
+    if (side == 2)
+        return cfw_message_bridge_send(FACECLAW_BRIDGE_RING_REPORT,
+                                      CFW_MESSAGE_LEFT, report, 11) == 0;
+    if (side != 1) return 0;
+    customCfwContext *ctx = faceclaw_context_if_valid();
+    if (!ctx) return 0;
+    unsigned event = 127;
+    switch (report[4]) {
+        case 0: event = 9; break;
+        case 1: event = 0; break;
+        case 2: event = 3; break;
+        case 4: event = 1; break; /* ring swipe up -> scroll top */
+        case 5: event = 2; break; /* ring swipe down -> scroll bottom */
+        case 8: event = 10; break;
+        case 9: event = 11; break;
+        case 10: event = 14; break;
+    }
+    uint8_t *p = ctx->ring_notify_buf;
+    p[0]=8; p[1]=2; p[2]=0x6a; p[3]=21; p[4]=0x1a; p[5]=19;
+    p[6]=8; p[7]=event; p[8]=0x10; p[9]=2; /* explicit ring source */
+    p[10]=0xa2; p[11]=6; p[12]=12;
+    p[13]='R'; p[14]='I'; p[15]=1; p[16]=1;
+    p[17]=report[4]; p[18]=report[5]; p[19]=report[6]; p[20]=0;
+    for (unsigned i=0; i<4; ++i) p[21+i]=report[7+i];
+    /* Match the stock SysEvent sender at 0x4efb92. FW_SEND creates a
+     * reply (flag 0), which the phone correctly rejects as an input event. */
+    ((send_fn)FW_NOTIFY_SEND)(1, 0xe0, p, 25);
+    return 1;
+}
+
+/* B.W at receiver entry, before push {r3,r4,r5,lr}; sub sp,#16.
+ * Preserve all argument registers for the stock path and callee-saved
+ * registers on both paths. Six words keep the helper's stack aligned. */
+__attribute__((naked)) int faceclaw_ring_receive(void)
+{
+    __asm volatile(
+        "push {r0-r4, lr}\n\t"
+        "bl faceclaw_ring_report\n\t"
+        "cmp r0, #0\n\t"
+        "beq 1f\n\t"
+        "pop {r0-r4, lr}\n\t"
+        "movs r0, #0\n\t"
+        "bx lr\n"
+        "1:\n\t"
+        "pop {r0-r4, lr}\n\t"
+        "push {r3,r4,r5,lr}\n\t"
+        "sub sp, #16\n\t"
+        "movw r3, #0x911f\n\t"
+        "movt r3, #0x0047\n\t" /* 0x0047911f: original body | Thumb */
+        "bx r3"
+        ::: "memory");
+}
+
+/* Wrap the existing three ordered bridge-arrival hooks. Ring reports use a
+ * new kind in the private SID-f0 envelope: [3, origin=LEFT, raw R1 bytes(11)].
+ * Request/ACK traffic continues through the existing transport unchanged.
+ * SendDataToBoth echoes locally: the left lens must neither send to the phone
+ * nor enqueue again. The peer checks its own lease before notifying the phone,
+ * so queued reports cannot outlive Faceclaw's ownership. */
+uint32_t faceclaw_input_bridge_received(uint32_t app_id, const uint8_t *data,
+                                        uint32_t length, uint16_t event)
+{
+    if (app_id != CFW_MESSAGE_SID || !data || !length ||
+        data[0] != FACECLAW_BRIDGE_RING_REPORT)
+        return cfw_message_bridge_received(app_id, data, length, event);
+    if (length != 13) return 0xbu;
+    if (data[1] != CFW_MESSAGE_LEFT) return 0xau;
+    if (FW_SIDE_ID() == 1) faceclaw_ring_report(data + 2, 11);
+    return 0;
+}
