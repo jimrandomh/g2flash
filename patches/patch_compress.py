@@ -185,6 +185,7 @@ HEADUP_GATE_BL_SITE = (0x467cf4, "07f085fb")  # bl FUN_0046f402 -> headup_gate
 GESTURE_PRESS_SITE      = (0x444940, "1ff071ff") # menu state getter -> gesture_press
 GESTURE_SHORT_LONG_SITE = (0x44499c, "1ff043ff") # bl FUN_00464826 -> gesture_short_long
 GESTURE_RELEASE_SITE    = (0x444d08, "1ff08dfd") # menu state getter -> gesture_release
+GESTURE_RING_PRESS_SITE = (0x44484a, "19f03efb") # mode lookup, r6=input -> ring press observer
 # Wakeword ("Hey Even") capture. The old patch unconditionally changed the
 # op==START branch in even_ai_display_ctrl, which also broke the official Even
 # app. Replace the first four bytes with a B.W trampoline: the injected entry
@@ -397,6 +398,7 @@ def layout(img):
     press_addr     = base + _fn(built, "gesture_press")["offset"]
     short_long_addr = base + _fn(built, "gesture_short_long")["offset"]
     release_addr   = base + _fn(built, "gesture_release")["offset"]
+    ring_press_addr = base + _fn(built, "gesture_ring_press_mode")["offset"]
     display_copy_addr = base + _fn(built, "display_copy_hook")["offset"]
     wear_notify_addr = base + _fn(built, "faceclaw_send_wear_event")["offset"]
     compass_decode_addr = base + _fn(built, "compass_decode_capture")["offset"]
@@ -470,6 +472,9 @@ def layout(img):
          enc_bl(HEADUP_GATE_BL_SITE[0], headup_gate_addr),
          "bl headup_gate (head-up sensor event -> EvenHub sys event 12 under lease)"),
         # Source-qualified long-press, tap-then-long-press, and release forwarding.
+        (g2f(GESTURE_RING_PRESS_SITE[0]), GESTURE_RING_PRESS_SITE[1],
+         enc_bl(GESTURE_RING_PRESS_SITE[0], ring_press_addr),
+         "bl gesture_ring_press_mode (observe ring touch-down, preserve stock dispatch)"),
         (g2f(GESTURE_PRESS_SITE[0]), GESTURE_PRESS_SITE[1],
          enc_bl(GESTURE_PRESS_SITE[0], press_addr),
          "bl gesture_press (owned event 9 before stock menu gate)"),

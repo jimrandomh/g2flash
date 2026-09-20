@@ -12,6 +12,29 @@ typedef int (*gesture_sysevt_t)(int, int, int, int, int, int);
 #define GESTURE_UI_CTX (*(void *volatile *)0x200777fcu)
 #define GESTURE_APP_EVENHUB 0xe0
 #define GESTURE_ET_HEAD_UP 12
+#define GESTURE_ET_RING_PRESS 14 /* 13 was used by an experimental temple edge */
+
+/* Wrap the dispatcher's mode lookup at 0x44484a. r6 holds the full input
+ * record, including its u16 source and unaligned u32 subtype. The return
+ * value is still the original mode pointer, and stock dispatch continues.
+ * Event 14 is ring-specific: the stock SysEvent sender leaves its source 0
+ * (unspecified), so the phone derives ring provenance from this event ID.
+ */
+int *gesture_ring_press_mode_impl(void *ctx, const unsigned char *event)
+{
+    int *mode = GESTURE_FW_MODE(ctx);
+    if (event && event[0] == 4 && event[1] == 0 &&
+        event[2] == 0x0d && event[3] == 0 && event[4] == 0 && event[5] == 0 &&
+        mode && *mode == GESTURE_APP_EVENHUB && cfw_fb_lease_active()) {
+        GESTURE_FW_SYSEVT(0, 0, 0, GESTURE_ET_RING_PRESS, 0, 4);
+    }
+    return mode;
+}
+
+__attribute__((naked)) int *gesture_ring_press_mode(void *ctx __attribute__((unused)))
+{
+    __asm volatile("mov r1, r6\n\tb gesture_ring_press_mode_impl");
+}
 
 /* Keep this symbol out of line: the naked entry shims call it from assembly. */
 __attribute__((used, noinline)) static int faceclaw_gesture_event(

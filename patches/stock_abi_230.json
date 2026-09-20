@@ -3818,6 +3818,11 @@
       "address": "0x00444d08",
       "bytes": "1ff08dfd",
       "label": "Gesture state getter before new menu-off gate"
+    },
+    {
+      "address": "0x0044484a",
+      "bytes": "19f03efb0400",
+      "label": "Ring press mode lookup, followed by mov r4,r0; preserves stock dispatcher"
     }
   ],
   "patch_sites": [
@@ -3909,6 +3914,11 @@
     {
       "address": "0x00467cf4",
       "old": "07f085fb",
+      "write_size": 4
+    },
+    {
+      "address": "0x0044484a",
+      "old": "19f03efb",
       "write_size": 4
     },
     {

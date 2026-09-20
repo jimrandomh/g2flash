@@ -458,6 +458,8 @@ __attribute__((naked)) void faceclaw_evenai_display_entry(void) {
 //  16 -> route real ANCS write completions and drain CCC writes on restore.
 //
 //  17 -> rebase to 2.3.0.24; idle forwarding shares the stock idle gate.
+//  18 -> ring touch-down subtype 0x0d forwarded as ring-specific SysEvent 14
+//        while the framebuffer lease and EvenHub foreground are active.
 //
 // The string is a normal rodata literal now that build.py emits/relocates .rodata
 // (earlier this had to be spelled out byte-by-byte to avoid a rodata section).
@@ -465,7 +467,7 @@ __attribute__((naked)) void faceclaw_evenai_display_entry(void) {
 
 int settings_send_wrapper(int type, int sid, unsigned char *buf, unsigned len) {
     if (sid == 9) {
-        static const char caps[] = "Faceclaw/17";
+        static const char caps[] = "Faceclaw/18";
         len = pb_append_bytes_field(buf, len, SETTINGS_RESPONSE_CAPACITY,
                                     100u, (const unsigned char *)caps,
                                     (unsigned)sizeof(caps) - 1u);
