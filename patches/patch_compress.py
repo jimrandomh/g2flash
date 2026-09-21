@@ -15,7 +15,7 @@ Build a CFW image for g2_2.3.0.24 with:
   (8) Faceclaw compass heading + sample diagnostics from the sensor hub while
       image-handler mode 10 is enabled, with magnetic calibration retained
       across IMU reconfiguration under the framebuffer lease, and
-  (9) a lease-scoped 256 KiB texture cache plus cached-image/cached-string drawing
+  (9) a lease-scoped 256 KiB resource cache plus cached-image/cached-string drawing
       through image-handler modes 18, 19, and 20,
       and built-in-font mode 15, and
   (10) a phone-controlled microphone configuration + multi-channel audio streaming

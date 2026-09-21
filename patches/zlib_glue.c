@@ -94,18 +94,23 @@ int cfw_message_received(const uint8_t *data, uint16_t size, uint16_t checksum) 
  *                              PASSIVE STOP. Reports arrive as sid-0x09 field 105.
  *   17          -> [17][0] query cached R1 battery (no display change).
  *                              Master replies on sid-0x09 field 106; see ring_battery.c.
- *   18          -> [18][offset32][length16][data]... update the lazily allocated,
- *                              zero-initialized 256 KiB phone-owned texture cache.
- *                              Every entry is validated before any bytes are written.
- *   19          -> [19][offset32][x16][y16][options8] draw a cached image. At offset:
- *                              [width8][height8][4bpp RLE], decoded directly into
- *                              the full-panel shadow with clipping.
- *   20          -> [20][font-offset32][x16][y16][options8][strlen8][string]
+ *   18          -> retired write-at-offset message; rejected.
+ *   19          -> [19][resource-id16][x16][y16][options8] draw a cached image:
+ *                              [width8][height8][4bpp RLE], decoded with clipping.
+ *   20          -> [20][font-id16][x16][y16][options8][strlen8][string]
  *                              draw cached glyphs. Options contains a low-nibble
  *                              top color plus transparency (bit 4) and inverse (bit 5).
- *                              The font is a 96-entry uint32 image-offset table for
- *                              characters 32..127. Bytes 1..31 adjust x by -10..20;
- *                              each glyph advances x by its cached image width.
+ *                              The font begins with 96 u16 offsets relative to its
+ *                              own start for characters 32..127; zero means absent.
+ *                              Bytes 1..31 adjust x by -10..20; each glyph advances
+ *                              x by its cached image width.
+ *   21          -> [21][count16]{[id16][total32][chunk-offset16][size16][bytes]}
+ *                              Upload resource chunks, maximum total 65536 bytes.
+ *                              Chunks are contiguous; exact received replays work.
+ *                              Whole batch validated first. IDs must be distinct.
+ *   22          -> [22][count16]{[id16]} evict distinct IDs (absent is a no-op).
+ *                              IDs are 0..511. The 256 KiB cache starts with a
+ *                              2 KiB pointer table; freelist/compaction preserves IDs.
  *   anything else / too short  -> reject the custom message.
  *
  * The HIGH BIT of the mode byte is a "lenses differ" flag; most modes ignore it. For
@@ -500,11 +505,8 @@ static int image_dispatch(const uint8_t *src, uint32_t srclen, int present, cfw_
         return cfw_cleanup_session();
     }
 
-    if (mode == 18) {
-        /* Cache update is not a shadow mutation and therefore does not hold the
-         * display gate. The helper validates the entire entry list first. */
-        return cfw_texture_cache_update(src + 1, srclen - 1);
-    }
+    if (mode == 21) return cfw_resource_upload(src + 1, srclen - 1);
+    if (mode == 22) return cfw_resource_evict(src + 1, srclen - 1);
 
     /* Custom shadow geometry is deliberately independent from the EvenHub carrier. */
     uint32_t w = IMAGE_W;
@@ -707,7 +709,7 @@ static int cfw_cleanup_session(void) {
     ctx->direct_pending = 0;
     ctx->direct_shadow = 0;
     ctx->direct_failed = 0;
-    cfw_texture_cache_release(ctx);
+    cfw_resource_cache_release(ctx);
     cfw_shadow_release(ctx);
 
     /* Suppress callbacks before asking the timer service to stop/delete them;

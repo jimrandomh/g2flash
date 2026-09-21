@@ -69,10 +69,9 @@ typedef struct {
     uint8_t direct_failed;
     uint8_t direct_active;                    /* physical framebuffer currently owns the image */
     uint32_t direct_lease_deadline;            /* fail-open repaint-guard deadline */
-    /* Phone-owned texture data, allocated lazily on the first mode-18 write and
-     * released with the Faceclaw framebuffer lease. Protocol references into
-     * this block are uint32 offsets. */
-    uint8_t *texture_cache;
+    /* Resource arena, including its 512-entry pointer table; allocated lazily
+     * and released with the framebuffer lease. Wire references are resource IDs. */
+    uint8_t *resource_cache;
     /* --- Microphone control + multi-channel routing (SybilSight "glasses ->
      * microphones"). See the contract comment in mic_control.c; the stock-entry
      * recovery evidence lives in evenRealities-openCFW/g2/docs/research/
@@ -123,6 +122,7 @@ typedef struct {
     uint16_t ancs_sequence;
     uint32_t ancs_token;
     uint8_t  ring_notify_buf[25]; /* atomic timestamped R1 SysEvent */
+    uint32_t resource_free_head; /* offset of first free block; zero = none */
 } customCfwContext;
 
 #define CFW_CTX_SLOT  0x2029f59cU    /* first word of the CFW-reserved TLSF tail */

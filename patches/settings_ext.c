@@ -130,7 +130,7 @@ __attribute__((used, noinline)) int cfw_fb_lease_active(void) {
     if ((int32_t)(ctx->direct_lease_deadline - FW_MS_TICK) <= 0) {
         ctx->direct_lease_deadline = 0;
         ctx->direct_active = 0;
-        cfw_texture_cache_release(ctx);
+        cfw_resource_cache_release(ctx);
         return 0;
     }
     return 1;
@@ -339,13 +339,13 @@ static void faceclaw_apply_control(const uint8_t *data, uint32_t len) {
         if (ctx->direct_lease_deadline == 0 ||
             (int32_t)(ctx->direct_lease_deadline - FW_MS_TICK) <= 0) {
             ctx->direct_active = 0;
-            cfw_texture_cache_release(ctx);
+            cfw_resource_cache_release(ctx);
         }
         ctx->direct_lease_deadline = FW_MS_TICK + FACECLAW_LEASE_MS;
     } else if (op == FACECLAW_OP_FB_RELEASE) {
         ctx->direct_lease_deadline = 0;
         ctx->direct_active = 0;
-        cfw_texture_cache_release(ctx);
+        cfw_resource_cache_release(ctx);
     } else if (op == FACECLAW_OP_WEAR_QUERY) {
         unsigned status = FW_WEAR_STATUS();
         if (status == 1u || status == 2u)
@@ -461,13 +461,16 @@ __attribute__((naked)) void faceclaw_evenai_display_entry(void) {
 //  18 -> ring touch-down subtype 0x0d forwarded as ring-specific SysEvent 14
 //        while the framebuffer lease and EvenHub foreground are active.
 //
+//  23 -> resource IDs, batched/chunked upload (21), eviction (22),
+//        freelist/compaction and resource-local u16 font glyph offsets.
+//
 // The string is a normal rodata literal now that build.py emits/relocates .rodata
 // (earlier this had to be spelled out byte-by-byte to avoid a rodata section).
 #define SETTINGS_RESPONSE_CAPACITY 256u
 
 int settings_send_wrapper(int type, int sid, unsigned char *buf, unsigned len) {
     if (sid == 9) {
-        static const char caps[] = "Faceclaw/22";
+        static const char caps[] = "Faceclaw/23";
         len = pb_append_bytes_field(buf, len, SETTINGS_RESPONSE_CAPACITY,
                                     100u, (const unsigned char *)caps,
                                     (unsigned)sizeof(caps) - 1u);

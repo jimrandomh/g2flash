@@ -60,20 +60,24 @@ updating the whole screen at once, and you can send messages which perform
 rect-to-rect copies for low-bandwidth scroll animations. Because this mode
 writes directly to the framebuffer without going through EvenHub's
 screen-update functions, stock containers do not contribute visible content
-while the direct framebuffer lease is held. A lease-scoped 256 KiB texture cache lets the phone upload RLE
-icons and glyphs once, then draw cached images and strings with small update
-messages. The cache is allocated on the EvenHub heap and zeroed on its first write and released
-when the Faceclaw framebuffer lease ends. Firmware revision 13 adds modes
-18/19/20 with 32-bit cache offsets (including glyph-table entries) for the
-full 256 KiB; legacy modes 12/13/14 are no longer accepted. Upload lengths
-remain 16-bit. Cached draw commands carry an options
-byte whose low nibble selects the top output color; bit 4 makes source color 0
-transparent, and bit 5 reverses the proportional 16-entry color ramp.
+while the direct framebuffer lease is held. A lease-scoped 256 KiB resource cache lets the phone upload RLE icons and fonts
+once, then draw them using resource IDs. Revision 23 reserves the first 2 KiB
+for 512 pointers and uses an on-glasses freelist with compaction. Each resource
+can contain up to 64 KiB; the phone manages residency and LRU eviction.
+Mode 21 uploads batches of resource chunks, and mode 22 evicts batches of IDs.
+Modes 19/20 draw an image/font by u16 resource ID. A font contains a 96-entry
+u16 glyph-offset table, relative to the start of that font resource. Legacy
+write-at-offset mode 18 is rejected. The cache is allocated lazily on the
+EvenHub heap and released when the framebuffer lease ends.
+Cached draw commands carry an options byte whose low nibble selects the top
+output color; bit 4 makes source color 0 transparent, and bit 5 reverses the
+proportional 16-entry color ramp. See [resource_cache.h](patches/resource_cache.h)
+and the wire layouts in [zlib_glue.c](patches/zlib_glue.c).
 Image-handler mode 15 draws a length-prefixed UTF-8 string with the glasses'
 built-in 20 px font chain and its default pair kerning. Its payload after the
 mode byte is `[x:u16][y:u16][options:u8][strlen:u8][UTF-8 bytes]`; options match
 the cached draw commands, and inline bytes 1–31 adjust x by -10 through 20 just
-as they do in cached-font mode 14.
+as they do in cached-font mode 20.
 
 The firmware also adds a microphone control plane (capability tokens `micctl`,
 `micmc`, `micraw`). Each temple carries a front + rear microphone pair, and the

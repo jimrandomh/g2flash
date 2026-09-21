@@ -112,12 +112,6 @@
       "0x004adddb": 1,
       "0x20000000": 1
     },
-    "texture_cache.c": {
-      "0x004ea2bb": 1,
-      "0x004ea30d": 1,
-      "0x004ea369": 1,
-      "0x20077a54": 1
-    },
     "transport_compression.c": {
       "0x005dbf9b": 1,
       "0x005dbfd7": 1,
@@ -150,6 +144,12 @@
       "0x005631a3": 1,
       "0x200008b8": 1,
       "0x20077834": 1
+    },
+    "texture_draw.c": {
+      "0x004ea2bb": 1,
+      "0x004ea30d": 1,
+      "0x004ea369": 1,
+      "0x20077a54": 1
     }
   },
   "dependencies": [
@@ -899,7 +899,7 @@
       "method": "strict-signature",
       "uses": [
         {
-          "file": "texture_cache.c",
+          "file": "texture_draw.c",
           "address": "0x004ea2bb",
           "count": 1
         }
@@ -912,7 +912,7 @@
       "method": "strict-signature",
       "uses": [
         {
-          "file": "texture_cache.c",
+          "file": "texture_draw.c",
           "address": "0x004ea30d",
           "count": 1
         }
@@ -925,7 +925,7 @@
       "method": "strict-signature",
       "uses": [
         {
-          "file": "texture_cache.c",
+          "file": "texture_draw.c",
           "address": "0x004ea369",
           "count": 1
         }
@@ -2422,7 +2422,7 @@
       "method": "literal loader witnesses",
       "uses": [
         {
-          "file": "texture_cache.c",
+          "file": "texture_draw.c",
           "address": "0x20077a54",
           "count": 1
         }
