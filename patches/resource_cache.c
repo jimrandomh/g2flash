@@ -234,7 +234,7 @@ static int cfw_resource_create(const uint8_t *src,uint32_t len) {
         for(uint32_t j=0;j<i;j++) if(rd16(src+2+j*6)==id) return -1;
         cfw_resource_block *b=cfw_resource_find(ctx,id);
         if(b) { const uint8_t *data=(const uint8_t *)(b+1);
-            if(b->length!=size || b->received!=size || data[0]!=4 || rd16(data+1)!=w || rd16(data+3)!=h) return -1;
+            if(b->length!=size || b->received!=size || data[0]!=CFW_RESOURCE_FLAG_LARGE || rd16(data+1)!=w || rd16(data+3)!=h) return -1;
         } else used+=cfw_resource_span(size);
     }
     if(used>CFW_RESOURCE_CACHE_SIZE-CFW_RESOURCE_TABLE_BYTES) return -1;
@@ -245,7 +245,7 @@ static int cfw_resource_create(const uint8_t *src,uint32_t len) {
         upload[0]=1;upload[1]=0;upload[2]=id;upload[3]=id>>8;
         upload[4]=size;upload[5]=size>>8;upload[6]=size>>16;upload[7]=0;
         upload[8]=upload[9]=0;upload[10]=5;upload[11]=0;
-        upload[12]=4;upload[13]=w;upload[14]=w>>8;upload[15]=h;upload[16]=h>>8;
+        upload[12]=CFW_RESOURCE_FLAG_LARGE;upload[13]=w;upload[14]=w>>8;upload[15]=h;upload[16]=h>>8;
         if(cfw_resource_upload(upload,sizeof(upload))) return -1;
         cfw_resource_block *b=cfw_resource_find(ctx,id);
         bzero((uint8_t *)(b+1)+5,size-5);b->received=size;cfw_resource_publish(ctx,b);

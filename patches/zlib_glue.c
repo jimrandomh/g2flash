@@ -15,146 +15,169 @@ int cfw_message_received(const uint8_t *data, uint16_t size, uint16_t checksum, 
     return image_worker(data, size, origin);
 }
 
-/*
- * Image/control handlers for the G2 CFW. DEFLATE is handled by the transport.
- *
- * Entered only through private SID-f0 messages. The stock EvenHub image path
- * is unmodified. Dispatch on the first byte of the reconstructed message:
- *   3           -> [3][l/4][t/2][w/4][h/2][fid16][rle]  bounding-box delta: composite a
- *                              tight-4bpp rectangle onto the persistent 640x480
- *                              shadow, then queue a direct physical-framebuffer
- *                              refresh. Box origin/size is quantized (left/width *4,
- *                              top/height *2). Needs a prior mode-6 keyframe.
- *   5           -> [5][...]    play a UI sound on the arm buzzer (no display change).
- *                              The G2 "speaker" is a PWM piezo buzzer — it can only
- *                              emit square-wave tones, not PCM/WAV — so this drives
- *                              the firmware's own buzzer driver instead of streaming
- *                              samples. Sub-dispatch on src[1]:
- *                                0 [0][type]            -> DRV_BuzzerPlayAfterQueue:
- *                                     play preset voice `type` (0..8) from the flash
- *                                     preset table (single beep / alarm / ringtone).
- *                                1 [1][note][oct][beat] -> DRV_BuzzerPlayNote: one
- *                                     tone. note 1..7, oct 0..3 (freq from the 28-
- *                                     entry note table), beat = duration in ~62ms
- *                                     units. Good for click/beep on tap/notification.
- *                                2 [2]                  -> stop/silence the buzzer.
- *                                3 [3][freqLo][freqHi][duty][msLo][msHi] -> raw tone:
- *                                     program the PWM to an ARBITRARY frequency
- *                                     (1..20000 Hz, 16-bit LE) at `duty` percent
- *                                     (0..100) for `ms` milliseconds (16-bit LE).
- *                                     Bypasses the 7-note x 4-octave lookup table
- *                                     entirely (that table is just a convenience);
- *                                     the hardware timer takes any Hz. Auto-stops
- *                                     by arming the buzzer's own osTimer with a
- *                                     null note list so the driver's timer callback
- *                                     shuts the PWM off after `ms`. Enables fine /
- *                                     microtonal pitch, chirps and pitch sweeps
- *                                     (send a run of these), and sub-62ms durations.
- *                              The preset/note/stop entries are self-contained fw
- *                              entries that queue into the buzzer's osTimer; the
- *                              raw-tone entry drives the low-level PWM start and
- *                              arms that same osTimer for auto-stop. None spin or
- *                              block here. Returns 0 (success).
- *   6           -> [6][rle]  headerless 4bpp full frame: RLE-decode the
- *                              tightly packed 640x480 pixels into the persistent CFW
- *                              shadow (seeding it for mode-3 deltas), then queue a
- *                              direct physical-framebuffer refresh.
- *   7           -> [7][sub]    diagnostic control (no display change): 0 clears the
- *                              overlay flags, 1 hides the overlay, 2 shows it.
- *   8           -> [8][count][len16][submsg]...  multi-segment: apply each sub-message
- *                              to the shadow with the panel push DEFERRED, then present
- *                              once — an atomic multi-op update (e.g. scroll = rect-copy
- *                              + delta). Bounded by the private message length; no
- *                              nesting. Intended for shadow ops (modes 3/6/9).
- *   9           -> [9][srcrect][dstrect]  rect-copy inside the 4bpp shadow (full uint16
- *                              L/T/W/H each; same size; may overlap), then present.
- *                              Pairs with a delta (usually via mode 8) to scroll.
- *   10          -> [10][enabled] compass control (no display change): invokes the
- *                              firmware's own compass start/stop routines on the
- *                              right arm. enabled=2 adds [interval16][min-change16],
- *                              both little-endian; interval is clamped to 50..2000 ms
- *                              before configuring the stock compass event filter.
- *                              Navigation heading notifications carry the result plus
- *                              optional sample diagnostics (see compass.c).
- *   11          -> [11] cleanup the custom-app session before disconnect: release
- *                              leases/direct-framebuffer ownership, stop and delete
- *                              CFW timers, stop custom buzzer/compass activity, release
- *                              owned framebuffer shadow, and restore stock behavior. The
- *                              singleton CFW context and sticky allocation flag remain.
- *   12/13/14    -> retired (rejected).
- *   15          -> [15][x16][y16][options8][strlen8][UTF-8 string] draw with the
- *                              stock background 20 px font chain and its default
- *                              pair kerning. Bytes 1..31 adjust x by -10..20 as in
- *                              mode 20; options and clipping also match mode 20.
- *   16          -> [16][op]... ambient light sensor (no display change; master lens
- *                              only, see als_sensor.c). op 0 = QUERY one report; op 1
- *                              [flags][interval16][min-delta16][heartbeat16] = PASSIVE
- *                              START: the CFW polls the OPT3001 itself and the stock
- *                              auto-brightness adjuster never steps the panel; op 2 =
- *                              PASSIVE STOP. Reports arrive as sid-0x09 field 105.
- *   17          -> [17][0] query cached R1 battery (no display change).
- *                              Master replies on sid-0x09 field 106; see ring_battery.c.
- *   18          -> retired write-at-offset message; rejected.
- *   19          -> [19][resource-id16][x16][y16][options8] draw a cached image:
- *                              [width8][height8][4bpp RLE], decoded with clipping.
- *   20          -> [20][font-id16][x16][y16][options8][strlen8][string]
- *                              draw cached glyphs. Options contains a low-nibble
- *                              top color plus transparency (bit 4) and inverse (bit 5).
- *                              The font begins with 96 u16 offsets relative to its
- *                              own start for characters 32..127; zero means absent.
- *                              Bytes 1..31 adjust x by -10..20; each glyph advances
- *                              x by its cached image width.
- *   21          -> [21][count16]{[id16][total32][chunk-offset16][size16][bytes]}
- *                              Upload resource chunks, maximum total 65536 bytes.
- *                              Chunks are contiguous; exact received replays work.
- *                              Whole batch validated first. IDs must be distinct.
- *   22          -> [22][count16]{[id16]} evict distinct IDs (absent is a no-op).
- *                              IDs are 0..511. The 256 KiB cache starts with a
- *                              2 KiB pointer table; freelist/compaction preserves IDs.
- *   anything else / too short  -> reject the custom message.
- *
- * The HIGH BIT of the mode byte is a "lenses differ" flag; most modes ignore it. For
- * mode 3 it carries two boxes (left then right, same size) sharing one RLE payload —
- * a stereo shift without duplicating pixels; each lens draws at its own box. For mode 9
- * it carries two rect-sets (left then right); each lens uses its own.
- *
- * Custom modes 3/6/8/9/15/19/20 use a lazily allocated 153600-byte CFW
- * framebuffer shadow, independent of EvenHub containers.
- *
- * RLE (modes 3 and 6 only): message bodies contain run-length encoded pixels.
- * Transport DEFLATE wraps the entire message (including mode and image headers).
- * RLE runs over the pixel NIBBLES of tightly packed rows in wire order (high nibble
- * first), including each odd-width row's padding nibble. One token is:
- *
- *   [cnt4|color4]                       cnt 1..15   (1 byte)
- *   [0|color4][cnt8]                    cnt 1..255  (2 bytes)
- *   [0|color4][0][cntLo][cntHi]         cnt 1..65535, little-endian (4 bytes)
- *
- * The low nibble is always the 4bpp color; the high nibble is the repeat count, and 0
- * escapes to the wider forms. 65535 is the longest single run — an encoder splits
- * anything longer into consecutive tokens. A run may cross row boundaries. Tokens
- * are decoded directly from the validated message without image scratch allocation,
- * and same-color pixel pairs are written as
- * whole bytes (color*0x11) rather than nibble at a time. A stream that decodes to
- * anything other than exactly rows*rowbytes*2 nibbles is rejected and the previous
- * frame is left on screen.
- *
- * Every invocation (any mode) first kicks the EvenHub keepalive: stock firmware
- * resets the ticks-since-heartbeat counter only on the sid-0x0c heartbeat msg, so
- * a client streaming image updates to maximize throughput would otherwise trip the
- * "Connection lost" teardown. See FW_KEEPALIVE_RESET in image_worker_locked.
- *
- * Shadow modes serialize with the stock display semaphore. display_copy_hook
- * copies packed 4bpp into the physical framebuffer before the panel refresh.
- *
- * Self-contained: no external symbols, no writable globals. Firmware entry points
- * are called by absolute constant address (movw/movt + blx, no relocation).
- * Addresses of OUR OWN functions (the z_stream zalloc/zfree pair, the seq_tick
- * osTimer callback) are taken with plain `&fn`: under -fropi clang materializes an
- * intra-CU function address PC-relatively (movw/movt of a resolved constant +
- * `add rX, pc`, Thumb bit included) with no relocation at all, so it needs no load
- * address at build time and stays correct wherever the blob is placed.
- */
+/* Private SID-f0 image/control messages. DEFLATE is handled by message_transport.c.
+ * Unknown, retired, or truncated messages are rejected. Active drawing messages
+ * stage screen/resource pixels; only CFW_MSG_PRESENT composes and presents.
+ * Keep names and wire IDs in sync with Faceclaw CfwMessageType.kt and cfw-message-type.ts. */
+typedef enum {
+    /* Retired on the wire; retained as a phone-side optimizer format. Historical layout:
+     * [3][l/4][t/2][w/4][h/2][fid16][rle]  bounding-box delta: composite a
+     * tight-4bpp rectangle onto the persistent 640x480
+     * shadow, then queue a direct physical-framebuffer
+     * refresh. Box origin/size is quantized (left/width *4,
+     * top/height *2). Needs a prior mode-6 keyframe. */
+    CFW_MSG_BOUNDING_BOX = 3,
+    /* [5][...]    play a UI sound on the arm buzzer (no display change).
+     * The G2 "speaker" is a PWM piezo buzzer — it can only
+     * emit square-wave tones, not PCM/WAV — so this drives
+     * the firmware's own buzzer driver instead of streaming
+     * samples. Sub-dispatch on src[1]:
+     * 0 [0][type]            -> DRV_BuzzerPlayAfterQueue:
+     * play preset voice `type` (0..8) from the flash
+     * preset table (single beep / alarm / ringtone).
+     * 1 [1][note][oct][beat] -> DRV_BuzzerPlayNote: one
+     * tone. note 1..7, oct 0..3 (freq from the 28-
+     * entry note table), beat = duration in ~62ms
+     * units. Good for click/beep on tap/notification.
+     * 2 [2]                  -> stop/silence the buzzer.
+     * 3 [3][freqLo][freqHi][duty][msLo][msHi] -> raw tone:
+     * program the PWM to an ARBITRARY frequency
+     * (1..20000 Hz, 16-bit LE) at `duty` percent
+     * (0..100) for `ms` milliseconds (16-bit LE).
+     * Bypasses the 7-note x 4-octave lookup table
+     * entirely (that table is just a convenience);
+     * the hardware timer takes any Hz. Auto-stops
+     * by arming the buzzer's own osTimer with a
+     * null note list so the driver's timer callback
+     * shuts the PWM off after `ms`. Enables fine /
+     * microtonal pitch, chirps and pitch sweeps
+     * (send a run of these), and sub-62ms durations.
+     * The preset/note/stop entries are self-contained fw
+     * entries that queue into the buzzer's osTimer; the
+     * raw-tone entry drives the low-level PWM start and
+     * arms that same osTimer for auto-stop. None spin or
+     * block here. Returns 0 (success).
+     * Kind 4: [4][count8]{[frequency16][duty8][duration16]} starts a timer-driven
+     * tone sequence, copied into persistent CFW context (at most CFW_SEQ_MAX steps). */
+    CFW_MSG_BUZZER = 5,
+    /* Retired on the wire; retained as a phone-side optimizer format. Historical layout:
+     * [6][rle]  headerless 4bpp full frame: RLE-decode the
+     * tightly packed 640x480 pixels into the persistent CFW
+     * shadow (seeding it for mode-3 deltas), then queue a
+     * direct physical-framebuffer refresh. */
+    CFW_MSG_FULL_FRAME = 6,
+    /* [7][sub]    diagnostic control (no display change): 0 clears the
+     * overlay flags, 1 hides the overlay, 2 shows it. */
+    CFW_MSG_DIAGNOSTICS = 7,
+    /* Retired on the wire; retained as a phone-side optimizer format. Historical layout:
+     * [8][count][len16][submsg]...  multi-segment: apply each sub-message
+     * to the shadow with the panel push DEFERRED, then present
+     * once — an atomic multi-op update (e.g. scroll = rect-copy
+     * + delta). Bounded by the private message length; no
+     * nesting. Intended for shadow ops (modes 3/6/9). */
+    CFW_MSG_MULTI_SEGMENT = 8,
+    /* Retired on the wire; retained as a phone-side optimizer format. Historical layout:
+     * [9][srcrect][dstrect]  rect-copy inside the 4bpp shadow (full uint16
+     * L/T/W/H each; same size; may overlap), then present.
+     * Pairs with a delta (usually via mode 8) to scroll. */
+    CFW_MSG_RECT_COPY = 9,
+    /* [10][enabled] compass control (no display change): invokes the
+     * firmware's own compass start/stop routines on the
+     * right arm. enabled=2 adds [interval16][min-change16],
+     * both little-endian; interval is clamped to 50..2000 ms
+     * before configuring the stock compass event filter.
+     * Navigation heading notifications carry the result plus
+     * optional sample diagnostics (see compass.c). */
+    CFW_MSG_COMPASS = 10,
+    /* [11] cleanup the custom-app session before disconnect: release
+     * leases/direct-framebuffer ownership, stop and delete
+     * CFW timers, stop custom buzzer/compass activity, release
+     * owned framebuffer shadow, and restore stock behavior. The
+     * singleton CFW context and sticky allocation flag remain. */
+    CFW_MSG_CLEANUP = 11,
+    /* Retired message ID; rejected. */
+    CFW_MSG_RETIRED_12 = 12,
+    /* Retired message ID; rejected. */
+    CFW_MSG_RETIRED_13 = 13,
+    /* Retired message ID; rejected. */
+    CFW_MSG_RETIRED_14 = 14,
+    /* Retired on the wire; retained as a phone-side optimizer format. Historical layout:
+     * [15][x16][y16][options8][strlen8][UTF-8 string] draw with the
+     * stock background 20 px font chain and its default
+     * pair kerning. Bytes 1..31 adjust x by -10..20 as in
+     * mode 20; options and clipping also match mode 20. */
+    CFW_MSG_STOCK_FONT_STRING = 15,
+    /* [16][op]... ambient light sensor (no display change; master lens
+     * only, see als_sensor.c). op 0 = QUERY one report; op 1
+     * [flags][interval16][min-delta16][heartbeat16] = PASSIVE
+     * START: the CFW polls the OPT3001 itself and the stock
+     * auto-brightness adjuster never steps the panel; op 2 =
+     * PASSIVE STOP. Reports arrive as sid-0x09 field 105. */
+    CFW_MSG_AMBIENT_LIGHT = 16,
+    /* [17][0] query cached R1 battery (no display change).
+     * Master replies on sid-0x09 field 106; see ring_battery.c. */
+    CFW_MSG_RING_BATTERY = 17,
+    /* Retired write-at-cache-offset message; rejected. Use CFW_MSG_UPLOAD_RESOURCE. */
+    CFW_MSG_RETIRED_CACHE_WRITE = 18,
+    /* Retired on the wire; retained as a phone-side optimizer format. Historical layout:
+     * [19][resource-id16][x16][y16][options8] draw a cached image:
+     * [width8][height8][4bpp RLE], decoded with clipping. */
+    CFW_MSG_CACHED_IMAGE = 19,
+    /* Retired on the wire; retained as a phone-side optimizer format. Historical layout:
+     * [20][font-id16][x16][y16][options8][strlen8][string]
+     * draw cached glyphs. Options contains a low-nibble
+     * top color plus transparency (bit 4) and inverse (bit 5).
+     * The font begins with 96 u16 offsets relative to its
+     * own start for characters 32..127; zero means absent.
+     * Bytes 1..31 adjust x by -10..20; each glyph advances
+     * x by its cached image width. */
+    CFW_MSG_CACHED_TEXT = 20,
+    /* [21][count16]{[id16][total32][chunk-offset16][size16][bytes]}
+     * Upload resource chunks, maximum total 65536 bytes.
+     * Chunks are contiguous; exact received replays work.
+     * Whole batch validated first. IDs must be distinct. */
+    CFW_MSG_UPLOAD_RESOURCE = 21,
+    /* [22][count16]{[id16]} Evict distinct resource IDs (absent is a no-op).
+     * IDs are 0..511. The 192 KiB cache starts with a 2 KiB pointer table;
+     * freelist allocation and compaction preserve resource IDs. */
+    CFW_MSG_EVICT_RESOURCE = 22,
+    /* [23][request-id16][lenses8][op8][length8][address32][value16]
+     * Read panel registers, framebuffer bytes, or a diagnostic snapshot (op 0).
+     * Validated by panel.c and queued onto the stock display task; replies retain the request ID. */
+    CFW_MSG_PANEL_READ = 23,
+    /* [24][request-id16][lenses8][op8][length8][address32][value16]
+     * Write a supported panel register or execute a panel control operation.
+     * See panel.c for allowed operations, baseline restoration, and watchdog handling. */
+    CFW_MSG_PANEL_WRITE = 24,
+    /* [25][request-id16][lenses8][pattern8][0][0:u32][value16]
+     * Display a diagnostic panel pattern (0..18); pattern 18 takes a 4bpp fill value.
+     * Runs on the stock display task with watchdog restoration; see panel.c. */
+    CFW_MSG_PANEL_PATTERN = 25,
+    /* [26][count16]{[length16][draw-call]} Validate and execute draw calls.
+     * Calls target the persistent screen buffer unless a call selects a resource.
+     * Does not present; draw opcodes and flags are declared in display_list.c. */
+    CFW_MSG_DRAW_CALLS = 26,
+    /* [27][resource-id16] Validate and set the root display list.
+     * ID 65535 clears the root. The resource graph is validated before changing the root. */
+    CFW_MSG_SET_ROOT_DISPLAY_LIST = 27,
+    /* [28] Copy the screen buffer to the composition buffer, replay the root
+     * display list for this lens, then present to the physical framebuffer under the display gate. */
+    CFW_MSG_PRESENT = 28,
+    /* [29][count16]{[id16][width16][height16]} Create zeroed raw image surfaces.
+     * Each resource is at most 64 KiB. Recreating an identical existing surface preserves its pixels. */
+    CFW_MSG_CREATE_SURFACE = 29,
+} cfw_message_type;
+
+/* The high bit historically selected separate lens coordinates in bbox/copy messages.
+ * Current dispatch ignores it except for panel messages, which use the full byte. */
+#define CFW_MSG_TYPE_MASK 127u
+#define CFW_MSG_FLAG_LENSES_DIFFER 128u
+
+/* RLE pixels are high-nibble first: [count4|color4], [color4][count8], or
+ * [color4][0][count16]. A run may cross rows; 65535 is the maximum run length.
+ * Private messages kick the stock EvenHub keepalive on receipt. Composition and
+ * cleanup serialize with the stock display gate. Firmware entry points are
+ * absolute donor addresses; internal callbacks remain PC-relative under -fropi. */
 
 typedef void (*cacheflush_fn)(void *desc);          /* desc = uint32[2]{ptr,size} */
 typedef uint32_t (*lens_side_fn)(void);             /* 2 = LEFT lens, 1 = RIGHT lens */
@@ -265,8 +288,8 @@ static int image_dispatch(const uint8_t *src, uint32_t srclen, cfw_rectlist *rl)
  * barrier so no direct-framebuffer job can still reference session-owned state. */
 static int is_composition_message(const uint8_t *src, uint32_t srclen) {
     if (src == 0 || srclen == 0) return 0;
-    uint8_t mode = src[0] & 0x7fu;
-    return mode == 11 || mode == 28;
+    cfw_message_type mode = (cfw_message_type)(src[0] & CFW_MSG_TYPE_MASK);
+    return mode == CFW_MSG_CLEANUP || mode == CFW_MSG_PRESENT;
 }
 
 /* Commands can arrive on both BLE and bridge receive tasks.
@@ -292,7 +315,7 @@ static int image_worker(const uint8_t *src, uint32_t size, uint8_t origin) {
         }
     }
     if (CFW_IMAGE_MUTEX_TAKE(mutex, 0xffffffffu) != 0) return -1;
-    int result = size && src[0] >= 23 && src[0] <= 25
+    int result = size && src[0] >= CFW_MSG_PANEL_READ && src[0] <= CFW_MSG_PANEL_PATTERN
         ? panel_queue(src, size, origin) : image_worker_locked(src, size);
     CFW_IMAGE_MUTEX_GIVE(mutex);
     return result;
@@ -349,9 +372,9 @@ static int image_worker_locked(const uint8_t *src, uint32_t srclen) {
 static int image_dispatch(const uint8_t *src, uint32_t srclen, cfw_rectlist *rl) {
     if (src == 0 || srclen < 1) return -1;
 
-    uint8_t mode = src[0] & 0x7f;
+    cfw_message_type mode = (cfw_message_type)(src[0] & CFW_MSG_TYPE_MASK);
 
-    if (mode == 5) {
+    if (mode == CFW_MSG_BUZZER) {
         /* play a UI sound on the buzzer; no display change. [5][kind][args...].
          * kinds 0-3 use firmware entry points that copy their args into fw-owned
          * storage (preset table is flash; PlayNote copies into an 8-byte scratch;
@@ -413,7 +436,7 @@ static int image_dispatch(const uint8_t *src, uint32_t srclen, cfw_rectlist *rl)
         return 0;
     }
 
-    if (mode == 7) {
+    if (mode == CFW_MSG_DIAGNOSTICS) {
         /* Diagnostic control (no display change). [7][sub]:
          *   0 -> clear the sticky flags and frame-order tracking (use between tests)
          *   1 -> hide the flag overlay      2 -> show the flag overlay
@@ -438,7 +461,7 @@ static int image_dispatch(const uint8_t *src, uint32_t srclen, cfw_rectlist *rl)
         return 0;
     }
 
-    if (mode == 10) {
+    if (mode == CFW_MSG_COMPASS) {
         /* Compass control (no display change):
          *   [10][0] stops
          *   [10][1] starts with the stock 1000 ms / 5 degree configuration
@@ -484,38 +507,38 @@ static int image_dispatch(const uint8_t *src, uint32_t srclen, cfw_rectlist *rl)
         return -1;
     }
 
-    if (mode == 17) {
+    if (mode == CFW_MSG_RING_BATTERY) {
         return ring_battery_control(src, srclen);
     }
 
-    if (mode == 16) {
+    if (mode == CFW_MSG_AMBIENT_LIGHT) {
         /* Ambient light sensor query / passive polling control (no display change).
          * Runs on both lenses; als_control itself acts only on the master lens. */
         return als_control(src, srclen);
     }
 
-    if (mode == 11) {
+    if (mode == CFW_MSG_CLEANUP) {
         /* Custom-session cleanup. image_worker owns the display gate here, so a
          * prior direct refresh has completed and the pointers below cannot still
          * be in use by display_copy_hook. Extra bytes are reserved and ignored. */
         return cfw_cleanup_session();
     }
 
-    if (mode == 21) return cfw_resource_upload(src + 1, srclen - 1);
-    if (mode == 22) return cfw_resource_evict(src + 1, srclen - 1);
+    if (mode == CFW_MSG_UPLOAD_RESOURCE) return cfw_resource_upload(src + 1, srclen - 1);
+    if (mode == CFW_MSG_EVICT_RESOURCE) return cfw_resource_evict(src + 1, srclen - 1);
 
-    if (mode == 29) return cfw_resource_create(src+1,srclen-1);
-    if (mode == 26 || mode == 27 || mode == 28) {
+    if (mode == CFW_MSG_CREATE_SURFACE) return cfw_resource_create(src+1,srclen-1);
+    if (mode == CFW_MSG_DRAW_CALLS || mode == CFW_MSG_SET_ROOT_DISPLAY_LIST || mode == CFW_MSG_PRESENT) {
         if (!cfw_fb_lease_active()) return -1;
         customCfwContext *ctx=getCustomCfwContext();
         uint8_t *screen=cfw_screen_buffer();
         if(!ctx || !screen) return -1;
         cfw_draw_target target={screen,640,480,320};
-        if(mode==26) {
+        if(mode == CFW_MSG_DRAW_CALLS) {
             if(cfw_draw_run(ctx,src+1,srclen-1,target,0,0)) return -1;
             return cfw_draw_run(ctx,src+1,srclen-1,target,1,0);
         }
-        if(mode==27) {
+        if(mode == CFW_MSG_SET_ROOT_DISPLAY_LIST) {
             if(srclen!=3) return -1;
             uint32_t id=rd16(src+1);
             if(cfw_draw_root(ctx,id,target,0,0)) return -1;

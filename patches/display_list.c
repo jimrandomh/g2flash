@@ -7,6 +7,29 @@ static int decode_image_rle(const uint8_t *,uint32_t,uint8_t *,uint32_t,uint32_t
 #define CFW_DRAW_SCREEN 65535u
 #define CFW_DRAW_CURRENT 65534u
 
+/* Keep names and wire IDs in sync with Faceclaw DrawCallType.kt. */
+typedef enum {
+    DRAW_OP_BOUNDING_BOX = 1,
+    DRAW_OP_RECT_COPY = 2,
+    DRAW_OP_STOCK_FONT_STRING = 3,
+    DRAW_OP_IMAGE = 4,
+    DRAW_OP_TEXT = 5,
+    DRAW_OP_REMAP_COLORS = 6,
+    DRAW_OP_DISPLAY_LIST = 7,
+    DRAW_OP_ROUNDED_RECT = 8,
+} cfw_draw_op;
+
+/* Keep flag names and values in sync with Faceclaw DrawFlags.kt. */
+typedef enum {
+    DRAW_FLAG_RESOURCE_TARGET = 1,
+    DRAW_FLAG_DEPTH = 2,
+    DRAW_FLAGS_MASK = DRAW_FLAG_RESOURCE_TARGET | DRAW_FLAG_DEPTH,
+} cfw_draw_call_flags;
+typedef enum {
+    DRAW_BBOX_FLAG_U16 = 1,
+} cfw_draw_bbox_flags;
+#define DRAW_ROUNDED_RECT_NO_BORDER 16u
+
 typedef struct { uint8_t *pixels; uint32_t width, height, stride; int32_t shift_x; } cfw_draw_target;
 typedef struct { uint32_t remaining, depth; uint16_t ancestors[CFW_DRAW_MAX_DEPTH]; uint8_t *references; } cfw_draw_walk;
 
@@ -14,7 +37,7 @@ static int cfw_draw_resource_target(customCfwContext *ctx, uint32_t id, cfw_draw
     uint32_t size;
     const uint8_t *data = cfw_resource_get(ctx, id, &size);
     cfw_cached_image image;
-    if (!data || (data[0] & 11u) || !cfw_texture_image_at(data, size, 0, &image)) return -1;
+    if (!data || (data[0] & (CFW_RESOURCE_TYPE_MASK | CFW_RESOURCE_FLAG_RLE)) || !cfw_texture_image_at(data, size, 0, &image)) return -1;
     out->pixels = (uint8_t *)image.rle; out->width = image.width; out->height = image.height;
     out->stride = (image.width + 1u) >> 1; out->shift_x = 0;
     return 0;
@@ -38,7 +61,7 @@ static int cfw_draw_list(customCfwContext *ctx, uint32_t id, cfw_draw_target tar
     for (uint32_t i = 0; i < walk->depth; i++) if (walk->ancestors[i] == id) return -1;
     uint32_t size;
     const uint8_t *data = cfw_resource_get(ctx, id, &size);
-    if (!data || size < 3 || data[0] != 2) return -1;
+    if (!data || size < 3 || data[0] != CFW_RESOURCE_TYPE_DISPLAY_LIST) return -1;
     cfw_draw_ref(walk, id);
     walk->ancestors[walk->depth++] = id;
     int result = cfw_draw_sequence(ctx, data + 1, size - 1, target, apply, walk);
@@ -55,9 +78,10 @@ static int cfw_draw_rounded_contains(int32_t x,int32_t y,int32_t w,int32_t h,int
 static int cfw_draw_call(customCfwContext *ctx, const uint8_t *p, uint32_t n,
                           cfw_draw_target target, int apply, cfw_draw_walk *walk) {
     if (n < 2 || !walk->remaining--) return -1;
-    uint32_t op = p[0], flags = p[1]; p += 2; n -= 2;
-    if (flags & ~3u) return -1;
-    if (flags & 1u) {
+    cfw_draw_op op = (cfw_draw_op)p[0];
+    uint32_t flags = p[1]; p += 2; n -= 2;
+    if (flags & ~DRAW_FLAGS_MASK) return -1;
+    if (flags & DRAW_FLAG_RESOURCE_TARGET) {
         if (n < 2) return -1;
         uint32_t id = rd16(p); p += 2; n -= 2;
         int32_t inherited_shift=target.shift_x;
@@ -65,16 +89,16 @@ static int cfw_draw_call(customCfwContext *ctx, const uint8_t *p, uint32_t n,
         target.shift_x=inherited_shift;
         cfw_draw_ref(walk, id);
     }
-    if (flags & 2u) {
+    if (flags & DRAW_FLAG_DEPTH) {
         if (!n) return -1;
         int32_t depth=(int8_t)*p++; n--;
         int32_t value=cfw_draw_right_lens()?depth+1:depth;
         int32_t half=value<0?(value-1)/2:value/2;
         target.shift_x+=cfw_draw_right_lens()?-half:half;
     }
-    if (op == 1) { /* bbox: flags, compact or u16 xywh, pixel RLE (no row padding). */
-        if (!n || p[0] > 1) return -1;
-        uint32_t wide = p[0], header = wide ? 9u : 5u;
+    if (op == DRAW_OP_BOUNDING_BOX) { /* bbox: flags, compact or u16 xywh, pixel RLE (no row padding). */
+        if (!n || (p[0] & ~DRAW_BBOX_FLAG_U16)) return -1;
+        uint32_t wide = p[0] & DRAW_BBOX_FLAG_U16, header = wide ? 9u : 5u;
         if (n < header) return -1;
         uint32_t x = wide ? rd16(p+1) : p[1]*4u, y = wide ? rd16(p+3) : p[2]*2u;
         uint32_t w = wide ? rd16(p+5) : p[3]*4u, h = wide ? rd16(p+7) : p[4]*2u;
@@ -91,7 +115,7 @@ static int cfw_draw_call(customCfwContext *ctx, const uint8_t *p, uint32_t n,
         if(apply && fast && !decode_image_rle(p+header,n-header,target.pixels+y*target.stride+((x+target.shift_x)>>1),target.stride,w>>1,h)) return -1;
         return 0;
     }
-    if (op == 2) { /* source id, source xywh, destination xy. */
+    if (op == DRAW_OP_RECT_COPY) { /* source id, source xywh, destination xy. */
         if (n != 14) return -1;
         cfw_draw_target source = target;
         uint32_t id=rd16(p);
@@ -108,7 +132,7 @@ static int cfw_draw_call(customCfwContext *ctx, const uint8_t *p, uint32_t n,
         }
         return 0;
     }
-    if (op == 3) {
+    if (op == DRAW_OP_STOCK_FONT_STRING) {
         if (n<6 || n!=6u+p[5]) return -1;
         uint32_t pos=6;
         while(pos<n) { uint32_t used,cp; if(p[pos]>=1 && p[pos]<=31) { pos++; continue; }
@@ -117,25 +141,25 @@ static int cfw_draw_call(customCfwContext *ctx, const uint8_t *p, uint32_t n,
         cfw_rectlist rl; rl.n=0;
         return cfw_builtin_draw_string_shifted(target.pixels,target.stride,target.width,target.height,p,n,&rl,target.shift_x);
     }
-    if (op == 4 || op == 5) {
-        if ((op==4 && n!=7) || (op==5 && (n<8 || n!=8u+p[7]))) return -1;
+    if (op == DRAW_OP_IMAGE || op == DRAW_OP_TEXT) {
+        if ((op == DRAW_OP_IMAGE && n!=7) || (op == DRAW_OP_TEXT && (n<8 || n!=8u+p[7]))) return -1;
         uint32_t id=rd16(p),size; const uint8_t *data=cfw_resource_get(ctx,id,&size);
         if (!data) return -1;
         cfw_draw_ref(walk,id);
         cfw_cached_image image;
-        if(op==4) { if(!cfw_texture_image_at(data,size,0,&image)) return -1; }
+        if(op == DRAW_OP_IMAGE) { if(!cfw_texture_image_at(data,size,0,&image)) return -1; }
         else {
-            if(size<193 || data[0]!=1) return -1;
+            if(size<193 || data[0]!=CFW_RESOURCE_TYPE_FONT) return -1;
             for(uint32_t i=8;i<n;i++) { uint32_t ch=p[i]; if(ch>=1 && ch<=31) continue;
                 if(ch<32 || ch>127) return -1; uint32_t offset=rd16(data+1+(ch-32)*2);
                 if(offset<193 || !cfw_texture_image_at(data,size,offset,&image)) return -1; }
         }
         if(!apply) return 0;
         cfw_rectlist rl; rl.n=0;
-        return op==4 ? cfw_texture_draw_image_shifted(target.pixels,target.stride,target.width,target.height,p,n,&rl,target.shift_x)
+        return op == DRAW_OP_IMAGE ? cfw_texture_draw_image_shifted(target.pixels,target.stride,target.width,target.height,p,n,&rl,target.shift_x)
                      : cfw_texture_draw_string_shifted(target.pixels,target.stride,target.width,target.height,p,n,&rl,target.shift_x);
     }
-    if (op == 6) { /* xywh + sixteen packed LUT nibbles. */
+    if (op == DRAW_OP_REMAP_COLORS) { /* xywh + sixteen packed LUT nibbles. */
         if(n!=16) return -1;
         uint32_t x=rd16(p),y=rd16(p+2),w=rd16(p+4),h=rd16(p+6);
         if(!w || !h || x>target.width || w>target.width-x || y>target.height || h>target.height-y) return -1;
@@ -146,22 +170,22 @@ static int cfw_draw_call(customCfwContext *ctx, const uint8_t *p, uint32_t n,
             cfw_draw_put(&target,xx,yy,(lut>>((v&1)?0:4))&15); }
         return 0;
     }
-    if (op == 8) { /* signed xy, u16 wh/radius, max-blended fill, outline (16 = none). */
+    if (op == DRAW_OP_ROUNDED_RECT) { /* signed xy, u16 wh/radius, max-blended fill, outline (16 = none). */
         if(n!=12) return -1;
         int32_t x=(int16_t)rd16(p),y=(int16_t)rd16(p+2);
         uint32_t w=rd16(p+4),h=rd16(p+6),radius=rd16(p+8),fill=p[10],border=p[11];
-        if(!w || !h || w>640 || h>480 || fill>15 || border>16) return -1;
+        if(!w || !h || w>640 || h>480 || fill>15 || border>DRAW_ROUNDED_RECT_NO_BORDER) return -1;
         if(apply) for(uint32_t yy=0;yy<h;yy++) for(uint32_t xx=0;xx<w;xx++) {
             if(!cfw_draw_rounded_contains(xx,yy,w,h,radius)) continue;
             int32_t tx=x+(int32_t)xx+target.shift_x,ty=y+(int32_t)yy;
             if(tx<0 || ty<0 || tx>=(int32_t)target.width || ty>=(int32_t)target.height) continue;
             int edge=!cfw_draw_rounded_contains((int32_t)xx-1,(int32_t)yy-1,(int32_t)w-2,(int32_t)h-2,radius?radius-1:0);
             uint8_t old=cfw_draw_pixel(&target,tx,ty);
-            cfw_draw_put(&target,x+(int32_t)xx,ty,edge && border<16?border:(old>fill?old:fill));
+            cfw_draw_put(&target,x+(int32_t)xx,ty,edge && border<DRAW_ROUNDED_RECT_NO_BORDER?border:(old>fill?old:fill));
         }
         return 0;
     }
-    if (op == 7 && n==2) return cfw_draw_list(ctx,rd16(p),target,apply,walk);
+    if (op == DRAW_OP_DISPLAY_LIST && n==2) return cfw_draw_list(ctx,rd16(p),target,apply,walk);
     return -1;
 }
 static int cfw_draw_sequence(customCfwContext *ctx,const uint8_t *p,uint32_t n,cfw_draw_target target,int apply,cfw_draw_walk *walk) {

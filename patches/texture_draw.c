@@ -22,8 +22,6 @@ typedef struct {
     uint32_t raw;
 } cfw_cached_image;
 
-#define CFW_TEXTURE_OPT_TRANSPARENT 0x10u
-#define CFW_TEXTURE_OPT_INVERSE     0x20u
 
 /* Stock LVGL font ABI (firmware 2.3.0.24, Thumb entry points). After building
  * the background chain, the font manager dereferences its private 12-byte
@@ -94,12 +92,12 @@ static int cfw_texture_image_at(const uint8_t *resource, uint32_t size, uint32_t
                                 cfw_cached_image *out) {
     if (!resource || offset >= size) return 0;
     const uint8_t *image=resource+offset;
-    uint32_t flags=image[0], header=(flags&4u)?5u:3u;
-    if((flags&~12u) || size-offset<header) return 0;
-    uint32_t width=(flags&4u)?rd16(image+1):image[1];
-    uint32_t height=(flags&4u)?rd16(image+3):image[2];
+    uint32_t flags=image[0], header=(flags&CFW_RESOURCE_FLAG_LARGE)?5u:3u;
+    if((flags&~CFW_RESOURCE_IMAGE_FLAGS_MASK) || size-offset<header) return 0;
+    uint32_t width=(flags&CFW_RESOURCE_FLAG_LARGE)?rd16(image+1):image[1];
+    uint32_t height=(flags&CFW_RESOURCE_FLAG_LARGE)?rd16(image+3):image[2];
     if(!width || !height || width>640 || height>480) return 0;
-    out->raw=!(flags&8u);
+    out->raw=!(flags&CFW_RESOURCE_FLAG_RLE);
     if(out->raw) {
         uint32_t bytes=((width+1u)>>1)*height;
         if(bytes>size-offset-header) return 0;
@@ -132,7 +130,7 @@ static int cfw_texture_image_at(const uint8_t *resource, uint32_t size, uint32_t
  * scale the 0..15 source range proportionally into 0..top. Inverse reverses
  * the completed ramp. */
 static void cfw_texture_make_lut(uint8_t options, uint8_t *lut) {
-    uint32_t top = options & 0x0fu;
+    uint32_t top = options & CFW_TEXTURE_OPT_BRIGHTNESS_MASK;
     for (uint32_t i = 0; i < 16u; i++) {
         uint32_t source = (options & CFW_TEXTURE_OPT_INVERSE) ? 15u - i : i;
         lut[i] = (uint8_t)((source * top) / 15u);
