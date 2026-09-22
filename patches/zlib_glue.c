@@ -177,6 +177,7 @@ typedef int (*compass_config_fn)(uint32_t, const uint32_t *); /* sensor-hub Func
 /* firmware entry points (Thumb bit set for blx via constant pointer) */
 #define FW_FLUSH   ((cacheflush_fn)0x0047e317U)     /* FUN_0047e316 dcache clean range */
 #define FW_SIDE    ((lens_side_fn)0x00465d4dU)       /* FUN_00465d4c -> 2=left, 1=right */
+static int cfw_draw_right_lens(void) { return FW_SIDE()==1; }
 #define FW_BUZZ_PRESET ((buzz_preset_fn)0x0051bccfU) /* FUN_0051bcce DRV_BuzzerPlayAfterQueue(type 0..8) */
 #define FW_BUZZ_NOTE   ((buzz_note_fn)0x0051bd6dU)   /* FUN_0051bd6c DRV_BuzzerPlayNote(note,tone,beat) */
 #define FW_BUZZ_RESET  ((buzz_reset_fn)0x0051bc39U)  /* FUN_0051bc38 buzzer stop/reset */

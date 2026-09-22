@@ -42,7 +42,7 @@ URL. See [the message probe instructions](docs/message-transport.md#sending-test
 for MTU-based packet splitting, lens selection, ACK verification, and the debug overlay.
 
 Custom messages use private SID `0xf0` and execute without an EvenHub context.
-Revision `Faceclaw/25` separates app drawing from presentation. A persistent
+Revision `Faceclaw/26` separates app drawing from presentation. A persistent
 153,600-byte packed **screen buffer** is allocated on the EvenHub heap. The old
 LVGL-heap shadow is now the **composition buffer**. Message 28 copies screen to
 composition, plays the root display list, then queues the existing gated copy to
@@ -61,13 +61,15 @@ for u16 dimensions instead of u8, and RLE=8. Raw images use packed high-first
 96 resource-relative u16 glyph offsets, and embedded image records.
 
 Message 26 carries length-prefixed draw calls: bbox, rect copy, stock text,
-resource image/text, color LUT, and nested display list. Each call may override
+resource image/text, color LUT, nested display list, and rounded rectangles.
+Rounded rectangle fills use max blending; a scoped signed depth shifts each
+lens in opposite directions. Selected menu rows replay at depth +2. Each call may override
 its target with a writable image ID. Compact aligned bboxes retain a fast mode;
 u16 bounds allow individual pixels. Message 27 sets the root list (65535 clears
 it). Drawing/root updates do not present until message 28. Lists reject cycles,
 missing resources, depth over 8, and more than 4096 expanded operations.
 Old drawing messages 3/6/8/9/15/19/20 are rejected. See
-[the revision 25 wire specification](docs/display-list-protocol.md).
+[the revision 26 wire specification](docs/display-list-protocol.md).
 
 The firmware also adds a microphone control plane (capability tokens `micctl`,
 `micmc`, `micraw`). Each temple carries a front + rear microphone pair, and the

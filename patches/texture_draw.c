@@ -232,17 +232,17 @@ static void cfw_texture_add_rect(cfw_rectlist *rl, int32_t x, int32_t y,
 }
 
 /* Mode 19 payload: [resource-id:u16][x:u16][y:u16][options:u8]. */
-static int cfw_texture_draw_image(uint8_t *shadow, uint32_t stride,
+static int cfw_texture_draw_image_shifted(uint8_t *shadow, uint32_t stride,
                                   uint32_t panel_w, uint32_t panel_h,
                                   const uint8_t *src, uint32_t len,
-                                  cfw_rectlist *rl) {
+                                  cfw_rectlist *rl, int32_t shift_x) {
     if (shadow == 0 || src == 0 || len != 7u || !cfw_fb_lease_active()) return -1;
     customCfwContext *ctx = getCustomCfwContext();
     cfw_cached_image image;
     uint32_t size;
     const uint8_t *resource = cfw_resource_get(ctx, rd16(src), &size);
     if (!resource || !cfw_texture_image_at(resource, size, 0, &image)) return -1;
-    int32_t x = (int32_t)(int16_t)rd16(src + 2u);
+    int32_t x = (int32_t)(int16_t)rd16(src + 2u) + shift_x;
     int32_t y = (int32_t)(int16_t)rd16(src + 4u);
     uint8_t options = src[6];
     uint8_t lut[16];
@@ -256,10 +256,10 @@ static int cfw_texture_draw_image(uint8_t *shadow, uint32_t stride,
 /* Mode 20 payload: [resource-id:u16][x:u16][y:u16][options:u8][strlen:u8][string].
  * The font starts with 96 little-endian uint16 resource-relative image offsets for characters
  * 32..127. Bytes 1..31 adjust x by -10..20; byte 0 and bytes >127 are invalid. */
-static int cfw_texture_draw_string(uint8_t *shadow, uint32_t stride,
+static int cfw_texture_draw_string_shifted(uint8_t *shadow, uint32_t stride,
                                    uint32_t panel_w, uint32_t panel_h,
                                    const uint8_t *src, uint32_t len,
-                                   cfw_rectlist *rl) {
+                                   cfw_rectlist *rl, int32_t shift_x) {
     if (shadow == 0 || src == 0 || len < 8u || !cfw_fb_lease_active()) return -1;
     uint32_t font_id = rd16(src);
     uint8_t options = src[6];
@@ -270,7 +270,7 @@ static int cfw_texture_draw_string(uint8_t *shadow, uint32_t stride,
     const uint8_t *table = cfw_resource_get(ctx, font_id, &size);
     if (!table || size < 193u || table[0] != 1) return -1;
     const uint8_t *string = src + 8u;
-    int32_t x = (int32_t)(int16_t)rd16(src + 2u);
+    int32_t x = (int32_t)(int16_t)rd16(src + 2u) + shift_x;
     int32_t y = (int32_t)(int16_t)rd16(src + 4u);
 
     /* Validate every character/table entry/RLE stream before drawing any glyph. */
@@ -404,10 +404,10 @@ static int cfw_builtin_glyph(const uint8_t *font, uint32_t letter,
  * It draws through the stock background 20 px font chain. Bytes 1..31 retain
  * mode 20's inline x adjustments (-10..20); all other text is strict UTF-8.
  * Supplying the next real glyph to LVGL applies the built-in default kerning. */
-static int cfw_builtin_draw_string(uint8_t *shadow, uint32_t stride,
+static int cfw_builtin_draw_string_shifted(uint8_t *shadow, uint32_t stride,
                                    uint32_t panel_w, uint32_t panel_h,
                                    const uint8_t *src, uint32_t len,
-                                   cfw_rectlist *rl) {
+                                   cfw_rectlist *rl, int32_t shift_x) {
     if (shadow == 0 || src == 0 || len < 6u || !cfw_fb_lease_active()) return -1;
     uint32_t string_len = src[5];
     if (len != 6u + string_len) return -1;
@@ -450,7 +450,7 @@ static int cfw_builtin_draw_string(uint8_t *shadow, uint32_t stride,
         if (bitmap) CFW_FONT_RELEASE(dsc);
     }
 
-    int32_t x = (int32_t)(int16_t)rd16(src);
+    int32_t x = (int32_t)(int16_t)rd16(src) + shift_x;
     int32_t y = (int32_t)(int16_t)rd16(src + 2);
     uint8_t options = src[4];
     uint8_t lut[16];
@@ -481,4 +481,16 @@ static int cfw_builtin_draw_string(uint8_t *shadow, uint32_t stride,
         x += (int32_t)rd16(dsc + CFW_GLYPH_ADV_W);
     }
     return 0;
+}
+
+static int cfw_texture_draw_image(uint8_t *pixels,uint32_t stride,uint32_t w,uint32_t h,const uint8_t *p,uint32_t n,cfw_rectlist *rl) {
+    return cfw_texture_draw_image_shifted(pixels,stride,w,h,p,n,rl,0);
+}
+
+static int cfw_texture_draw_string(uint8_t *pixels,uint32_t stride,uint32_t w,uint32_t h,const uint8_t *p,uint32_t n,cfw_rectlist *rl) {
+    return cfw_texture_draw_string_shifted(pixels,stride,w,h,p,n,rl,0);
+}
+
+static int cfw_builtin_draw_string(uint8_t *pixels,uint32_t stride,uint32_t w,uint32_t h,const uint8_t *p,uint32_t n,cfw_rectlist *rl) {
+    return cfw_builtin_draw_string_shifted(pixels,stride,w,h,p,n,rl,0);
 }

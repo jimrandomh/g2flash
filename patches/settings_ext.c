@@ -471,7 +471,7 @@ __attribute__((naked)) void faceclaw_evenai_display_entry(void) {
 int settings_send_wrapper(int type, int sid, unsigned char *buf, unsigned len) {
     if (sid == 9) {
         // 24: display-task panel queries/pokes/patterns, bounded result replies.
-        static const char caps[] = "Faceclaw/25";
+        static const char caps[] = "Faceclaw/26";
         len = pb_append_bytes_field(buf, len, SETTINGS_RESPONSE_CAPACITY,
                                     100u, (const unsigned char *)caps,
                                     (unsigned)sizeof(caps) - 1u);
