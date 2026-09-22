@@ -1,6 +1,7 @@
 #pragma once
 #include <stdint.h>
 #include "message_transport.h"
+#include "panel.h"
 
 /* Persistent CFW-owned state, independent of EvenHub image containers. The
  * full-panel shadow is an owned heap allocation. This context is anchored in
@@ -34,7 +35,7 @@ typedef struct {
     uint8_t  fid_resync; /* keyframe rebaselines the next delta's fid (no false skip) */
     uint8_t  diag_hide;  /* 1 = don't draw the flag overlay (default 0 = visible) */
     uint32_t last_worker_us;  /* image_worker() duration of the PREVIOUS message (overlay) */
-    uint32_t last_present_us; /* present_shadow() duration of the PREVIOUS present (overlay) */
+    uint32_t last_present_us; /* present_composition() duration of the PREVIOUS present (overlay) */
     uint32_t cyc_per_ms;      /* calibrated DWT cycles per 1 ms OS tick (0 = not yet done) */
     uint8_t  f_reorder;  /* FLAG: ever saw a frame id go backward */
     uint8_t  f_skip;     /* FLAG: ever saw a frame id gap (skipped) */
@@ -116,13 +117,16 @@ typedef struct {
     uint8_t  gesture_notify_buf[16];
     volatile cfw_message_probe message_probe; /* latest valid SID-f0 payload */
     uint32_t image_mutex; /* serializes commands from BLE and bridge */
-    uint8_t *framebuffer_shadow; /* owned 640x480 packed 4bpp; released by mode 11 */
+    uint8_t *composition_buffer; /* owned 640x480 packed 4bpp; released by mode 11 */
     cfw_message_stream message_streams[2]; /* index = BLE ingress lens bit - 1 */
     uint8_t ancs_connection, ancs_stage;
     uint16_t ancs_sequence;
     uint32_t ancs_token;
     uint8_t  ring_notify_buf[25]; /* atomic timestamped R1 SysEvent */
     uint32_t resource_free_head; /* offset of first free block; zero = none */
+    cfw_panel_state panel;
+    uint8_t *screen_buffer;
+    uint16_t root_display_list; /* id + 1, zero means no root */
 } customCfwContext;
 
 #define CFW_CTX_SLOT  0x2029f59cU    /* first word of the CFW-reserved TLSF tail */

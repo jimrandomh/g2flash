@@ -5,14 +5,14 @@
 #include "debug.h"
 #include "message_transport.h"
 
-static int image_worker(const uint8_t *src, uint32_t srclen);
+static int image_worker(const uint8_t *src, uint32_t srclen, uint8_t origin);
 
 /* The stream parser owns data until this synchronous handler returns. */
-int cfw_message_received(const uint8_t *data, uint16_t size, uint16_t checksum) {
+int cfw_message_received(const uint8_t *data, uint16_t size, uint16_t checksum, uint8_t origin) {
     customCfwContext *ctx = getCustomCfwContext();
     if (!ctx) return -1;
     ctx->message_probe.snapshot = (uint32_t)size | ((uint32_t)checksum << 16);
-    return image_worker(data, size);
+    return image_worker(data, size, origin);
 }
 
 /*
@@ -246,8 +246,8 @@ __attribute__((noinline)) uint32_t cfw_create_buzzer_timer(customCfwContext *ctx
     return FW_TIMER_NEW((void *)&seq_tick, 0, ctx, 0);
 }
 
-static uint8_t *cfw_shadow_buffer(void);
-static int is_shadow_message(const uint8_t *src, uint32_t srclen);
+static uint8_t *cfw_composition_buffer(void);
+static int is_composition_message(const uint8_t *src, uint32_t srclen);
 static int cfw_cleanup_session(void);
 static void mic_cleanup_session(void);   /* mic_control.c (same TU): mic hw + lease teardown */
 static void als_cleanup_session(void);   /* als_sensor.c (same TU): passive ALS teardown */
@@ -255,18 +255,17 @@ int ring_battery_control(const uint8_t *src, uint32_t srclen); /* mode 17 */
 int als_control(const uint8_t *src, uint32_t srclen); /* als_sensor.c: mode 16 */
 
 static int decode_image_rle(const uint8_t *src, uint32_t size, uint8_t *base, uint32_t stride, uint32_t rowbytes, uint32_t rows);
-static void present_shadow(uint32_t w, uint32_t h, cfw_rectlist *rl);
-static int image_dispatch(const uint8_t *src, uint32_t srclen, int present, cfw_rectlist *rl);
+static void present_composition(uint32_t w, uint32_t h, cfw_rectlist *rl);
+static int image_dispatch(const uint8_t *src, uint32_t srclen, cfw_rectlist *rl);
 
 
 /* True for top-level messages that need exclusive ownership of the stock display
- * gate. Mode 8 mutates/presents the custom shadow; mode 11 uses the gate as a
+ * gate. Mode 28 renders/presents the composition buffer; mode 11 uses the gate as a
  * barrier so no direct-framebuffer job can still reference session-owned state. */
-static int is_shadow_message(const uint8_t *src, uint32_t srclen) {
+static int is_composition_message(const uint8_t *src, uint32_t srclen) {
     if (src == 0 || srclen == 0) return 0;
     uint8_t mode = src[0] & 0x7fu;
-    return mode == 3 || mode == 6 || mode == 8 || mode == 9 || mode == 11 ||
-           mode == 15 || mode == 19 || mode == 20;
+    return mode == 11 || mode == 28;
 }
 
 /* Commands can arrive on both BLE and bridge receive tasks.
@@ -277,7 +276,7 @@ static int is_shadow_message(const uint8_t *src, uint32_t srclen) {
 #define CFW_IMAGE_MUTEX_GIVE ((int (*)(uint32_t))0x00442ff7u)
 #define CFW_IMAGE_MUTEX_DELETE ((int (*)(uint32_t))0x00443049u)
 static int image_worker_locked(const uint8_t *src, uint32_t size);
-static int image_worker(const uint8_t *src, uint32_t size) {
+static int image_worker(const uint8_t *src, uint32_t size, uint8_t origin) {
     customCfwContext *ctx = getCustomCfwContext();
     if (!ctx) return -1;
     uint32_t mutex = __atomic_load_n(&ctx->image_mutex, __ATOMIC_ACQUIRE);
@@ -292,7 +291,8 @@ static int image_worker(const uint8_t *src, uint32_t size) {
         }
     }
     if (CFW_IMAGE_MUTEX_TAKE(mutex, 0xffffffffu) != 0) return -1;
-    int result = image_worker_locked(src, size);
+    int result = size && src[0] >= 23 && src[0] <= 25
+        ? panel_queue(src, size, origin) : image_worker_locked(src, size);
     CFW_IMAGE_MUTEX_GIVE(mutex);
     return result;
 }
@@ -326,16 +326,16 @@ static int image_worker_locked(const uint8_t *src, uint32_t srclen) {
      * This prevents the next pipelined delta from changing the shadow while the hook
      * is copying it. Non-image control messages never take the gate. */
     customCfwContext *ctx = getCustomCfwContext();
-    int gated = is_shadow_message(src, srclen);
+    int gated = is_composition_message(src, srclen);
     if (gated) {
         if (ctx == 0) return -1;
         FW_DISPLAY_WAIT();
-        if (ctx->direct_pending) return -1;          /* timed out; caller does not own gate */
+        if (ctx->direct_pending || ctx->panel.pending) return -1;          /* timed out; caller does not own gate */
     }
 
     uint32_t t;
     cfw_time_start(&t);
-    int r = image_dispatch(src, srclen, 1, &rl);
+    int r = image_dispatch(src, srclen, &rl);
     if (rl.direct_failed) r = -1;
     uint32_t us = cfw_time_end(&t);
 
@@ -344,15 +344,10 @@ static int image_worker_locked(const uint8_t *src, uint32_t srclen) {
     return r;
 }
 
-/* Dispatch one message. `present`=1 means push the result to the panel now; a
- * multi-segment message (mode 8) dispatches each sub-message with present=0 (so they
- * only mutate the shadow) and then presents once, giving an atomic multi-op update
- * (e.g. scroll = rect-copy + delta). The high bit of the mode byte is the "lenses
- * differ" flag; most modes ignore it. */
-static int image_dispatch(const uint8_t *src, uint32_t srclen, int present, cfw_rectlist *rl) {
+/* Drawing stages screen/resource pixels; only mode 28 composes and presents. */
+static int image_dispatch(const uint8_t *src, uint32_t srclen, cfw_rectlist *rl) {
     if (src == 0 || srclen < 1) return -1;
 
-    int lenses_differ = src[0] & 0x80;             /* high bit: per-lens variant */
     uint8_t mode = src[0] & 0x7f;
 
     if (mode == 5) {
@@ -508,165 +503,45 @@ static int image_dispatch(const uint8_t *src, uint32_t srclen, int present, cfw_
     if (mode == 21) return cfw_resource_upload(src + 1, srclen - 1);
     if (mode == 22) return cfw_resource_evict(src + 1, srclen - 1);
 
-    /* Custom shadow geometry is deliberately independent from the EvenHub carrier. */
-    uint32_t w = IMAGE_W;
-    uint32_t h = IMAGE_H;
-
-    if (mode == 15 || mode == 19 || mode == 20) {
-        uint8_t *shadow = cfw_shadow_buffer();
-        if (shadow == 0) return -1;
-        int r;
-        if (mode == 19)
-            r = cfw_texture_draw_image(shadow, (w + 1u) >> 1, w, h,
-                                       src + 1, srclen - 1, rl);
-        else if (mode == 20)
-            r = cfw_texture_draw_string(shadow, (w + 1u) >> 1, w, h,
-                                        src + 1, srclen - 1, rl);
-        else
-            r = cfw_builtin_draw_string(shadow, (w + 1u) >> 1, w, h,
-                                        src + 1, srclen - 1, rl);
-        if (r != 0) return r;
-        if (present) present_shadow(w, h, rl);
-        return 0;
-    }
-
-    if (mode == 8) {
-        /* Multi-segment: [8][count][len16][submsg]... — dispatch each sub with
-         * present=0 (mutate the shadow only), then present once, giving an atomic
-         * multi-op update (e.g. scroll = rect-copy + delta, no intermediate flash).
-         * Bounded by the private message length; no nesting
-         * (a sub-message may not itself be a multi-segment message). Only shadow
-         * operations (modes 3/6/9/15/19/20) are accepted. */
-        if (!present) return -1;                       /* only valid at top level */
-        if (srclen < 2) return -1;
-        uint32_t count = src[1];
-        uint32_t pos = 2;
-        for (uint32_t i = 0; i < count; i++) {
-            if (pos + 2 > srclen) return -1;
-            uint32_t seglen = rd16(src + pos);
-            pos += 2;
-            if (seglen < 1 || pos + seglen > srclen) return -1;
-            uint8_t submode = src[pos] & 0x7fu;
-            if (submode != 3 && submode != 6 && submode != 9 &&
-                submode != 15 &&
-                submode != 19 && submode != 20) return -1;
-            if (image_dispatch(src + pos, seglen, 0, rl) != 0) return -1;
-            pos += seglen;
+    if (mode == 29) return cfw_resource_create(src+1,srclen-1);
+    if (mode == 26 || mode == 27 || mode == 28) {
+        if (!cfw_fb_lease_active()) return -1;
+        customCfwContext *ctx=getCustomCfwContext();
+        uint8_t *screen=cfw_screen_buffer();
+        if(!ctx || !screen) return -1;
+        cfw_draw_target target={screen,640,480,320};
+        if(mode==26) {
+            if(cfw_draw_run(ctx,src+1,srclen-1,target,0,0)) return -1;
+            return cfw_draw_run(ctx,src+1,srclen-1,target,1,0);
         }
-        present_shadow(w, h, rl);               /* one atomic present */
-        return 0;
-    }
-
-    if (mode == 9) {
-        /* Rect-copy within the 4bpp shadow: move a block from a source rect to a
-         * destination rect (full uint16 coords; the rects may overlap). Both rects must
-         * be the same size and wholly in bounds. With the lenses-differ flag there are
-         * two rect-sets (left then right) and each lens uses its own. rect_copy_4bpp
-         * takes a whole-byte fast path when left/width are even, else a nibble path.
-         * Pairs with a follow-up delta (usually in one mode-8 message) to scroll. */
-        const uint8_t *r = src + 1;
-        uint32_t need = lenses_differ ? 32u : 16u;     /* 8 bytes per rect, 2 or 4 rects */
-        if (srclen < 1 + need) return -1;
-        if (lenses_differ && FW_SIDE() != 2) r += 16;  /* right lens uses the 2nd set */
-        uint32_t sL = rd16(r),     sT = rd16(r + 2),  sW = rd16(r + 4),  sH = rd16(r + 6);
-        uint32_t dL = rd16(r + 8), dT = rd16(r + 10), dW = rd16(r + 12), dH = rd16(r + 14);
-        if (sW == 0 || sH == 0 || sW != dW || sH != dH) return -1;    /* copy = same size */
-        if (sL + sW > w || sT + sH > h || dL + dW > w || dT + dH > h) return -1;  /* bounds */
-        uint8_t *shadow = cfw_shadow_buffer();
-        if (shadow == 0) return -1;
-        rect_copy_4bpp(shadow, (w + 1) >> 1, sL, sT, dL, dT, sW, sH);
-        rl_add(rl, dL, dT, dW, dH);                     /* updated region = destination rect */
-        if (present) present_shadow(w, h, rl);
-        return 0;
-    }
-
-    if ((mode != 3 && mode != 6) || srclen < 3)
-        return -1;
-
-    if (mode == 6) {
-        /* Full headerless 4bpp frame. RLE-decode it into the persistent
-         * CFW-owned shadow that mode-3 deltas composite
-         * onto, so a mode-6 keyframe seeds a stable base, then present (unless
-         * deferred by a multi-segment wrapper). */
-        cfw_diag(0, 0);                               /* keyframe: rebaseline delta fid */
-        uint32_t stride = (w + 1) >> 1;                          /* tight 4bpp */
-        uint8_t *dst = cfw_shadow_buffer();
-        if (dst == 0) return -1;                      /* no shadow allocation -> can't proceed */
-        if (!decode_image_rle(src + 1, srclen - 1, dst, stride, stride, h)) return -1;
-        rl_add(rl, 0, 0, w, h);                       /* keyframe updates the whole screen */
-        if (present) present_shadow(w, h, rl);
-        return 0;
-    }
-
-    if (mode == 3) {
-        /* Bounding-box delta, composited onto a PERSISTENT 4bpp shadow of the last
-         * frame kept in the CFW-owned allocation (see cfw_shadow_buffer),
-         * then the packed shadow is queued for a direct framebuffer refresh.
-         *
-         * Messages arrive in stream order and the parser owns their input until
-         * this handler returns.
-         *
-         *   [3][left/4][top/2][width/4][height/2][fid_lo][fid_hi][rle(box pixels)]
-         * left/width are *4 (=> multiples of 4 => even) so left>>1 and bw>>1 are whole
-         * byte offsets: each box row lands in the 4bpp shadow as a plain byte run, no
-         * nibble shifting. fid is a uint16 per-frame counter (diagnostics). Rejected
-         * (old frame kept) if the box isn't wholly in bounds. The sender must have sent
-         * a mode-6 keyframe before/among deltas.
-         *
-         * lenses-differ variant: [3|80][Lbox 4][Rbox 4][fid 2][shared RLE]. Both boxes
-         * must be the same size; each lens draws the SAME decompressed pixels at its own
-         * box — a stereo shift (e.g. a raised dialog) with the pixel data sent once. */
-        uint32_t box_off, fid_off, z_off;
-        if (lenses_differ) {
-            if (srclen < 12) return -1;               /* mode + 2 boxes + fid + some RLE */
-            if (src[3] != src[7] || src[4] != src[8]) return -1;   /* boxes must match size */
-            box_off = (FW_SIDE() == 2) ? 1 : 5;       /* left set / right set */
-            fid_off = 9;
-            z_off   = 11;
-        } else {
-            if (srclen < 8) return -1;                /* 4 box hdr + 2 fid + some RLE */
-            box_off = 1;
-            fid_off = 5;
-            z_off   = 7;
+        if(mode==27) {
+            if(srclen!=3) return -1;
+            uint32_t id=rd16(src+1);
+            if(cfw_draw_root(ctx,id,target,0,0)) return -1;
+            ctx->root_display_list=id==65535u?0:(uint16_t)(id+1);
+            return 0;
         }
-        uint32_t left = (uint32_t)src[box_off]     * 4;
-        uint32_t top  = (uint32_t)src[box_off + 1] * 2;
-        uint32_t bw   = (uint32_t)src[box_off + 2] * 4;
-        uint32_t bh   = (uint32_t)src[box_off + 3] * 2;
-        uint16_t fid  = (uint16_t)rd16(src + fid_off);
-        if (bw == 0 || bh == 0 || left + bw > w || top + bh > h) return -1;
-
-        /* Frame IDs are diagnostic only. The stream rejects repeated packets;
-         * each accepted record executes even if a phone restart reused its ID. */
-        cfw_diag(1, fid);
-
-        uint32_t sstride = (w + 1) >> 1;              /* 4bpp shadow row stride */
-        uint8_t *shadow = cfw_shadow_buffer();   /* persistent CFW-owned last frame */
-        if (shadow == 0) return -1;                   /* no stable base -> keyframe resyncs */
-        uint32_t rowbytes = bw >> 1;                  /* whole bytes (bw even) */
-
-        /* Decode the box straight into its slot in the shadow: rows of rowbytes bytes
-         * at the shadow's stride. left/bw are multiples of 4 so every row starts (and
-         * ends) on a byte boundary. */
-        if (!decode_image_rle(src + z_off, srclen - z_off, shadow + top * sstride + (left >> 1), sstride, rowbytes, bh))
-            return -1;                                /* leave the old frame on screen */
-
-        rl_add(rl, left, top, bw, bh);                /* updated region = this lens's box */
-        if (present) present_shadow(w, h, rl); /* queue one full packed refresh */
+        if(srclen!=1) return -1;
+        uint8_t *composition=cfw_composition_buffer();
+        if(!composition) return -1;
+        target.pixels=composition;
+        uint32_t root=ctx->root_display_list?ctx->root_display_list-1u:65535u;
+        if(cfw_draw_root(ctx,root,target,0,0)) return -1;
+        memcpy(composition,screen,CFW_FRAMEBUFFER_BYTES);
+        if(cfw_draw_root(ctx,root,target,1,0)) return -1;
+        present_composition(640,480,rl);
         return 0;
     }
-
     return -1;
 }
-
 
 /* Publish the CFW-owned packed-4bpp shadow to the stock display task. image_worker
  * already owns the stock display gate, so the shadow cannot change until the task has
  * copied it. The display task consumes this job in display_copy_hook immediately before
  * its normal panel refresh, bypassing LVGL and the stock 576x288 compositor copy. */
-static void present_shadow(uint32_t w, uint32_t h, cfw_rectlist *rl) {
+static void present_composition(uint32_t w, uint32_t h, cfw_rectlist *rl) {
     customCfwContext *ctx = getCustomCfwContext();
-    uint8_t *shadow = cfw_shadow_buffer();
+    uint8_t *shadow = cfw_composition_buffer();
     if (ctx == 0 || shadow == 0 || w != IMAGE_W || h != IMAGE_H) {
         if (rl) rl->direct_failed = 1;
         return;
@@ -685,7 +560,7 @@ static void present_shadow(uint32_t w, uint32_t h, cfw_rectlist *rl) {
 
 
 /* Transport has already inflated and checked the message CRC. RLE remains
- * local to image handlers, including nested mode-8 segments. */
+ * local to image handlers, including nested display lists. */
 static int decode_image_rle(const uint8_t *src, uint32_t size, uint8_t *base,
                             uint32_t stride, uint32_t rowbytes, uint32_t rows) {
     rle_state rs;
@@ -710,7 +585,7 @@ static int cfw_cleanup_session(void) {
     ctx->direct_shadow = 0;
     ctx->direct_failed = 0;
     cfw_resource_cache_release(ctx);
-    cfw_shadow_release(ctx);
+    cfw_framebuffers_release(ctx);
 
     /* Suppress callbacks before asking the timer service to stop/delete them;
      * a callback already dispatched on the timer thread will then be harmless. */
@@ -758,7 +633,13 @@ static int cfw_cleanup_session(void) {
  * the display task refreshes the already-correct physical buffer instead of
  * overwriting it with stale LVGL content. Lease release/expiry restores the transparent stock pass-through. */
 void display_copy_hook(void) {
+    panel_service();
     customCfwContext *ctx = peekCustomCfwContext();
+    if (ctx && ctx->panel.pattern) {
+        ctx->direct_pending = 0;
+        ctx->direct_shadow = 0;
+        return;
+    }
     if (ctx == 0 || !ctx->direct_pending || ctx->direct_shadow == 0) {
         if (ctx && ctx->direct_active) {
             uint32_t deadline = ctx->direct_lease_deadline;

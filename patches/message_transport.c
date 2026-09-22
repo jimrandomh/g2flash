@@ -138,7 +138,7 @@ static uint32_t cfw_message_complete(cfw_message_stream *stream, uint8_t here,
     }
     uint16_t crc = valid ? cfw_message_crc(data, (uint16_t)size) : 0;
     valid = valid && crc == stream->checksum;
-    if (valid && cfw_message_received(data, (uint16_t)size, crc) != 0) valid = 0;
+    if (valid && cfw_message_received(data, (uint16_t)size, crc, origin) != 0) valid = 0;
     if (!valid) {
         cfw_inflate_reset(stream);
         stream->context_valid = 0; /* only an explicit record reset can recover */
@@ -267,6 +267,13 @@ uint32_t cfw_message_bridge_received(uint32_t app_id, const uint8_t *data,
         }
         return (data[10] & here) ? cfw_message_process(data + 2, length - 2, here, origin) : 0;
     }
+    if (data[0] == 3u) { /* bounded panel-result fragment */
+        if (here != origin) return 0;
+        if (length < 9 || length > 11 || data[2] != 4 ||
+            data[5] != (origin ^ CFW_MESSAGE_BOTH) || data[7] > 48 ||
+            !data[7] || data[6] >= data[7] || length - 8 > data[7] - data[6]) return 0xbu;
+        return CFW_BLE_SEND(1, CFW_MESSAGE_SID, data + 2, length - 2) == 0 ? 0 : 6;
+    }
     if (data[0] == CFW_BRIDGE_RETURN) {
         if (here != origin) return 0;
         if (length < CFW_ACK_SIZE + 2 || length > CFW_ACK_MAX_SIZE + 2 ||
@@ -276,4 +283,20 @@ uint32_t cfw_message_bridge_received(uint32_t app_id, const uint8_t *data,
         return CFW_BLE_SEND(1, CFW_MESSAGE_SID, data + 2, length - 2) == 0 ? 0 : 6;
     }
     return 0xau;
+}
+
+/* Nine-byte bodies fit MTU 23. Each fragment is independently CRC protected by
+ * stock TPL; the phone assembles by application request ID, processing lens and
+ * offset. A missing result is retried with the SAME request ID, independently
+ * of transport ACK/replay. */
+static void panel_emit(uint8_t origin, uint16_t id, const uint8_t *data, uint8_t size) {
+    uint8_t here = cfw_message_lens();
+    for (uint8_t offset = 0; offset < size; offset += 3) {
+        uint8_t count = size - offset;
+        if (count > 3) count = 3;
+        uint8_t b[9] = {4, (uint8_t)id, (uint8_t)(id >> 8), here, offset, size, 0, 0, 0};
+        memcpy(b + 6, data + offset, count);
+        if (here == origin) CFW_BLE_SEND(1, CFW_MESSAGE_SID, b, 6 + count);
+        else cfw_message_bridge_send(3, origin, b, 6 + count);
+    }
 }

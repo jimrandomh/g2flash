@@ -7,9 +7,10 @@
 
 /* Cached image format:
  *
- *   [width:u8][height:u8][4bpp RLE tokens...]
+ *   [flags:u8][width,height:u8 or u16][raw packed rows or 4bpp RLE]
+ * Flags: type image=0 in bits 0..1; bit 2 LARGE, bit 3 RLE.
  *
- * RLE uses the same tokens as modes 3/6, but covers exactly width*height
+ * RLE uses the same tokens as the bbox draw call, but covers exactly width*height
  * pixels (there is no packed-row pad nibble). Since an image has no encoded
  * byte length, a valid stream ends at the first token that completes that
  * pixel count. The scanner never reads past the containing resource. */
@@ -18,6 +19,7 @@ typedef struct {
     uint32_t rle_len;
     uint32_t width;
     uint32_t height;
+    uint32_t raw;
 } cfw_cached_image;
 
 #define CFW_TEXTURE_OPT_TRANSPARENT 0x10u
@@ -90,14 +92,22 @@ static int cfw_texture_rle_token(const uint8_t *p, uint32_t len,
  * cannot leave a partially modified shadow. */
 static int cfw_texture_image_at(const uint8_t *resource, uint32_t size, uint32_t offset,
                                 cfw_cached_image *out) {
-    if (!resource || size < 2u || offset > size - 2u) return 0;
-    const uint8_t *image = resource + offset;
-    uint32_t width = image[0];
-    uint32_t height = image[1];
-    if (width == 0 || height == 0) return 0;
-
-    const uint8_t *p = image + 2;
-    uint32_t available = size - offset - 2u;
+    if (!resource || offset >= size) return 0;
+    const uint8_t *image=resource+offset;
+    uint32_t flags=image[0], header=(flags&4u)?5u:3u;
+    if((flags&~12u) || size-offset<header) return 0;
+    uint32_t width=(flags&4u)?rd16(image+1):image[1];
+    uint32_t height=(flags&4u)?rd16(image+3):image[2];
+    if(!width || !height || width>640 || height>480) return 0;
+    out->raw=!(flags&8u);
+    if(out->raw) {
+        uint32_t bytes=((width+1u)>>1)*height;
+        if(bytes>size-offset-header) return 0;
+        out->rle=image+header;out->rle_len=bytes;out->width=width;out->height=height;
+        return 1;
+    }
+    const uint8_t *p = image + header;
+    uint32_t available = size - offset - header;
     uint32_t pos = 0;
     uint32_t left = width * height;
     while (left) {
@@ -137,6 +147,18 @@ static void cfw_texture_render(uint8_t *shadow, uint32_t stride,
                                int32_t x0, int32_t y0,
                                const cfw_cached_image *image,
                                const uint8_t *lut, int transparent) {
+    if(image->raw) {
+        int reverse = image->rle == shadow && (y0>0 || (y0==0 && x0>0));
+        for(uint32_t i=0;i<image->width*image->height;i++) {
+            uint32_t j=reverse?image->width*image->height-1-i:i, yy=j/image->width, xx=j%image->width;
+            uint8_t color=(image->rle[yy*((image->width+1u)>>1)+(xx>>1)]>>((xx&1u)?0:4))&15u;
+            int32_t x=x0+(int32_t)xx,y=y0+(int32_t)yy;
+            if((transparent && !color) || x<0 || y<0 || (uint32_t)x>=panel_w || (uint32_t)y>=panel_h) continue;
+            uint8_t *b=shadow+(uint32_t)y*stride+((uint32_t)x>>1),mapped=lut[color];
+            if(x&1) *b=(*b&0xf0u)|mapped;else *b=(*b&15u)|(mapped<<4);
+        }
+        return;
+    }
     uint32_t pos = 0;
     uint32_t pixel = 0;
     while (pos < image->rle_len) {
@@ -220,8 +242,8 @@ static int cfw_texture_draw_image(uint8_t *shadow, uint32_t stride,
     uint32_t size;
     const uint8_t *resource = cfw_resource_get(ctx, rd16(src), &size);
     if (!resource || !cfw_texture_image_at(resource, size, 0, &image)) return -1;
-    int32_t x = (int32_t)rd16(src + 2u);
-    int32_t y = (int32_t)rd16(src + 4u);
+    int32_t x = (int32_t)(int16_t)rd16(src + 2u);
+    int32_t y = (int32_t)(int16_t)rd16(src + 4u);
     uint8_t options = src[6];
     uint8_t lut[16];
     cfw_texture_make_lut(options, lut);
@@ -246,10 +268,10 @@ static int cfw_texture_draw_string(uint8_t *shadow, uint32_t stride,
     customCfwContext *ctx = getCustomCfwContext();
     uint32_t size;
     const uint8_t *table = cfw_resource_get(ctx, font_id, &size);
-    if (!table || size < 192u) return -1;
+    if (!table || size < 193u || table[0] != 1) return -1;
     const uint8_t *string = src + 8u;
-    int32_t x = (int32_t)rd16(src + 2u);
-    int32_t y = (int32_t)rd16(src + 4u);
+    int32_t x = (int32_t)(int16_t)rd16(src + 2u);
+    int32_t y = (int32_t)(int16_t)rd16(src + 4u);
 
     /* Validate every character/table entry/RLE stream before drawing any glyph. */
     int32_t scan_x = x;
@@ -263,9 +285,9 @@ static int cfw_texture_draw_string(uint8_t *shadow, uint32_t stride,
             continue;
         }
         if (ch < 32u || ch > 127u) return -1;
-        uint32_t image_offset = rd16(table + (ch - 32u) * 2u);
+        uint32_t image_offset = rd16(table + 1u + (ch - 32u) * 2u);
         cfw_cached_image image;
-        if (image_offset < 192u || !cfw_texture_image_at(table, size, image_offset, &image)) return -1;
+        if (image_offset < 193u || !cfw_texture_image_at(table, size, image_offset, &image)) return -1;
         scan_x += (int32_t)image.width;
     }
     (void)scan_x;
@@ -276,10 +298,10 @@ static int cfw_texture_draw_string(uint8_t *shadow, uint32_t stride,
             x += (int32_t)ch - 11;
             continue;
         }
-        uint32_t image_offset = rd16(table + (ch - 32u) * 2u);
+        uint32_t image_offset = rd16(table + 1u + (ch - 32u) * 2u);
         cfw_cached_image image;
         /* Already validated above; cache contents cannot change in this handler. */
-        if (image_offset < 192u || !cfw_texture_image_at(table, size, image_offset, &image)) return -1;
+        if (image_offset < 193u || !cfw_texture_image_at(table, size, image_offset, &image)) return -1;
         cfw_texture_render(shadow, stride, panel_w, panel_h, x, y, &image,
                            lut, transparent);
         cfw_texture_add_rect(rl, x, y, image.width, image.height, panel_w, panel_h);
@@ -428,8 +450,8 @@ static int cfw_builtin_draw_string(uint8_t *shadow, uint32_t stride,
         if (bitmap) CFW_FONT_RELEASE(dsc);
     }
 
-    int32_t x = (int32_t)rd16(src);
-    int32_t y = (int32_t)rd16(src + 2);
+    int32_t x = (int32_t)(int16_t)rd16(src);
+    int32_t y = (int32_t)(int16_t)rd16(src + 2);
     uint8_t options = src[4];
     uint8_t lut[16];
     cfw_texture_make_lut(options, lut);

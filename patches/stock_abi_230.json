@@ -97,6 +97,17 @@
       "0x005af09f": 1,
       "0x005b1581": 1
     },
+    "panel.c": {
+      "0x00442b2b": 1,
+      "0x005b208b": 1,
+      "0x005b20fb": 1,
+      "0x005b212f": 1,
+      "0x005b279f": 1,
+      "0x005b2f95": 1,
+      "0x0072bd7c": 1,
+      "0x2007785c": 1,
+      "0x20077868": 1
+    },
     "ring_battery.c": {
       "0x00465d4d": 1,
       "0x0047f025": 1,
@@ -111,6 +122,12 @@
       "0x0049f1a5": 1,
       "0x004adddb": 1,
       "0x20000000": 1
+    },
+    "texture_draw.c": {
+      "0x004ea2bb": 1,
+      "0x004ea30d": 1,
+      "0x004ea369": 1,
+      "0x20077a54": 1
     },
     "transport_compression.c": {
       "0x005dbf9b": 1,
@@ -144,12 +161,6 @@
       "0x005631a3": 1,
       "0x200008b8": 1,
       "0x20077834": 1
-    },
-    "texture_draw.c": {
-      "0x004ea2bb": 1,
-      "0x004ea30d": 1,
-      "0x004ea369": 1,
-      "0x20077a54": 1
     }
   },
   "dependencies": [
@@ -3351,6 +3362,123 @@
         }
       ],
       "review": "reserved context slot +4"
+    },
+    {
+      "old": "0x00442b2b",
+      "new": "0x00442b2a",
+      "method": "donor-disassembly-panel-diagnostics",
+      "uses": [
+        {
+          "file": "panel.c",
+          "address": "0x00442b2b",
+          "count": 1
+        }
+      ],
+      "evidence": "docs/panel-diagnostics.md; full donor guards added for callees, pointer literals and templates"
+    },
+    {
+      "old": "0x005b208b",
+      "new": "0x005b208a",
+      "method": "donor-disassembly-panel-diagnostics",
+      "uses": [
+        {
+          "file": "panel.c",
+          "address": "0x005b208b",
+          "count": 1
+        }
+      ],
+      "evidence": "docs/panel-diagnostics.md; full donor guards added for callees, pointer literals and templates"
+    },
+    {
+      "old": "0x005b20fb",
+      "new": "0x005b20fa",
+      "method": "donor-disassembly-panel-diagnostics",
+      "uses": [
+        {
+          "file": "panel.c",
+          "address": "0x005b20fb",
+          "count": 1
+        }
+      ],
+      "evidence": "docs/panel-diagnostics.md; full donor guards added for callees, pointer literals and templates"
+    },
+    {
+      "old": "0x005b212f",
+      "new": "0x005b212e",
+      "method": "donor-disassembly-panel-diagnostics",
+      "uses": [
+        {
+          "file": "panel.c",
+          "address": "0x005b212f",
+          "count": 1
+        }
+      ],
+      "evidence": "docs/panel-diagnostics.md; full donor guards added for callees, pointer literals and templates"
+    },
+    {
+      "old": "0x005b279f",
+      "new": "0x005b279e",
+      "method": "donor-disassembly-panel-diagnostics",
+      "uses": [
+        {
+          "file": "panel.c",
+          "address": "0x005b279f",
+          "count": 1
+        }
+      ],
+      "evidence": "docs/panel-diagnostics.md; full donor guards added for callees, pointer literals and templates"
+    },
+    {
+      "old": "0x005b2f95",
+      "new": "0x005b2f94",
+      "method": "donor-disassembly-panel-diagnostics",
+      "uses": [
+        {
+          "file": "panel.c",
+          "address": "0x005b2f95",
+          "count": 1
+        }
+      ],
+      "evidence": "docs/panel-diagnostics.md; full donor guards added for callees, pointer literals and templates"
+    },
+    {
+      "old": "0x0072bd7c",
+      "new": "0x0072bd7c",
+      "method": "donor-disassembly-panel-diagnostics",
+      "uses": [
+        {
+          "file": "panel.c",
+          "address": "0x0072bd7c",
+          "count": 1
+        }
+      ],
+      "evidence": "docs/panel-diagnostics.md; full donor guards added for callees, pointer literals and templates"
+    },
+    {
+      "old": "0x2007785c",
+      "new": "0x2007785c",
+      "method": "donor-disassembly-panel-diagnostics",
+      "uses": [
+        {
+          "file": "panel.c",
+          "address": "0x2007785c",
+          "count": 1
+        }
+      ],
+      "evidence": "docs/panel-diagnostics.md; full donor guards added for callees, pointer literals and templates"
+    },
+    {
+      "old": "0x20077868",
+      "new": "0x20077868",
+      "method": "donor-disassembly-panel-diagnostics",
+      "uses": [
+        {
+          "file": "panel.c",
+          "address": "0x20077868",
+          "count": 1
+        }
+      ],
+      "evidence": "docs/panel-diagnostics.md; full donor guards added for callees, pointer literals and templates"
     }
   ],
   "guards": [
@@ -3828,6 +3956,71 @@
       "address": "0x0047911a",
       "bytes": "38b584b00400002c02d15ff0ff3093e089b2082942dbe51d207908280ed020790a280bd0dff8b0150868002806d02a680868121a642a01d200207de020790a2803d02868dff890150860c4f7f3fa800712d52079039028680290dff87c05019040f2f9100090dff87435dff82825dff828150420c4f785fdc4f7dcfac00703d4c4f7d8fa400709d5dff85825207900902b6811005ff08450c3f71fffe078002849d1207900280ed0012813d0022818d004281dd0052822d0082827d009282cd00a2831d037e0002300220321042066f03cf830e0002300220021042066f035f829e0002300220121042066f02ef822e0a37962790521042066f027f81be0a37962790421042066f020f814e0002300220e21042066f019f80de0002300221121042066f012f806e0002300220d21042066f00bf8ffe7002005b030bd",
       "label": "R1 receiver: entry prologue, tick suppression exemptions, subtype mapping and epilogue"
+    },
+    {
+      "address": "0x005b208a",
+      "bytes": "78b587b004000d0016006846dff8501b1c2287f6b2fd8df8094003960595dff8440c00680690684607f06cfc08b070bd",
+      "label": "Panel diagnostics: JBD PIO command writer; (opcode, aligned packed bytes, byte count)"
+    },
+    {
+      "address": "0x005b20fa",
+      "bytes": "78b587b004000d0016006846dff8781b1c2287f67afd8df8094003960595dff8d40b00680690684607f0e6fb0028ffd108b070bd",
+      "label": "Panel diagnostics: JBD normal PIO reader; (opcode, aligned destination, byte count)"
+    },
+    {
+      "address": "0x005b212e",
+      "bytes": "f0b587b004000d0016001f006846dff8b81b1c2287f65ffd01978df8094003960595dff89c0b00680690684607f0cafb0028ffd107b0f0bd",
+      "label": "Panel diagnostics: JBD addressed PIO reader; fourth arg address, OTP address<<8 includes dummy"
+    },
+    {
+      "address": "0x005b279e",
+      "bytes": "10b58ab00c980024b0f5207f02db40f27f200c900d98b0f5f07f02db40f2df100d9003a8dff8f4191c2287f61cfadff8a80400680890dff818050068099003a807f078f9002831d100200290002202a99720fff74bfc0443002c01d1002422e08af6a6ff80070ed5dff8a009019040f219200090dff8303bdff8ec24dff8ec1401208bf63cfa8af693ffc00703d48af68fff400706d5dff878190a005ff080608af6d9fb0124022090f670f920000ab010bd",
+      "label": "Panel diagnostics: JBD full frame DMA then SYNC; six geometry args, registered buffer"
+    },
+    {
+      "address": "0x005b2f94",
+      "bytes": "f8b50020039000200290bdf63bf803aa02a9bdf65bfafff76bfe8af6cefb80070cd5dff8180401904ff446700090dff810347d4a7d4903208af666fe8af6bdfbc00703d48af6b9fb400706d5dff8f4130a005ff040608af603f80120f5f68afefff7fafd8af6a9fb80070cd5dff8d80301904ff447700090dff8c4336a4a6b4903208af641fe8af698fbc00703d48af694fb400706d5dff8b4130a005ff0406089f6defffff795f88af687fb80070cd5dff89c03019040f21e300090dff88033594a5a4903208af61ffe8af676fbc00703d48af672fb400706d5dff878130a005ff0406089f6bcff0120f5f643fe4ff4f07001904ff4207000900023002200210020fff782fb0120f5f634fe029a03990020fff7d3fb05b000bd",
+      "label": "Panel diagnostics: JBD stock status recovery: power cycle, configure, refresh, calibrated brightness"
+    },
+    {
+      "address": "0x004d904a",
+      "bytes": "2de9fc4104000e00170098460020042c01d3052017e0002512e0dff8c40b56f8251010eb043211610021009110233f2210eb043010f118014046b0f7cfff6d1ca900b942e9d3bde8f681",
+      "label": "Panel diagnostics: PIO write loads ceil(length/4) words: aligned padded packed buffer ABI"
+    },
+    {
+      "address": "0x004d9094",
+      "bytes": "2de9fc4706000d0014009946042e01d3052042e0a0465fea98087ff0030000fb0844002706e01aeb063adaf8140045f827007f1c47450fd2dff85cab0020009000233f221aeb063010f11c014846b0f7a0ff0028e7d020e0002c1dd0dff8388b0020009000233f2218eb063010f11c014846b0f78eff00280fd118eb0638d8f81400009005eb8700002103e06a46525c4254491ca142f9d30020bde8",
+      "label": "Panel diagnostics: PIO read stores words and trailing bytes"
+    },
+    {
+      "address": "0x005b97ae",
+      "bytes": "f8b504000d001600002c01d0002d00d118e0182100222f00380082f68cfce0682860207c2874606968610020687100206874ae712078e8716068a860207a2873607ae881f1bd",
+      "label": "Panel diagnostics: Common MSPI request to HAL PIO descriptor"
+    },
+    {
+      "address": "0x0072bd7c",
+      "bytes": "f51f5b004f295b001d205b0051205b00ed2b5b00852c5b0051285b00a52b5b00212d5b0045245b009f275b0051265b0009315b00c5315b000000000000000000",
+      "label": "Panel diagnostics: JBD operations vtable for exact selected-backend guard"
+    },
+    {
+      "address": "0x004e41bc",
+      "bytes": "e0b52a4a116800291fd159f7c2fa80070ad52748019040f26b100090474b264a2649012059f75cfd59f7b3fac00703d459f7affa400705d521490a005ff0806058f7fafe5ff0ff3003e0c0b21168496b88470ebd",
+      "label": "Panel diagnostics: ULED manager loads active operations pointer from literal at 4e4268"
+    },
+    {
+      "address": "0x004e4268",
+      "bytes": "68780720",
+      "label": "Panel diagnostics: Active ULED operations RAM slot = 20077868"
+    },
+    {
+      "address": "0x005b2cf0",
+      "bytes": "5c780720",
+      "label": "Panel diagnostics: JBD MSPI handle RAM slot = 2007785c"
+    },
+    {
+      "address": "0x007a071c",
+      "bytes": "00000000000000000100000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000010000000000000001000000000000000000000001000000000000000100000000000000010000000000000000000000",
+      "label": "Panel diagnostics: JBD command/data/read/addressed-read request templates"
     }
   ],
   "patch_sites": [

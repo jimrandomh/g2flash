@@ -126,6 +126,7 @@ static void cfw_resource_cache_release(customCfwContext *ctx) {
         uint8_t *cache = ctx->resource_cache;
         ctx->resource_cache = 0;
         ctx->resource_free_head = 0;
+        ctx->root_display_list = 0;
         if (cache) FW_FREE(cache);
     }
 }
@@ -216,5 +217,38 @@ static int cfw_resource_evict(const uint8_t *src, uint32_t len) {
         pos += b->span;
     }
     cfw_resource_rebuild_free(ctx);
+    return 0;
+}
+
+/* [count16]{id16,width16,height16}. Allocate zeroed raw large images.
+ * Replaying creation of an existing identical surface does not erase its pixels. */
+static int cfw_resource_create(const uint8_t *src,uint32_t len) {
+    if(!src || len<2) return -1;
+    uint32_t count=rd16(src);
+    if(count>512 || len!=2+count*6 || !cfw_fb_lease_active()) return -1;
+    customCfwContext *ctx=getCustomCfwContext();if(!ctx) return -1;
+    uint32_t used=cfw_resource_used(ctx);
+    for(uint32_t i=0;i<count;i++) {
+        const uint8_t *p=src+2+i*6;uint32_t id=rd16(p),w=rd16(p+2),h=rd16(p+4),size=5+((w+1)>>1)*h;
+        if(id>=512 || !w || !h || w>640 || h>480 || size>65536) return -1;
+        for(uint32_t j=0;j<i;j++) if(rd16(src+2+j*6)==id) return -1;
+        cfw_resource_block *b=cfw_resource_find(ctx,id);
+        if(b) { const uint8_t *data=(const uint8_t *)(b+1);
+            if(b->length!=size || b->received!=size || data[0]!=4 || rd16(data+1)!=w || rd16(data+3)!=h) return -1;
+        } else used+=cfw_resource_span(size);
+    }
+    if(used>CFW_RESOURCE_CACHE_SIZE-CFW_RESOURCE_TABLE_BYTES) return -1;
+    for(uint32_t i=0;i<count;i++) {
+        const uint8_t *p=src+2+i*6;uint32_t id=rd16(p),w=rd16(p+2),h=rd16(p+4),size=5+((w+1)>>1)*h;
+        if(cfw_resource_find(ctx,id)) continue;
+        uint8_t upload[17];
+        upload[0]=1;upload[1]=0;upload[2]=id;upload[3]=id>>8;
+        upload[4]=size;upload[5]=size>>8;upload[6]=size>>16;upload[7]=0;
+        upload[8]=upload[9]=0;upload[10]=5;upload[11]=0;
+        upload[12]=4;upload[13]=w;upload[14]=w>>8;upload[15]=h;upload[16]=h>>8;
+        if(cfw_resource_upload(upload,sizeof(upload))) return -1;
+        cfw_resource_block *b=cfw_resource_find(ctx,id);
+        bzero((uint8_t *)(b+1)+5,size-5);b->received=size;cfw_resource_publish(ctx,b);
+    }
     return 0;
 }

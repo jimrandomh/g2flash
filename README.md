@@ -42,42 +42,32 @@ URL. See [the message probe instructions](docs/message-transport.md#sending-test
 for MTU-based packet splitting, lens selection, ACK verification, and the debug overlay.
 
 Custom messages use private SID `0xf0` and execute without an EvenHub context.
-Screen handlers allocate a persistent 153,600-byte packed framebuffer shadow
-from the CFW heap. Mode 11 cleanup releases it once pending display refreshes
-have finished. Faceclaw retains a blank text container for input forwarding at
-the existing session boundaries; it allocates no EvenHub image container.
-Custom image and control commands use only the private message stream.
+Revision `Faceclaw/25` separates app drawing from presentation. A persistent
+153,600-byte packed **screen buffer** is allocated on the EvenHub heap. The old
+LVGL-heap shadow is now the **composition buffer**. Message 28 copies screen to
+composition, plays the root display list, then queues the existing gated copy to
+the stock framebuffer. Mode 11 releases both buffers after pending refreshes.
+Stock EvenHub image handling is unchanged; Faceclaw uses the private transport.
 
-Starting with `Faceclaw/8`, the stock EvenHub image path is unmodified: its
-original size limits, reconstruction, BMP loader, and ACK timing are restored.
-Custom mode-prefixed payloads sent through that path are no longer supported.
-The private transport and direct framebuffer display-copy hooks remain active.
+The lazy, lease-scoped resource cache is **192 KiB**, including a 2 KiB table of
+512 pointers. Resources use stable IDs and an on-glasses freelist with compaction;
+the phone manages pinning and LRU eviction. Each resource is at most 64 KiB.
+Modes 21/22 upload resource chunks and evict IDs in batches. Mode 29 creates
+zero-filled writable raw image surfaces in batches; replay preserves their pixels.
 
-Image traffic is compressed with
-zlib+RLE. Screen contents can be up to 640x480 (larger than the screen area
-supported by the stock firmware), you can update dirty rects rather than
-updating the whole screen at once, and you can send messages which perform
-rect-to-rect copies for low-bandwidth scroll animations. Because this mode
-writes directly to the framebuffer without going through EvenHub's
-screen-update functions, stock containers do not contribute visible content
-while the direct framebuffer lease is held. A lease-scoped 256 KiB resource cache lets the phone upload RLE icons and fonts
-once, then draw them using resource IDs. Revision 23 reserves the first 2 KiB
-for 512 pointers and uses an on-glasses freelist with compaction. Each resource
-can contain up to 64 KiB; the phone manages residency and LRU eviction.
-Mode 21 uploads batches of resource chunks, and mode 22 evicts batches of IDs.
-Modes 19/20 draw an image/font by u16 resource ID. A font contains a 96-entry
-u16 glyph-offset table, relative to the start of that font resource. Legacy
-write-at-offset mode 18 is rejected. The cache is allocated lazily on the
-EvenHub heap and released when the framebuffer lease ends.
-Cached draw commands carry an options byte whose low nibble selects the top
-output color; bit 4 makes source color 0 transparent, and bit 5 reverses the
-proportional 16-entry color ramp. See [resource_cache.h](patches/resource_cache.h)
-and the wire layouts in [zlib_glue.c](patches/zlib_glue.c).
-Image-handler mode 15 draws a length-prefixed UTF-8 string with the glasses'
-built-in 20 px font chain and its default pair kerning. Its payload after the
-mode byte is `[x:u16][y:u16][options:u8][strlen:u8][UTF-8 bytes]`; options match
-the cached draw commands, and inline bytes 1–31 adjust x by -10 through 20 just
-as they do in cached-font mode 20.
+Resource flags contain two type bits (image=0, font=1, display list=2), LARGE=4
+for u16 dimensions instead of u8, and RLE=8. Raw images use packed high-first
+4bpp rows with odd-width padding. RLE images omit padding. Fonts contain flags=1,
+96 resource-relative u16 glyph offsets, and embedded image records.
+
+Message 26 carries length-prefixed draw calls: bbox, rect copy, stock text,
+resource image/text, color LUT, and nested display list. Each call may override
+its target with a writable image ID. Compact aligned bboxes retain a fast mode;
+u16 bounds allow individual pixels. Message 27 sets the root list (65535 clears
+it). Drawing/root updates do not present until message 28. Lists reject cycles,
+missing resources, depth over 8, and more than 4096 expanded operations.
+Old drawing messages 3/6/8/9/15/19/20 are rejected. See
+[the revision 25 wire specification](docs/display-list-protocol.md).
 
 The firmware also adds a microphone control plane (capability tokens `micctl`,
 `micmc`, `micraw`). Each temple carries a front + rear microphone pair, and the

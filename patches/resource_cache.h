@@ -1,7 +1,7 @@
 #pragma once
 #include <stdint.h>
 
-#define CFW_RESOURCE_CACHE_SIZE (256u * 1024u)
+#define CFW_RESOURCE_CACHE_SIZE (192u * 1024u)
 #define CFW_RESOURCE_COUNT 512u
 #define CFW_RESOURCE_TABLE_BYTES (CFW_RESOURCE_COUNT * 4u)
 #define CFW_RESOURCE_MAX_SIZE 65536u

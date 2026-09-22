@@ -28,7 +28,7 @@ typedef struct {
     uint8_t ack_count, ack_capacity, packet_capacity;
     uint8_t ack_history[CFW_ACK_HISTORY][CFW_ACK_ENTRY_SIZE];
 } cfw_message_stream;
-int cfw_message_received(const uint8_t *data, uint16_t size, uint16_t checksum);
+int cfw_message_received(const uint8_t *data, uint16_t size, uint16_t checksum, uint8_t origin);
 uint32_t cfw_receive_packet(uint8_t pipe, const uint8_t *packet, uint16_t length);
 uint32_t cfw_message_bridge_received(uint32_t app_id, const uint8_t *data,
                                      uint32_t length, uint16_t event);
