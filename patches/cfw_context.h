@@ -10,6 +10,7 @@
  * word holds the pointer; the second holds a sticky allocation diagnostic. */
 
 #define CFW_FID_RING  16     /* recent mode-3 frame ids kept for diagnostics */
+#define CFW_TIMER_PAINT_SAMPLES 10
 #define CFW_SEQ_MAX   48     /* max steps in a buzzer tone sequence (mode-5 kind 4) */
 
 /* Sidecar for a stock IMU ring record; written/read on the sensor-hub task. */
@@ -127,6 +128,16 @@ typedef struct {
     cfw_panel_state panel;
     uint8_t *screen_buffer;
     uint16_t root_display_list; /* id + 1, zero means no root */
+    uint32_t animation_timer;
+    uint32_t animation_origin_ms;
+    uint32_t animation_due_ms;
+    uint32_t draw_elapsed_ms; /* one snapshot shared by validation and drawing */
+    uint8_t animation_pending;
+    uint8_t animation_running;
+    uint32_t timer_paint_us[CFW_TIMER_PAINT_SAMPLES];
+    uint32_t timer_paint_average_us; /* published to the display-task debug overlay */
+    uint8_t timer_paint_count;
+    uint8_t timer_paint_next;
 } customCfwContext;
 
 #define CFW_CTX_SLOT  0x2029f59cU    /* first word of the CFW-reserved TLSF tail */

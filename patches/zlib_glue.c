@@ -300,6 +300,56 @@ static int is_composition_message(const uint8_t *src, uint32_t srclen) {
 #define CFW_IMAGE_MUTEX_GIVE ((int (*)(uint32_t))0x00442ff7u)
 #define CFW_IMAGE_MUTEX_DELETE ((int (*)(uint32_t))0x00443049u)
 static int image_worker_locked(const uint8_t *src, uint32_t size);
+static void cfw_record_timer_paint(customCfwContext *ctx, uint32_t us);
+static int cfw_animation_present(customCfwContext *ctx, cfw_rectlist *rl, int reset_time);
+static void cfw_animation_tick(void *arg);
+
+static void cfw_animation_schedule(customCfwContext *ctx) {
+    ctx->animation_running=ctx->animation_pending;
+    if (!ctx->animation_running) return;
+    if (!ctx->animation_timer) ctx->animation_timer=FW_TIMER_NEW((void *)&cfw_animation_tick,0,ctx,0);
+    ctx->animation_due_ms=FW_MS_TICK+45u;
+    if (!ctx->animation_timer || FW_TIMER_START(ctx->animation_timer,45)!=0) ctx->animation_running=0;
+}
+
+/* Runs on the timer thread. Never wait on a command's mutex: cleanup may be
+ * stopping this timer while holding it. A delayed/stale callback checks the
+ * current deadline again after taking the mutex. It never renews the lease. */
+static void cfw_animation_tick(void *arg) {
+    customCfwContext *ctx=(customCfwContext *)arg;
+    uint32_t mutex=__atomic_load_n(&ctx->image_mutex,__ATOMIC_ACQUIRE);
+    if (!mutex) return;
+    if (CFW_IMAGE_MUTEX_TAKE(mutex,0)!=0) {
+        if (ctx->animation_timer) FW_TIMER_START(ctx->animation_timer,45);
+        return;
+    }
+    uint32_t now=FW_MS_TICK;
+    if (!ctx->animation_running || !cfw_fb_lease_active()) {
+        ctx->animation_running=0;
+    } else if ((int32_t)(now-ctx->animation_due_ms)>=0) {
+        if (ctx->direct_pending || ctx->panel.pending) {
+            cfw_animation_schedule(ctx);
+        } else {
+            cfw_rectlist rl;
+            rl.n=0;
+            rl.direct_submitted=0;
+            rl.direct_failed=0;
+            FW_DISPLAY_WAIT();
+            if (!ctx->direct_pending && !ctx->panel.pending) {
+                uint32_t started;
+                cfw_time_start(&started);
+                int result=cfw_animation_present(ctx,&rl,0);
+                uint32_t us=cfw_time_end(&started);
+                if (result!=0) ctx->animation_running=0;
+                else cfw_record_timer_paint(ctx,us);
+                if (!rl.direct_submitted) FW_DISPLAY_SIGNAL();
+            } else cfw_animation_schedule(ctx);
+        }
+    } else if (ctx->animation_timer) {
+        FW_TIMER_START(ctx->animation_timer,ctx->animation_due_ms-now);
+    }
+    CFW_IMAGE_MUTEX_GIVE(mutex);
+}
 static int image_worker(const uint8_t *src, uint32_t size, uint8_t origin) {
     customCfwContext *ctx = getCustomCfwContext();
     if (!ctx) return -1;
@@ -373,6 +423,14 @@ static int image_dispatch(const uint8_t *src, uint32_t srclen, cfw_rectlist *rl)
     if (src == 0 || srclen < 1) return -1;
 
     cfw_message_type mode = (cfw_message_type)(src[0] & CFW_MSG_TYPE_MASK);
+
+    /* A new staged frame must not leak through an animation redraw before
+     * its PRESENT. All of these paths execute under image_mutex. */
+    if (mode==CFW_MSG_DRAW_CALLS || mode==CFW_MSG_SET_ROOT_DISPLAY_LIST ||
+        mode==CFW_MSG_UPLOAD_RESOURCE || mode==CFW_MSG_EVICT_RESOURCE || mode==CFW_MSG_CREATE_SURFACE) {
+        customCfwContext *ctx=peekCustomCfwContext();
+        if (ctx) ctx->animation_running=0;
+    }
 
     if (mode == CFW_MSG_BUZZER) {
         /* play a UI sound on the buzzer; no display change. [5][kind][args...].
@@ -452,6 +510,8 @@ static int image_dispatch(const uint8_t *src, uint32_t srclen, cfw_rectlist *rl)
                 ctx->last_fid = ctx->high_fid = 0;
                 for (uint32_t i = 0; i < CFW_FID_RING; i++) ctx->recent_fids[i] = 0xffff;
                 ctx->recent_pos = 0;
+                ctx->timer_paint_count = ctx->timer_paint_next = 0;
+                ctx->timer_paint_average_us = 0;
             } else if (sub == 1) {
                 ctx->diag_hide = 1;
             } else if (sub == 2) {
@@ -533,7 +593,8 @@ static int image_dispatch(const uint8_t *src, uint32_t srclen, cfw_rectlist *rl)
         customCfwContext *ctx=getCustomCfwContext();
         uint8_t *screen=cfw_screen_buffer();
         if(!ctx || !screen) return -1;
-        cfw_draw_target target={screen,640,480,320};
+        ctx->draw_elapsed_ms=FW_MS_TICK-ctx->animation_origin_ms;
+        cfw_draw_target target={screen,640,480,320,0};
         if(mode == CFW_MSG_DRAW_CALLS) {
             if(cfw_draw_run(ctx,src+1,srclen-1,target,0,0)) return -1;
             return cfw_draw_run(ctx,src+1,srclen-1,target,1,0);
@@ -546,17 +607,31 @@ static int image_dispatch(const uint8_t *src, uint32_t srclen, cfw_rectlist *rl)
             return 0;
         }
         if(srclen!=1) return -1;
-        uint8_t *composition=cfw_composition_buffer();
-        if(!composition) return -1;
-        target.pixels=composition;
-        uint32_t root=ctx->root_display_list?ctx->root_display_list-1u:65535u;
-        if(cfw_draw_root(ctx,root,target,0,0)) return -1;
-        memcpy(composition,screen,CFW_FRAMEBUFFER_BYTES);
-        if(cfw_draw_root(ctx,root,target,1,0)) return -1;
-        present_composition(640,480,rl);
-        return 0;
+        return cfw_animation_present(ctx,rl,1);
     }
     return -1;
+}
+
+/* Caller owns both image_mutex and the display gate. Only an inbound PRESENT
+ * resets time; timer callbacks render from the same screen with a later time. */
+static int cfw_animation_present(customCfwContext *ctx, cfw_rectlist *rl, int reset_time) {
+    ctx->animation_running=0;
+    ctx->animation_pending=0;
+    uint32_t now=FW_MS_TICK;
+    if (reset_time) ctx->animation_origin_ms=now;
+    ctx->draw_elapsed_ms=now-ctx->animation_origin_ms;
+    if (!cfw_fb_lease_active() || !ctx->screen_buffer) return -1;
+    uint8_t *composition=cfw_composition_buffer();
+    if (!composition) return -1;
+    cfw_draw_target target={composition,640,480,320,0};
+    uint32_t root=ctx->root_display_list?ctx->root_display_list-1u:CFW_DRAW_SCREEN;
+    if (cfw_draw_root(ctx,root,target,0,0)) return -1;
+    memcpy(composition,ctx->screen_buffer,CFW_FRAMEBUFFER_BYTES);
+    if (cfw_draw_root(ctx,root,target,1,0)) return -1;
+    present_composition(640,480,rl);
+    if (rl->direct_failed) return -1;
+    cfw_animation_schedule(ctx);
+    return 0;
 }
 
 /* Publish the CFW-owned packed-4bpp shadow to the stock display task. image_worker
@@ -603,6 +678,13 @@ static int cfw_cleanup_session(void) {
 
     /* Publish fail-open ownership first. image_worker holds the display gate,
      * making it safe to discard any direct job/pointer left by this session. */
+    ctx->animation_running=0;
+    ctx->animation_pending=0;
+    if (ctx->animation_timer) FW_TIMER_STOP(ctx->animation_timer);
+    ctx->timer_paint_count=ctx->timer_paint_next=0;
+    ctx->timer_paint_average_us=0;
+    /* Keep the handle for reuse: a callback already dispatched may still be
+     * retrying the mutex. The context and this one timer live for the boot. */
     ctx->direct_lease_deadline = 0;
     ctx->direct_active = 0;
     ctx->direct_pending = 0;

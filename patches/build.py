@@ -132,6 +132,7 @@ def resolve_movwt(blob, off, sym_addr, high):
 CLANG = "clang"
 CFLAGS = [
     "--target=thumbv7em-none-eabi", "-mthumb",
+    "-mfpu=fpv4-sp-d16", "-mfloat-abi=softfp", "-ffp-contract=off",
     "-O2", "-ffreestanding", "-fno-jump-tables", "-fomit-frame-pointer",
     "-fno-builtin", "-mno-unaligned-access",
     "-fno-unwind-tables", "-fno-asynchronous-unwind-tables",

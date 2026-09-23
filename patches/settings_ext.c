@@ -155,10 +155,15 @@ void faceclaw_wake_fallback_tick(void *arg) {
     FW_DISPLAY_START(1, 0, 0, 0);
 }
 
+/* A nearby non-inlined factory keeps the ROPI callback displacement bounded. */
+__attribute__((noinline)) uint32_t cfw_create_wake_timer(customCfwContext *ctx) {
+    return FW_TIMER_NEW((void *)&faceclaw_wake_fallback_tick,0,ctx,0);
+}
+
 static int faceclaw_arm_fallback(customCfwContext *ctx, uint32_t delay_ms) {
     if (ctx->wake_fallback_timer == 0) {
         ctx->wake_fallback_timer =
-            FW_TIMER_NEW((void *)&faceclaw_wake_fallback_tick, 0, ctx, 0);
+            cfw_create_wake_timer(ctx);
     }
     if (ctx->wake_fallback_timer == 0) return 0;
     FW_TIMER_STOP(ctx->wake_fallback_timer);
@@ -471,7 +476,7 @@ __attribute__((naked)) void faceclaw_evenai_display_entry(void) {
 int settings_send_wrapper(int type, int sid, unsigned char *buf, unsigned len) {
     if (sid == 9) {
         // 24: display-task panel queries/pokes/patterns, bounded result replies.
-        static const char caps[] = "Faceclaw/26";
+        static const char caps[] = "Faceclaw/27";
         len = pb_append_bytes_field(buf, len, SETTINGS_RESPONSE_CAPACITY,
                                     100u, (const unsigned char *)caps,
                                     (unsigned)sizeof(caps) - 1u);

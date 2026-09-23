@@ -137,6 +137,44 @@ static void cfw_texture_make_lut(uint8_t options, uint8_t *lut) {
     }
 }
 
+/* Opaque identity-mapped surfaces need only a clipped packed-row copy. Keep
+ * partial destination bytes intact; odd source alignment joins adjacent bytes.
+ * The caller excludes self-copies, which retain the overlap-safe pixel path. */
+static void cfw_texture_copy_raw(uint8_t *shadow, uint32_t stride,
+                                  uint32_t panel_w, uint32_t panel_h,
+                                  int32_t x, int32_t y, const cfw_cached_image *image) {
+    int32_t sx = x < 0 ? -x : 0, sy = y < 0 ? -y : 0;
+    int32_t width = (int32_t)image->width - sx;
+    int32_t height = (int32_t)image->height - sy;
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    if (width > (int32_t)panel_w - x) width = (int32_t)panel_w - x;
+    if (height > (int32_t)panel_h - y) height = (int32_t)panel_h - y;
+    if (width <= 0 || height <= 0) return;
+    uint32_t source_stride = (image->width + 1u) >> 1;
+    for (int32_t row = 0; row < height; row++) {
+        const uint8_t *src = image->rle + (sy + row) * source_stride;
+        uint8_t *dst = shadow + (y + row) * stride + (x >> 1);
+        int32_t column = sx, count = width;
+        if (x & 1) {
+            uint32_t color = (src[column >> 1] >> ((column & 1) ? 0 : 4)) & 15u;
+            *dst = (*dst & 0xf0u) | color;
+            dst++; column++; count--;
+        }
+        src += column >> 1;
+        uint32_t bytes = (uint32_t)count >> 1;
+        if (!(column & 1)) {
+            memcpy(dst, src, bytes);
+        } else {
+            for (uint32_t i = 0; i < bytes; i++) dst[i] = (src[i] << 4) | (src[i + 1] >> 4);
+        }
+        if (count & 1) {
+            uint32_t color = (src[bytes] >> ((column & 1) ? 0 : 4)) & 15u;
+            dst[bytes] = (dst[bytes] & 15u) | (color << 4);
+        }
+    }
+}
+
 /* Render a previously validated image, clipping signed coordinates to the
  * physical packed-4bpp shadow. Transparency tests the original source value,
  * before the LUT, so source color 0 is skipped even for an inverse ramp. */
@@ -146,6 +184,14 @@ static void cfw_texture_render(uint8_t *shadow, uint32_t stride,
                                const cfw_cached_image *image,
                                const uint8_t *lut, int transparent) {
     if(image->raw) {
+        if (!transparent && image->rle != shadow) {
+            int identity = 1;
+            for (uint32_t i = 0; i < 16; i++) if (lut[i] != i) identity = 0;
+            if (identity) {
+                cfw_texture_copy_raw(shadow, stride, panel_w, panel_h, x0, y0, image);
+                return;
+            }
+        }
         int reverse = image->rle == shadow && (y0>0 || (y0==0 && x0>0));
         for(uint32_t i=0;i<image->width*image->height;i++) {
             uint32_t j=reverse?image->width*image->height-1-i:i, yy=j/image->width, xx=j%image->width;

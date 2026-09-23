@@ -49,6 +49,10 @@ composition, plays the root display list, then queues the existing gated copy to
 the stock framebuffer. Mode 11 releases both buffers after pending refreshes.
 Stock EvenHub image handling is unchanged; Faceclaw uses the private transport.
 
+Revision `Faceclaw/27` adds extended integer/expression coordinates to rounded
+rectangles, 300 ms menu-selection movement, and 45 ms animation replay. See
+[the expression protocol](docs/draw-expressions.md) for byte encoding and opcodes.
+
 The lazy, lease-scoped resource cache is **192 KiB**, including a 2 KiB table of
 512 pointers. Resources use stable IDs and an on-glasses freelist with compaction;
 the phone manages pinning and LRU eviction. Each resource is at most 64 KiB.
@@ -63,7 +67,7 @@ for u16 dimensions instead of u8, and RLE=8. Raw images use packed high-first
 Message 26 carries length-prefixed draw calls: bbox, rect copy, stock text,
 resource image/text, color LUT, nested display list, and rounded rectangles.
 Rounded rectangle fills use max blending; a scoped signed depth shifts each
-lens in opposite directions. Selected menu rows replay at depth +2. Each call may override
+lens in opposite directions. Selected menu rows share their menu's depth. Each call may override
 its target with a writable image ID. Compact aligned bboxes retain a fast mode;
 u16 bounds allow individual pixels. Message 27 sets the root list (65535 clears
 it). Drawing/root updates do not present until message 28. Lists reject cycles,

@@ -68,6 +68,21 @@ static uint32_t cfw_time_end(const uint32_t *t) {
     return dc / cyc_per_us;
 }
 
+/* Timer-task writer; publish a single aligned average for the display task.
+ * Divide each sample first so even ten UINT32_MAX samples cannot overflow.
+ * Until the ring fills, average only the paints that have actually completed. */
+static void cfw_record_timer_paint(customCfwContext *ctx, uint32_t us) {
+    ctx->timer_paint_us[ctx->timer_paint_next]=us;
+    ctx->timer_paint_next=(ctx->timer_paint_next+1u)%CFW_TIMER_PAINT_SAMPLES;
+    if (ctx->timer_paint_count<CFW_TIMER_PAINT_SAMPLES) ctx->timer_paint_count++;
+    uint32_t average=0, remainder=0, count=ctx->timer_paint_count;
+    for (uint32_t i=0; i<count; i++) {
+        average+=ctx->timer_paint_us[i]/count;
+        remainder+=ctx->timer_paint_us[i]%count;
+    }
+    ctx->timer_paint_average_us=average+remainder/count;
+}
+
 /* Diagnostic: record whether the frames the worker processes arrive in order /
  * skipped / DUPLICATED (mode-3 frame ids). Sticky flags shown by cfw_draw_flags;
  * these flags describe the private sender's frame IDs. `has_fid`=0 for a mode-6
@@ -119,7 +134,8 @@ static void append_heap_kib(char *out, cfw_heap_stats stats, uint32_t maxlen) {
 
 /* Terminus 6x12 diagnostic overlay at the top-left of the packed framebuffer.
  * First line: sticky REORDER/SKIP/DUP/ALLOC flags and previous worker/present
- * durations in microseconds. Second: last received message size and CRC.
+ * durations and rolling last-ten timer-paint average (t10), in microseconds.
+ * Second: last received message size and CRC.
  * Third: total free / maximum malloc request for each heap, in whole KiB.
  * Heap snapshots are approximate; failed validation displays ?/?. Suppressed
  * when diag_hide is set (mode 7). */
@@ -147,6 +163,8 @@ static void cfw_draw_flags(uint8_t *disp, uint32_t w, uint32_t h) {
     u_to_dec(line, ctx->last_worker_us, sizeof(line));
     strlcat(line, "us p", sizeof(line));
     u_to_dec(line, ctx->last_present_us, sizeof(line));
+    strlcat(line, "us t10 ", sizeof(line));
+    u_to_dec(line, ctx->timer_paint_average_us, sizeof(line));
     strlcat(line, "us", sizeof(line));
 
     draw_string(disp, w, h, IMAGE_X + 2, IMAGE_Y + 2, line, 15, 0);

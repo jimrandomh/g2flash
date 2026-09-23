@@ -21,12 +21,12 @@ _Static_assert(sizeof(cfw_zstream) == 0x38, "firmware zlib ABI");
 #define CFW_ZEND(s) ((int (*)(void *))0x005dbf9bu)(s)
 #endif
 
-static void *cfw_zalloc(void *opaque, uint32_t items, uint32_t size) {
+__attribute__((noinline)) void *cfw_zalloc(void *opaque, uint32_t items, uint32_t size) {
     (void)opaque;
     if (size && items > 0xffffffffu / size) return 0;
     return CFW_MESSAGE_MALLOC(items * size);
 }
-static void cfw_zfree(void *opaque, void *ptr) {
+__attribute__((noinline)) void cfw_zfree(void *opaque, void *ptr) {
     (void)opaque;
     CFW_MESSAGE_FREE(ptr);
 }
