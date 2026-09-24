@@ -1,4 +1,4 @@
-/* Revision 28. All calls inherit a target; a call-local override is scoped. */
+/* Revision 29. All calls inherit a target; a call-local override is scoped. */
 #include "resource_cache.h"
 
 static int cfw_draw_right_lens(void);
@@ -368,19 +368,23 @@ static void cfw_draw_copy_row(uint8_t *dst, const uint8_t *src,
     if (last) dst[(dx + width) >> 1] = (dst[(dx + width) >> 1] & 15u) | (last_color << 4);
 }
 
-/* [source-id16][x16][y16][w16][h16][dx s16][dy s16]
- * Source CFW_DRAW_SCREEN is the screen buffer; CFW_DRAW_CURRENT is the target itself. */
+/* [source-id16][x extended][y extended][w16][h16][dx extended][dy extended]
+ * Source CFW_DRAW_SCREEN is the screen buffer; CFW_DRAW_CURRENT is the target itself.
+ * Animated source coordinates must stay inside the source at every time. */
 static int cfw_draw_op_rect_copy(const cfw_draw_env *env, cfw_reader r, cfw_draw_target target) {
+    cfw_expression_frame frame={env->walk->elapsed_ms,0};
     uint32_t id = READ_U16(r);
-    uint32_t x = READ_U16(r);
-    uint32_t y = READ_U16(r);
+    int32_t sx = cfw_read_extended(&r,&frame);
+    int32_t sy = cfw_read_extended(&r,&frame);
     uint32_t w = READ_U16(r);
     uint32_t h = READ_U16(r);
-    int32_t dx = READ_S16(r);
-    int32_t dy = READ_S16(r);
-    if (!READ_DONE(r)) {
+    int32_t dx = cfw_read_extended(&r,&frame);
+    int32_t dy = cfw_read_extended(&r,&frame);
+    if (!READ_DONE(r) || sx < 0 || sy < 0) {
         return -1;
     }
+    uint32_t x = (uint32_t)sx, y = (uint32_t)sy;
+    env->walk->animation_pending |= frame.animation_pending;
 
     cfw_draw_target source = target;
     if (id == CFW_DRAW_SCREEN) {
@@ -401,7 +405,9 @@ static int cfw_draw_op_rect_copy(const cfw_draw_env *env, cfw_reader r, cfw_draw
         return 0;
     }
 
-    /* Clip the destination once and advance the source by the same amount. */
+    /* Clip the destination once and advance the source by the same amount.
+     * Far-off destinations return before the depth shift can overflow. */
+    if (dx < -65536 || dx > 65536) return 0;
     dx += target.shift_x;
     if (dx >= (int32_t)target.width || dy >= (int32_t)target.height ||
         dx <= -(int32_t)w || dy <= -(int32_t)h) return 0;
