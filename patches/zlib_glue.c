@@ -613,7 +613,9 @@ static int image_dispatch(const uint8_t *src, uint32_t srclen, cfw_rectlist *rl)
 }
 
 /* Caller owns both image_mutex and the display gate. Only an inbound PRESENT
- * resets time; timer callbacks render from the same screen with a later time. */
+ * resets time; timer callbacks render from the same screen with a later time.
+ * A root list composes the whole frame, including copying (or clearing and
+ * shifting) the screen; with no root, the screen is presented as-is. */
 static int cfw_animation_present(customCfwContext *ctx, cfw_rectlist *rl, int reset_time) {
     ctx->animation_running=0;
     ctx->animation_pending=0;
@@ -625,9 +627,8 @@ static int cfw_animation_present(customCfwContext *ctx, cfw_rectlist *rl, int re
     if (!composition) return -1;
     cfw_draw_target target={composition,640,480,320,0};
     uint32_t root=ctx->root_display_list?ctx->root_display_list-1u:CFW_DRAW_SCREEN;
-    if (cfw_draw_root(ctx,root,target,0,0)) return -1;
-    memcpy(composition,ctx->screen_buffer,CFW_FRAMEBUFFER_BYTES);
-    if (cfw_draw_root(ctx,root,target,1,0)) return -1;
+    if (root==CFW_DRAW_SCREEN) memcpy(composition,ctx->screen_buffer,CFW_FRAMEBUFFER_BYTES);
+    else if (cfw_draw_root(ctx,root,target,0,0) || cfw_draw_root(ctx,root,target,1,0)) return -1;
     present_composition(640,480,rl);
     if (rl->direct_failed) return -1;
     cfw_animation_schedule(ctx);

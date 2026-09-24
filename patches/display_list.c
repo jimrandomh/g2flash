@@ -1,4 +1,4 @@
-/* Revision 27. All calls inherit a target; a call-local override is scoped. */
+/* Revision 28. All calls inherit a target; a call-local override is scoped. */
 #include "resource_cache.h"
 
 static int cfw_draw_right_lens(void);
@@ -19,6 +19,7 @@ typedef enum {
     DRAW_OP_REMAP_COLORS = 6,
     DRAW_OP_DISPLAY_LIST = 7,
     DRAW_OP_ROUNDED_RECT = 8,
+    DRAW_OP_CLEAR = 9,
 } cfw_draw_op;
 
 /* Keep flag names and values in sync with Faceclaw DrawFlags.kt. */
@@ -603,6 +604,20 @@ static int cfw_draw_op_rounded_rect(const cfw_draw_env *env, cfw_reader r, cfw_d
     return 0;
 }
 
+/* [color8] fills the whole target, padding included. A clear has no position,
+ * so depth does not apply. */
+static int cfw_draw_op_clear(const cfw_draw_env *env, cfw_reader r, cfw_draw_target target) {
+    uint32_t color = READ_U8(r);
+    if (!READ_DONE(r) || color > 15) {
+        return -1;
+    }
+    if (!env->apply) {
+        return 0;
+    }
+    memset(target.pixels, (int)(color * 17u), target.stride * target.height);
+    return 0;
+}
+
 /* [display-list-id16] */
 static int cfw_draw_op_display_list(const cfw_draw_env *env, cfw_reader r, cfw_draw_target target) {
     uint32_t id = READ_U16(r);
@@ -674,6 +689,8 @@ static int cfw_draw_call(customCfwContext *ctx, const uint8_t *p, uint32_t n,
         return cfw_draw_op_display_list(&env, r, target);
     case DRAW_OP_ROUNDED_RECT:
         return cfw_draw_op_rounded_rect(&env, r, target);
+    case DRAW_OP_CLEAR:
+        return cfw_draw_op_clear(&env, r, target);
     default:
         return -1;
     }

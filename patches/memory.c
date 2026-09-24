@@ -107,3 +107,35 @@ void *memmove(void *dst, const void *src, size_t size) {
     }
     return dst;
 }
+
+/* Same shape as memcpy: peel to word alignment, then 16- and 4-byte aligned
+ * stores, then the byte tail. Like __builtin_memcpy_inline, the constant-size
+ * __builtin_memset_inline expands to stores and never calls memset. */
+__attribute__((noinline, no_builtin("memset")))
+void *memset(void *dst, int value, size_t size) {
+    uint8_t *d = dst;
+    uint8_t byte = (uint8_t)value;
+    #pragma clang loop unroll(disable)
+    while (size && ((uintptr_t)d & 3u)) {
+        *d++ = byte;
+        --size;
+    }
+    #pragma clang loop unroll(disable)
+    while (size >= 16) {
+        __builtin_memset_inline(__builtin_assume_aligned(d, 4), byte, 16);
+        d += 16;
+        size -= 16;
+    }
+    #pragma clang loop unroll(disable)
+    while (size >= 4) {
+        __builtin_memset_inline(__builtin_assume_aligned(d, 4), byte, 4);
+        d += 4;
+        size -= 4;
+    }
+    #pragma clang loop unroll(disable)
+    while (size) {
+        *d++ = byte;
+        --size;
+    }
+    return dst;
+}
