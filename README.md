@@ -36,73 +36,14 @@ missing any.
 
 ## Modifications
 
-For a test of the private message stream transport, use
-`python3 send_message_probe.py --dry-run`, then run it with your usual connection
-URL. See [the message probe instructions](docs/message-transport.md#sending-test-messages)
-for MTU-based packet splitting, lens selection, ACK verification, and the debug overlay.
+Some features this has (used by Faceclaw, but the exact API may not be fully documented):
 
-Custom messages use private SID `0xf0` and execute without an EvenHub context.
-Revision `Faceclaw/26` separates app drawing from presentation. A persistent
-153,600-byte packed **screen buffer** is allocated on the EvenHub heap. The old
-LVGL-heap shadow is now the **composition buffer**. Message 28 copies screen to
-composition, plays the root display list, then queues the existing gated copy to
-the stock framebuffer. Mode 11 releases both buffers after pending refreshes.
-Stock EvenHub image handling is unchanged; Faceclaw uses the private transport.
-
-Revision `Faceclaw/27` adds extended integer/expression coordinates to rounded
-rectangles, 300 ms menu-selection movement, and 45 ms animation replay. See
-[the expression protocol](docs/draw-expressions.md) for byte encoding and opcodes.
-
-The lazy, lease-scoped resource cache is **192 KiB**, including a 2 KiB table of
-512 pointers. Resources use stable IDs and an on-glasses freelist with compaction;
-the phone manages pinning and LRU eviction. Each resource is at most 64 KiB.
-Modes 21/22 upload resource chunks and evict IDs in batches. Mode 29 creates
-zero-filled writable raw image surfaces in batches; replay preserves their pixels.
-
-Resource flags contain two type bits (image=0, font=1, display list=2), LARGE=4
-for u16 dimensions instead of u8, and RLE=8. Raw images use packed high-first
-4bpp rows with odd-width padding. RLE images omit padding. Fonts contain flags=1,
-96 resource-relative u16 glyph offsets, and embedded image records.
-
-Message 26 carries length-prefixed draw calls: bbox, rect copy, stock text,
-resource image/text, color LUT, nested display list, and rounded rectangles.
-Rounded rectangle fills use max blending; a scoped signed depth shifts each
-lens in opposite directions. Selected menu rows share their menu's depth. Each call may override
-its target with a writable image ID. Compact aligned bboxes retain a fast mode;
-u16 bounds allow individual pixels. Message 27 sets the root list (65535 clears
-it). Drawing/root updates do not present until message 28. Lists reject cycles,
-missing resources, depth over 8, and more than 4096 expanded operations.
-Old drawing messages 3/6/8/9/15/19/20 are rejected. See
-[the revision 26 wire specification](docs/display-list-protocol.md).
-
-The firmware also adds a microphone control plane (capability tokens `micctl`,
-`micmc`, `micraw`). Each temple carries a front + rear microphone pair, and the
-stock firmware only ever sends the phone a mono 16 kHz LC3 stream. The mic
-extension lets the phone choose, per temple, the capture front end (codec vs
-PDM), which of the pair's microphones are used, the codec (LC3 vs raw PCM
-passthrough), sample format/rate, and LC3 bitrate, over a private
-settings-channel message (sid 0x09 field 103), with live read-back on field 104
-so a UI (e.g. SybilSight's glasses -> microphones menu) can display and confirm
-the active configuration of both temples. When armed, capture is streamed as
-`'SM'` frames carrying the multi-channel samples, a millisecond timestamp, and
-the on-device SSR + TDOA angle estimate — everything a phone-side beamformer
-needs to do direction-of-arrival processing across the four microphones,
-fused with the compass/IMU heading the firmware already forwards. Streaming is
-held by a fail-open 90-second renewal lease, so mics can never be left running
-when the phone goes away. Bringing up the capture hardware is additionally
-gated behind an explicit arm flag because several of the recovered stock audio
-entry points are ABI-inferred and must be validated on hardware first; see the
-contract comment in `patches/mic_control.c`.
-
-The firmware also reconfigures the bluetooth stack for 2M PHY support and
-requests a 7.5 ms connection interval with latency 0. This prevents the stock
-one-minute slow-mode timer from throttling screen transfers. Connection
-parameters still depend on the phone; it must request  2M PHY and must agree to
-the short connection interval.
-
-Some other features this has (used by Faceclaw, but the exact API may not be
-fully documented):
-
+ * Use the full 640x480 resolution of the screens, not just the 576x288 exposed
+   by the EvenHub API
+ * Upload display lists, which define instructions for redrawing the screen to
+   make animations without needing to send messages for each frame
+ * Compressed message transport, including cross-message compression
+ * Modified bluetooth radio settings, greatly increasing transfer speed
  * Receive ring and temple-touchpad long-press and long-press-release as regular
    source-qualified gestures, rather than opening a modal offering to quit
  * Receive 2.2.9's tap-then-long gesture as distinct private event type 11 and,
@@ -128,18 +69,6 @@ fully documented):
    report the single tap, long press and long-press release that the stock
    display thread drops, so the phone can show a lightweight sleep-time
    display (Faceclaw's Glanceboard) without a full wake
- * Report the head-up (IMU head-tilt) wake distinctly from the double-tap
-   wake, and forward the head-up while an EvenHub page is on screen, so the
-   phone can route it to that lightweight display too
-
-For the experimental custom-message entry point before stock reconstruction,
-see [Custom-message transport](docs/message-transport.md). SID `0xf0` uses an
-options byte to select either or both lenses and forwards over the frame bridge.
-A stream of two-byte-length-prefixed messages is reconstructed across arbitrary
-packet boundaries, with per-message processing ACKs returning through the BLE
-ingress lens. Messages can be up to 65,535 bytes. The probe defaults to a mode-7
-no-op and records payload size and checksum without requiring an EvenHub layout.
-Handler dispatch through this transport requires `Faceclaw/7` on both lenses.
 
 Glasses with a custom firmware identify themselves with the version number of
 the stock firmware that the modded version is based on, with an extra field in
@@ -364,36 +293,3 @@ a real device.
 
 Thanks to kalanihelekunihi for [evenRealities-openCFW](https://github.com/kalanihelekunihi/evenRealities-openCFW/) and Commute773 for [g2-kit-unofficial](https://github.com/Commute773/g2-kit-unofficial/), which were immensely helpful while creating this.
 
-### R1 battery reporting
-
-CFW `ringbat17` exposes the stock R1 battery cache in settings field 106 and
-read-only image-handler mode 17. Faceclaw shows it as `R1` in the top bar.
-See [the wire contract and stock-firmware evidence](docs/ring-battery.md).
-
-### Transient brightness (Faceclaw/32)
-
-Private mode 30 is `[30, 1, level, visible, duration_lo, duration_hi]`:
-`level` is 2–100, `visible` is 0/1, and duration is 0–3000 ms (little endian).
-It requires the framebuffer lease. Faceclaw pairs it with passive ALS mode 16,
-which suppresses stock auto adjustment, and computes the configurable light
-curve on the phone. Mode 30 does not save stock settings or modify ALS learning.
-
-Panel writes run in the existing display-copy hook using the donor's complete
-calibrated brightness conversion/provider, including display enable and SYNC.
-Revision 32 restores the hardware path from revision 30 after revision 31's
-register-only writer caused the display to remain dark on hardware. Matching
-brightness registers do not establish that the panel is displaying. The
-injected blob is byte-identical to revision 30 except for the capability string.
-The small brightness-step flicker may return; the flicker optimization is
-withdrawn pending a validated panel update sequence.
-
-A local smoothstep fade runs every 40 ms. Sleep retains the physical frame
-until brightness reaches 2, then clears it; wake waits for a subsequent inbound
-PRESENT before starting. Duplicate targets are idempotent; new targets reverse
-from the current level. Lease expiry or cleanup restores saved stock brightness.
-Idle ownership reapplies brightness once a second, including after stock panel
-recovery. Transport ACKs indicate command acceptance, not fade completion or
-physical readback.
-
-Host tests cover interpolation, reversal, ordering, malformed commands, and
-cleanup. Device validation of brightness/fade timing is still required.
