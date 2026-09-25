@@ -220,6 +220,22 @@ the CLI now explicitly exits after session teardown, and a subsequent scan
 exited normally. This is one successful
 installation and dormant control check, not general hardware qualification.
 
+### First physical keyboard input — 2026-09-24 (Pacific)
+
+A retry connected the generic BLE device advertised as `Bluetooth Keyboard`
+through the right lens. The glasses reported connection-open, encryption
+success and pairing-complete events. No passkey prompt was requested. The
+reference client completed attribute discovery, a paginated Report Map read,
+Report Protocol selection and CCC writes for four input reports. It then
+received real key-down/up events, including letters, spaces and overlapping
+presses, through the glasses' private field-131 notifications. This run used
+the Mac as the companion client; phone Bluetooth was disconnected.
+
+The earlier connection attempt timed out and the keyboard was absent from the
+following scan; the cause was not established. The successful retry establishes
+one keyboard's encrypted input path. Ring coexistence, autonomous reconnect,
+phone background delivery and broader keyboard compatibility remain untested.
+
 Hardware acceptance still required before calling this a supported firmware:
 
 1. Verify dormant boot, OTA availability, phone and R1 reconnect on both lenses.
