@@ -299,5 +299,6 @@ The `keyboard` branch adds `GLASSLYCFW/39`: an explicitly enabled right-lens
 BLE keyboard connection with HID reports relayed to the phone alongside ring
 input. The companion driver and CLI are in `demos/keyboard*.ts`. See
 [setup, protocol and validation limits](docs/keyboard.md) and the
-[donor ABI review](docs/keyboard-abi.md). Offline tests pass; this feature has
-not been flashed or validated on hardware or in a native iOS app.
+[donor ABI review](docs/keyboard-abi.md). Offline tests and the first physical
+installation/reconnect/status check pass. Keyboard pairing, three-link
+coexistence and native iOS delivery remain unvalidated.

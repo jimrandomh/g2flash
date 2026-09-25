@@ -6,7 +6,9 @@ to the companion app. The keyboard pairs to the **glasses**, not to iOS's system
 keyboard service.
 
 This is an implementation for hardware bring-up, **not a hardware-validated
-release**. No glasses were flashed during development. The host tests cannot
+release**. The first physical installation passed OTA verification, subsequent
+BLE authentication and a disabled-keyboard status query; see the installation
+record below. The host tests cannot
 prove that the controller will maintain phone + ring + keyboard connections,
 that a particular keyboard's pairing succeeds, or that iOS wakes the native
 app correctly. The [investigation](ble-keyboard-investigation.md) explains the
@@ -196,6 +198,24 @@ eight isolated ARM scenarios against the exact committed image using
 PaulMcMillan/g2-firmware-emulator. It covers production trampolines, relay and
 failure handling with explicit stock-function shims. Full-system boot, real
 Bluetooth coexistence and iOS background delivery remain unverified.
+
+### First physical installation — 2026-09-24 (Pacific)
+
+Installed image SHA-256
+`4c7bf9a552df1a42f26b3378425c7c2121ca4058fed7283ec863c3f8d2cd13fe`
+on both lenses. Each lens verified all six OTA components with status 8
+(`UPDATING`), zero block resends, and no transfer errors. Transfers took 305 s
+left and 309 s right. Both lenses subsequently reconnected and authenticated.
+The right-lens settings response reported both base versions as `2.3.0.24` and
+custom revision `GLASSLYCFW/39`. Direct left-lens settings queries timed out both
+before and after installation; its custom revision was not independently read.
+
+The reference client's status query returned `enabled=false`, `conn=0`,
+`connected=false`, `encrypted=false`, `scanning=false`. No keyboard was paired
+and no ring/keyboard coexistence or native iOS test was performed. The status
+CLI remained alive after printing its disconnect message and was terminated;
+its command-line shutdown lifecycle needs follow-up. This is one successful
+installation and dormant control check, not general hardware qualification.
 
 Hardware acceptance still required before calling this a supported firmware:
 
