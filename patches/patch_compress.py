@@ -437,6 +437,18 @@ def layout(img):
 
     # --- in-place live-code edits + bl retargets (targets are the appended addrs) ---
     in_place = [
+        (g2f(0x4caa60), "0ef009fa",
+         enc_bl(0x4caa60, base + _fn(built, "keyboard_dm_alloc_entry")["offset"]),
+         "DM callback allocation: retain keyboard lifecycle on queue exhaustion"),
+        (g2f(0x4caab0), "0ef0e1f9",
+         enc_bl(0x4caab0, base + _fn(built, "keyboard_att_alloc_entry")["offset"]),
+         "ATT callback allocation: expose lost keyboard events as relay gaps"),
+        *[(g2f(site), "0a681279", enc_bl(site, base + _fn(built, "keyboard_io_cap_entry")["offset"]),
+           "SMP Pairing I/O capability: KeyboardDisplay only for owned keyboard")
+          for site in (0x60093e, 0x601298)],
+        (g2f(0x4cc1ec), "38b584b0",
+         enc_bw(0x4cc1ec, base + _fn(built, "keyboard_dispatch_entry")["offset"]),
+         "BLE app dispatcher: isolate explicitly enabled keyboard connection"),
         (g2f(0x47911a), "38b584b0",
          enc_bw(0x47911a, base + _fn(built, "faceclaw_ring_receive")["offset"]),
          "ring receiver entry: timestamped unfiltered reports under framebuffer lease"),

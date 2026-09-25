@@ -293,3 +293,11 @@ a real device.
 
 Thanks to kalanihelekunihi for [evenRealities-openCFW](https://github.com/kalanihelekunihi/evenRealities-openCFW/) and Commute773 for [g2-kit-unofficial](https://github.com/Commute773/g2-kit-unofficial/), which were immensely helpful while creating this.
 
+### Experimental BLE keyboard bridge
+
+The `keyboard` branch adds `GLASSLYCFW/39`: an explicitly enabled right-lens
+BLE keyboard connection with HID reports relayed to the phone alongside ring
+input. The companion driver and CLI are in `demos/keyboard*.ts`. See
+[setup, protocol and validation limits](docs/keyboard.md) and the
+[donor ABI review](docs/keyboard-abi.md). Offline tests pass; this feature has
+not been flashed or validated on hardware or in a native iOS app.

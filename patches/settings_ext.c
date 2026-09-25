@@ -73,6 +73,9 @@ typedef int  (*pb_decode_fn)(void *stream, const void *fields, void *dest);
 #define MIC_CONTROL_FIELD 103u
 void mic_apply_control(const uint8_t *data, uint32_t len);
 unsigned mic_append_status(unsigned char *buf, unsigned len, unsigned capacity);
+#define KEYBOARD_CONTROL_FIELD 130u
+void keyboard_apply_control(const uint8_t *data, uint32_t len);
+
 typedef void (*display_start_fn)(unsigned app_id, void *arg, unsigned arg_len, void *cb);
 
 #define FW_SEND 0x0047ef05 /* FUN_0047ef04 | thumb bit */
@@ -380,6 +383,8 @@ static void faceclaw_scan_settings_control(const uint8_t *buf, uint32_t len) {
                 faceclaw_apply_control(p, item_len);
             else if (field == MIC_CONTROL_FIELD)
                 mic_apply_control(p, item_len);
+            else if (field == KEYBOARD_CONTROL_FIELD)
+                keyboard_apply_control(p, item_len);
             p += item_len;
         } else if (wire == 5) {
             if ((uint32_t)(end - p) < 4) return;
@@ -484,7 +489,9 @@ int settings_send_wrapper(int type, int sid, unsigned char *buf, unsigned len) {
         // 38: head up (12) / head down (15, new) forwarded from the UI dispatcher
         //     while a page is up; fast BLE profile requested unless the link is
         //     already <= 11.25 ms with latency 0.
-        static const char caps[] = "Faceclaw/38";
+        // 39: experimental BLE keyboard bridge (fields 130/131): one explicitly
+        //     enabled right-lens HOGP connection alongside the ring.
+        static const char caps[] = "Faceclaw/39";
         len = pb_append_bytes_field(buf, len, SETTINGS_RESPONSE_CAPACITY,
                                     100u, (const unsigned char *)caps,
                                     (unsigned)sizeof(caps) - 1u);

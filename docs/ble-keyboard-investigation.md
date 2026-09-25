@@ -266,3 +266,10 @@ Decode as little-endian Thumb. Selected witnesses:
 The code-space calculation comes from the committed append operation in
 `patches/cfw_patches.json`, including alignment, rather than an estimated build.
 No new offsets in this report have been added to the executable patch manifest.
+
+## Implementation follow-up
+
+An experimental implementation now exists on `keyboard` as revision 39. See
+[keyboard.md](keyboard.md) for implemented behavior and explicit limits, and
+[keyboard-abi.md](keyboard-abi.md) for the new donor ABI evidence. The offline
+implementation does not close the hardware and native iOS acceptance gates above.

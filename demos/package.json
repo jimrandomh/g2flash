@@ -15,6 +15,7 @@
   },
   "scripts": {
     "detect": "bun detect-cfw.ts",
-    "bench": "bun video-bench.ts"
+    "bench": "bun video-bench.ts",
+    "keyboard": "bun keyboard.ts"
   }
 }

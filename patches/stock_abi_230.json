@@ -81,6 +81,27 @@
       "0x004ef959": 1,
       "0x200777fc": 1
     },
+    "keyboard.c": {
+      "0x00483c2d": 1,
+      "0x004843a9": 1,
+      "0x004c9fcd": 1,
+      "0x004ca561": 1,
+      "0x004ca759": 1,
+      "0x004ce3f5": 1,
+      "0x004d8e77": 1,
+      "0x004d8e93": 1,
+      "0x004e6685": 1,
+      "0x0051c7e5": 1,
+      "0x0051d0c3": 1,
+      "0x0051d163": 1,
+      "0x0051d249": 1,
+      "0x00550239": 1,
+      "0x00579c13": 1,
+      "0x20073908": 1,
+      "0x20073c30": 1,
+      "0x20073e64": 1,
+      "0x200769b4": 1
+    },
     "malloc.h": {
       "0x0045855f": 1,
       "0x004585a3": 1,
@@ -4123,9 +4144,244 @@
       "address": "0x00599d78",
       "bytes": "4c6d0720",
       "label": "Mic diagnostics: PCM app table literal = 20076d4c"
+    },
+    {
+      "address": "0x004caa42",
+      "bytes": "2de9f041060030001cf017f90700b078262801d1357a00e00025e81980b20ef009fa0400002c1bd03a0092b23100a04640466ff7b6f8b07826280ad1bfb204eb07006060adb2716866682a0030006ff7a8f82100dff8a40a90f856000ef0f8f9bde8f08170b505002889103080b20ef0e1f90400002c16d010222900260030006ff78ff814f1100060602a896968656828006ff786f82100dff8600a90f856000ef0d6f909e0a878122806d1688940f66401884201d1b3f7acfd70bd70b50500",
+      "label": "keyboard: DM/ATT callback layouts, allocation sites and handler posting"
+    },
+    {
+      "address": "0x004cc1ec",
+      "bytes": "38b584b005000c00002c00f0c380a078801e1728",
+      "label": "keyboard: BLE dispatcher prologue and ATT event range"
+    },
+    {
+      "address": "0x004cc2c4",
+      "bytes": "2088002805d02088c0b202f086fc002805d1200050f0f3fe200050f040ff2088",
+      "label": "keyboard: central DM app/security dispatch ordering"
+    },
+    {
+      "address": "0x004cc39c",
+      "bytes": "70b50400dff8445785f85640dff874070473c0218172dff87007dff870170860dff86c07dff86c170860dff8386a0420",
+      "label": "keyboard: app handler id and SMP configuration initialization"
+    },
+    {
+      "address": "0x004ccb20",
+      "bytes": "3c6f072068ab7a00e804002084517c002c760720",
+      "label": "keyboard: SMP config and application security config literals"
+    },
+    {
+      "address": "0x004cb53c",
+      "bytes": "643e0720",
+      "label": "keyboard: application handler context literal"
+    },
+    {
+      "address": "0x004ccae8",
+      "bytes": "643e0720",
+      "label": "keyboard: handler id context literal"
+    },
+    {
+      "address": "0x004cd2b8",
+      "bytes": "feb50500dff85c49002601e0761c30343000c0b2032880f2bd80a07d0028f5d130210022270038006ef700ff2900200019f000fc4ff6ff70a081761c2674002060740120a075002084f82c00",
+      "label": "keyboard: three connection slots, stride, in-use and handle offsets"
+    },
+    {
+      "address": "0x004cdc1c",
+      "bytes": "303c0720",
+      "label": "keyboard: DM connection table address"
+    },
+    {
+      "address": "0x004d8e76",
+      "bytes": "80b5083080b273f009fb002800d0083002bd80b5083873f055fb01bd38b504000d002000c0b20bf0a0fa2a002100c9b200f006f801212000c0b20bf087fa31bd80b5",
+      "label": "keyboard: WSF allocation, free and message send APIs"
+    },
+    {
+      "address": "0x00579bd4",
+      "bytes": "00200de0514960220300dbb201eb43031a8230220300dbb201eb43018a82401c0100c9b20229eddb49490020c87447480a7b0273002202760020c8737047f8b505000c0017001e000e205ff72af900282cd01021817005710022002313e05ff0010c1cfa02fc2900c9b211ea0c0f09d01900c9b2795c9c465ffa8cfc84448cf805105b1c521c1100c9b2082903da1900c9b20229e3db0799069ac47102814181067301002a48007b5ff709f9f1bd80b504205ff7f6f8002806d01121817001002348007b5ff7fbf8",
+      "label": "keyboard: scan state/parameters, bounded scan and message builder"
+    },
+    {
+      "address": "0x00579d20",
+      "bytes": "b46907208c6c0720",
+      "label": "keyboard: scan and DM control block addresses"
+    },
+    {
+      "address": "0x0051d248",
+      "bytes": "2de9ff410e0017001c003b003200d2b20100c9b203205cf0e1fd05002800c0b2002800f0c380",
+      "label": "keyboard: AppMasterConnOpen calling convention"
+    },
+    {
+      "address": "0x0051d3bc",
+      "bytes": "bf492a00d2b24420424301eb0200b0f1440888f80450002c07d0200066f7b6fb002802d0c8f8004006e039003000c0b266f7dcffc8f800002800c0b204b0bde8",
+      "label": "keyboard: app connection slot setup and DB lookup"
+    },
+    {
+      "address": "0x004ce3f4",
+      "bytes": "70b504000d00160024200af03afd00280cd019218170edb2058006710179c170447101009848007b0af039fd70bd",
+      "label": "keyboard: DmConnClose client/connection/reason ABI"
+    },
+    {
+      "address": "0x00483c2c",
+      "bytes": "30b40200dff86c37002000240ce093f82f10002906d093f8c3101500edb2a94200d1401c641cc8332100c9b20a29eedbc0b230bc7047",
+      "label": "keyboard: bond count by role and record stride"
+    },
+    {
+      "address": "0x00483cc0",
+      "bytes": "2de9ff4106000f001400dff8d4562000c0b2fff7abff052845dbb9f7",
+      "label": "keyboard: five-bond eviction threshold"
+    },
+    {
+      "address": "0x00483db6",
+      "bytes": "0800c0b200281dd095f82f000028f5d1c8210022a8464046b8f789f9012085f82f003000c0b262f03cffa8713900280062f081fe85f8c340fcf723ffc5f8c400280022e0",
+      "label": "keyboard: ten total bond slots and reservation on allocation"
+    },
+    {
+      "address": "0x004843a8",
+      "bytes": "f8b50c00dff8545ac0b262f051fc07000a2601e0761ec8353000c0b2002818d095f82f000028f5d095f830000028f1d0",
+      "label": "keyboard: AppDbFindByAddr entry and address normalization"
+    },
+    {
+      "address": "0x0051c7e4",
+      "bytes": "feb504000e0015002868002812d001aa0221286867f760fe020000280ad00120a871012028729df804102000c0b25df0b6fa38e0f6b2002e35d0dff8246a3068007810f00100e871e879002811d0286800280ed12000c0b2b1f70dff07002000c0b2b1f7fffe01223900c0b267f736fa28600020e872306887782000c0b2b1f7f1fe012801d157f0020701202872ffb2009730684378306802783068c1782000c0b25df062faf7bd",
+      "label": "keyboard: per-connection security setup, existing key and new bond paths"
+    },
+    {
+      "address": "0x0051cb64",
+      "bytes": "80b50a0000215171002191710021d17100211172dff8c816096809790088c0b2fff72efe01bd",
+      "label": "keyboard: connection security flags initialization"
+    },
+    {
+      "address": "0x0051d0c2",
+      "bytes": "80b500218278272a05d08278282a02d08278402a10d10288002a0dd00288002a0ad00288042a07dadff8d025038844214b4302eb030144398278202a14d0242a18d0252a19d0262a1ad0272a1bd0282a1cd0372a1dd0402a1ed04a2a0ad04b2a0bd04c2a0cd01ae0ff20dff82c1581f89d0014e0fff740fc11e0fff744fc0ee0fff7f8fc0be0fff7f9fc08e0fff7fcfc05e0fff761fe02e0fff77bffffe701bd",
+      "label": "keyboard: AppMasterProcDmMsg dispatch"
+    },
+    {
+      "address": "0x0051d162",
+      "bytes": "80b5002182783f2a13d08278792a10d00288002a0dd00288002a0ad00288042a07dadff83425038844214b4302eb030144398278272a16d0282a19d02a2a1cd02b2a1fd02c2a22d02d2a25d02f2a28d0322a2bd03a2a33d03b2a36d03f2a2ad0792a37d037e0002901d0fff7cafc32e0002901d0fff7d8fc2de0002901d0fff739fd28e0002901d0fff7fdfd23e0002901d0fff700fe1ee00088c0b2b6f74cfa19e0002901d0fff714fd14e0002901d0fff7c2fc0fe0002901d0fff7e4fc0ae0002901d0fff7e9fc05e0002901d0fff7f3fc00e0ffe701bddff8200490f896007047",
+      "label": "keyboard: AppMasterSecProcDmMsg dispatch"
+    },
+    {
+      "address": "0x0051d6bc",
+      "bytes": "08390720",
+      "label": "keyboard: app connection context table base"
+    },
+    {
+      "address": "0x004e6684",
+      "bytes": "f8b506000f0015001620f2f7f2fb0400002c10d00420a070f6b226802775002d06d0ffb2261d3a002900300053f798fa20006df0eafdf1bd",
+      "label": "keyboard: passkey response length/data copying"
+    },
+    {
+      "address": "0x00550238",
+      "bytes": "70b505000e00162088f719fe0400002c11d02800c0b22080f6b2002e02d01620a07005e00c2221002800c0b23af0f4fe200004f010f870bd0100c87b8a7b120210184a7b10eb0240097b10eb01600849b0fbf1f201fb12007047",
+      "label": "keyboard: numeric comparison reply and display value derivation"
+    },
+    {
+      "address": "0x004ca560",
+      "bytes": "2de9f84307000d0016001c0019f0defe00213800c0b283f03dfa0100002809d00868b0f8008008688078c0f3800919f0010903e05ff000085ff0000919f0cafe404680b2002843d05ffa89f9b9f1000f35d10020ddf82090002c0cd03100c9b20b2901d0208806e04946c9b2002902d120680088401d1ffa88f880b2804514d30c200ef048fc002822d0ffb2078080f80390867044600581002181720100ba4890f860000ef045fc17e077232a0092b23100c9b23800c0b283f071fb08e071232a0092b23100c9b23800c0b283f067fb002c02d020000ef027fc",
+      "label": "keyboard: ATT request validation, packet ownership and asynchronous dispatch"
+    },
+    {
+      "address": "0x004c9fcc",
+      "bytes": "80b5002180b20ef049ff02bd",
+      "label": "keyboard: ATT packet allocator"
+    },
+    {
+      "address": "0x004ca63e",
+      "bytes": "f8b504000d0017001e000d20fff7bffc002812d0052101804580878010f1080104220a70491cf6b2009603000222290089b22000c0b2fff774fff1bd38b504000d000b20fff7a3fc0300002b16d00320188013f108000a210170401c0570401c290089b2090a0170401c002000900522290089b22000c0b2fff753ff31bd2de9f84306000f001500984615f10b0080b2fff77dfc0400002c1ed0e81c208014f1080012210170401c0770401c390089b2090a017010f10109adb22a00414648466ff771fa0020009023000922390089b23000c0b2fff725ffbde8f183",
+      "label": "keyboard: FindInfo/Read/Write request builder layouts"
+    },
+    {
+      "address": "0x00556c42",
+      "bytes": "2de9f84306000f001500984615f10b0080b273f7baf90400002c1ed0e81c208014f1080052210170401c0770401c390089b2090a017010f10109adb22a0041464846e2f6aeff0020009023000a22390089b23000c0b273f762fcbde8f183",
+      "label": "keyboard: Write Command request builder"
+    },
+    {
+      "address": "0x0054cf8c",
+      "bytes": "70b50500e879012818d1a8680088083080b27df715f80400002c08d0a86802880832a96826003000ecf616fe09e07022291d95f8290000f0aafe32e0ac680020a86014f10900a979062909d1801c698a0170401c698a89b2090a0170401c0fe0698a0170401c698a89b2090a0170401ca98a0170401ca98a89b2090a0170401c142085f82200dff8cc090068817915f1180086f791fd23002288a97b28687cf7d5ff70bd",
+      "label": "keyboard: continuing request sender including Read Blob offset"
+    },
+    {
+      "address": "0x0054d292",
+      "bytes": "80b5dff8241b827951f82210884701bd",
+      "label": "keyboard: ATT send request table dispatch"
+    },
+    {
+      "address": "0x00729f34",
+      "bytes": "0000000031d054008dcf54008dcf54008dcf540059cf54008dcf540059cf54008dcf540059cf5400a3d15400d7d1540059cf5400",
+      "label": "keyboard: ATT request table includes Read Blob (index 6)"
+    },
+    {
+      "address": "0x0054ddbc",
+      "bytes": "349f7200",
+      "label": "keyboard: ATT request table literal"
+    },
+    {
+      "address": "0x004ca758",
+      "bytes": "1fb504002000c0b2002840f0",
+      "label": "keyboard: indication confirmation entry"
+    },
+    {
+      "address": "0x004ca88e",
+      "bytes": "0021e4b2601e80b283f00dfa0400002c19d02068807810f01200102813d10920fff78dfb0300002b0dd02068807810f0ef00216888701e201872012220688189042082f008fa1fbd",
+      "label": "keyboard: indication flag clear and confirmation PDU"
+    },
+    {
+      "address": "0x00600900",
+      "bytes": "70b505000e000122012195f83d00cef653f8022085f83f0028008cf755fa40204bf7b7fd28630f2053f7abfc0400002c25d014f1080001210170401cab490a6812790270401c32790270401c72790270401c096889790170401cb1790170401cf1790170401c072214f1080115f12006300039f637f92100280053f7bafb70bd",
+      "label": "keyboard: master Pairing Request I/O capability hook and saved request"
+    },
+    {
+      "address": "0x00601286",
+      "bytes": "f8b505000c0015f1270002210170401cae490a6812790270401c22790270401c62790270401c096889790170401ca1790170401ce1790170401ca44e6a460df101012800d6f8f0309847",
+      "label": "keyboard: Pairing Response I/O capability hook and local parameters"
+    },
+    {
+      "address": "0x00600bec",
+      "bytes": "e8040020",
+      "label": "keyboard: Pairing Request pSmpCfg literal"
+    },
+    {
+      "address": "0x00601550",
+      "bytes": "e8040020",
+      "label": "keyboard: Pairing Response pSmpCfg literal"
+    },
+    {
+      "address": "0x007aab68",
+      "bytes": "b80b0000030710030100000000fa000000fa000002000000",
+      "label": "keyboard: unchanged SMP config including NoInputNoOutput"
+    },
+    {
+      "address": "0x007c5184",
+      "bytes": "090001000000",
+      "label": "keyboard: unchanged application security flags/key distribution"
     }
   ],
   "patch_sites": [
+    {
+      "address": "0x004caa60",
+      "old": "0ef009fa",
+      "write_size": 4
+    },
+    {
+      "address": "0x004caab0",
+      "old": "0ef0e1f9",
+      "write_size": 4
+    },
+    {
+      "address": "0x0060093e",
+      "old": "0a681279",
+      "write_size": 4
+    },
+    {
+      "address": "0x00601298",
+      "old": "0a681279",
+      "write_size": 4
+    },
+    {
+      "address": "0x004cc1ec",
+      "old": "38b584b0",
+      "write_size": 4
+    },
     {
       "address": "0x0047911a",
       "old": "38b584b0",
@@ -4516,5 +4772,10 @@
       "new": "0x004b75be",
       "description": "bl compass_preserve_accuracy (retain magnetic calibration under Faceclaw framebuffer lease)"
     }
-  ]
+  ],
+  "keyboard_review": {
+    "evidence": "docs/keyboard-abi.md",
+    "scope": "Experimental keyboard bridge, dormant before private settings commands; five reviewed 4-byte hooks, no boot or capacity changes",
+    "date": "2026-09-24"
+  }
 }

@@ -147,6 +147,7 @@ typedef struct {
     uint8_t timer_paint_count;
     uint8_t timer_paint_next;
     cfw_brightness_state brightness;
+    void *keyboard;                        /* lazy, reboot-volatile BLE keyboard bridge */
 } customCfwContext;
 
 #define CFW_CTX_SLOT  0x2029f59cU    /* first word of the CFW-reserved TLSF tail */

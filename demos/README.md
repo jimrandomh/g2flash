@@ -79,3 +79,11 @@ frame's on-device processing.
 `video-bench.ts` uses display modes that only exist in the CFW; against stock
 firmware it won't render. Build and flash the firmware first (see the
 [top-level README](../README.md)), then confirm with `detect-cfw.ts`.
+
+## BLE keyboard bridge (experimental revision 39)
+
+`bun keyboard.ts scan` scans through the right lens;
+`bun keyboard.ts connect AA:BB:CC:DD:EE:FF random` pairs, discovers HID reports
+and prints key transitions. `status` queries and `disable` disconnects.
+See [keyboard.md](../docs/keyboard.md) for protocol, native app integration
+and the hardware tests still required. This CLI does not flash firmware.
