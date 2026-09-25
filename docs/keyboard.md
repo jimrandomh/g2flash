@@ -65,7 +65,9 @@ The other address-type arguments are `public`, `public-identity` and
 `random-identity`. An already-running stock scan/initiation returns BUSY;
 retry once the ring connection settles. Scanning does not disconnect the ring.
 A connect attempt times out after 30 seconds. The CLI shows pairing prompts and
-prints HID usages; Ctrl-C after setup disables/disconnects the keyboard.
+readable keyboard key names (other usages retain their numeric IDs); Ctrl-C
+after setup disables/disconnects the keyboard. Set `KEYBOARD_DEBUG=1` to print
+control, connection and ATT records while diagnosing setup failures.
 
 `keyboard-client.ts` is transport-independent. `keyboard.ts` supplies its G2 BLE
 transport and subscribes to **raw right-lens sid-0x09 notifications**, extracting
@@ -214,7 +216,8 @@ The reference client's status query returned `enabled=false`, `conn=0`,
 `connected=false`, `encrypted=false`, `scanning=false`. No keyboard was paired
 and no ring/keyboard coexistence or native iOS test was performed. The status
 CLI remained alive after printing its disconnect message and was terminated;
-its command-line shutdown lifecycle needs follow-up. This is one successful
+the CLI now explicitly exits after session teardown, and a subsequent scan
+exited normally. This is one successful
 installation and dormant control check, not general hardware qualification.
 
 Hardware acceptance still required before calling this a supported firmware:
