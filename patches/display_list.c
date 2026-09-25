@@ -25,7 +25,8 @@ typedef enum {
 typedef enum {
     DRAW_FLAG_RESOURCE_TARGET = 1,
     DRAW_FLAG_DEPTH = 2,
-    DRAW_FLAGS_MASK = DRAW_FLAG_RESOURCE_TARGET | DRAW_FLAG_DEPTH,
+    DRAW_FLAG_CLIP = 4,
+    DRAW_FLAGS_MASK = DRAW_FLAG_RESOURCE_TARGET | DRAW_FLAG_DEPTH | DRAW_FLAG_CLIP,
 } cfw_draw_call_flags;
 
 typedef enum {
@@ -34,10 +35,16 @@ typedef enum {
 
 #define DRAW_ROUNDED_RECT_NO_BORDER 16u
 
+/* `clip` (revision 35) narrows every write to a rectangle in shifted target
+ * pixels. It is only meaningful while `clipped` is set, so zero-initialized
+ * targets are unclipped. Like shift_x, it travels by value: a call's clip
+ * applies to that call and to everything a nested list draws. */
 typedef struct {
     uint8_t *pixels;
     uint32_t width, height, stride;
     int32_t shift_x;
+    int32_t clipped;
+    cfw_texture_clip clip;
 } cfw_draw_target;
 
 typedef struct {
@@ -120,6 +127,7 @@ static int cfw_draw_resource_target(customCfwContext *ctx, uint32_t id, cfw_draw
     out->height = image.height;
     out->stride = (image.width + 1u) >> 1;
     out->shift_x = 0;
+    out->clipped = 0;
     return 0;
 }
 
@@ -133,9 +141,24 @@ static uint8_t cfw_draw_pixel(cfw_draw_target *t, uint32_t x, uint32_t y) {
     return (t->pixels[y * t->stride + (x >> 1)] >> ((x & 1u) ? 0 : 4)) & 15u;
 }
 
+/* The writable region: the whole target, narrowed by any clip rect. */
+static cfw_texture_clip cfw_draw_bounds(const cfw_draw_target *t) {
+    cfw_texture_clip b = cfw_texture_panel(t->width, t->height);
+    if (t->clipped) {
+        if (b.x0 < t->clip.x0) b.x0 = t->clip.x0;
+        if (b.y0 < t->clip.y0) b.y0 = t->clip.y0;
+        if (b.x1 > t->clip.x1) b.x1 = t->clip.x1;
+        if (b.y1 > t->clip.y1) b.y1 = t->clip.y1;
+    }
+    return b;
+}
+
 static void cfw_draw_put(cfw_draw_target *t, int32_t x, int32_t y, uint8_t value) {
     x += t->shift_x;
     if (x < 0 || y < 0 || (uint32_t)x >= t->width || (uint32_t)y >= t->height) {
+        return;
+    }
+    if (t->clipped && (x < t->clip.x0 || y < t->clip.y0 || x >= t->clip.x1 || y >= t->clip.y1)) {
         return;
     }
     uint8_t *p = t->pixels + (uint32_t)y * t->stride + ((uint32_t)x >> 1);
@@ -176,12 +199,13 @@ static int32_t cfw_draw_rounded_inset(int32_t row, int32_t height, int32_t radiu
     return inset;
 }
 
-/* Clip once, preserve partial-byte neighbors, then handle two pixels per byte.
- * A zero max-blended fill is a no-op; white fill is an unconditional overwrite. */
-static void cfw_draw_rounded_span(uint8_t *row, int32_t width, int32_t left, int32_t right,
+/* Clip once to [lo, hi), preserve partial-byte neighbors, then handle two
+ * pixels per byte. A zero max-blended fill is a no-op; white fill is an
+ * unconditional overwrite. */
+static void cfw_draw_rounded_span(uint8_t *row, int32_t lo, int32_t hi, int32_t left, int32_t right,
                                   uint32_t value, int blend) {
-    if (left < 0) left = 0;
-    if (right > width) right = width;
+    if (left < lo) left = lo;
+    if (right > hi) right = hi;
     if (left >= right || (blend && value == 0)) return;
     if (value == 15) blend = 0;
     if (left & 1) {
@@ -307,9 +331,9 @@ static int cfw_draw_op_bounding_box(const cfw_draw_env *env, cfw_reader r, cfw_d
         return -1;
     }
 
-    /* Compact boxes that stay on even columns and inside the target after the
-     * depth shift can be decoded straight into the buffer. */
-    int fast = !wide && !(target.shift_x & 1)
+    /* Compact unclipped boxes that stay on even columns and inside the target
+     * after the depth shift can be decoded straight into the buffer. */
+    int fast = !wide && !target.clipped && !(target.shift_x & 1)
             && (int32_t)x + target.shift_x >= 0
             && (int32_t)(x + w) + target.shift_x <= (int32_t)target.width;
 
@@ -404,16 +428,18 @@ static int cfw_draw_op_rect_copy(const cfw_draw_env *env, cfw_reader r, cfw_draw
         return 0;
     }
 
-    /* Clip the destination once and advance the source by the same amount.
-     * Far-off destinations return before the depth shift can overflow. */
+    /* Clip the destination once to the writable region and advance the source
+     * by the same amount. Far-off destinations return before the depth shift
+     * can overflow. */
     if (dx < -65536 || dx > 65536) return 0;
     dx += target.shift_x;
-    if (dx >= (int32_t)target.width || dy >= (int32_t)target.height ||
-        dx <= -(int32_t)w || dy <= -(int32_t)h) return 0;
-    if (dx < 0) { x -= dx; w += dx; dx = 0; }
-    if (dy < 0) { y -= dy; h += dy; dy = 0; }
-    if (w > target.width - (uint32_t)dx) w = target.width - (uint32_t)dx;
-    if (h > target.height - (uint32_t)dy) h = target.height - (uint32_t)dy;
+    cfw_texture_clip b = cfw_draw_bounds(&target);
+    if (b.x0 >= b.x1 || b.y0 >= b.y1 || dx >= b.x1 || dy >= b.y1 ||
+        dx <= b.x0 - (int32_t)w || dy <= b.y0 - (int32_t)h) return 0;
+    if (dx < b.x0) { x += b.x0 - dx; w -= b.x0 - dx; dx = b.x0; }
+    if (dy < b.y0) { y += b.y0 - dy; h -= b.y0 - dy; dy = b.y0; }
+    if (w > (uint32_t)(b.x1 - dx)) w = b.x1 - dx;
+    if (h > (uint32_t)(b.y1 - dy)) h = b.y1 - dy;
     /* Bottom-up rows preserve vertical overlap; the row helper handles
      * horizontal overlap and opposite nibble alignment without a scratch row. */
     int reverse = source.pixels == target.pixels
@@ -444,19 +470,22 @@ static int cfw_draw_op_stock_font_string(const cfw_draw_env *env, cfw_reader r, 
     }
     cfw_rectlist rl;
     rl.n = 0;
-    return cfw_builtin_draw_string_shifted(target.pixels, target.stride, target.width, target.height,
+    return cfw_builtin_draw_string_clipped(target.pixels, target.stride, cfw_draw_bounds(&target),
                                            call, call_length, &rl, target.shift_x);
 }
 
-/* [image-id16][x s16][y s16][options8] */
+/* [image-id16][x extended][y extended][options8]
+ * Revision 35: x/y were s16; they may now be expressions. */
 static int cfw_draw_op_image(const cfw_draw_env *env, cfw_reader r, cfw_draw_target target) {
-    const uint8_t *call = r.p;
-    uint32_t call_length = READ_REMAINING(r);
+    cfw_expression_frame frame={env->walk->elapsed_ms,0};
     uint32_t id = READ_U16(r);
-    READ_SKIP(r, 5); /* x, y, options: decoded by the image renderer. */
+    int32_t x = cfw_read_extended(&r,&frame);
+    int32_t y = cfw_read_extended(&r,&frame);
+    uint32_t options = READ_U8(r);
     if (!READ_DONE(r)) {
         return -1;
     }
+    env->walk->animation_pending |= frame.animation_pending;
 
     uint32_t size;
     const uint8_t *data = cfw_resource_get(env->ctx, id, &size);
@@ -471,23 +500,28 @@ static int cfw_draw_op_image(const cfw_draw_env *env, cfw_reader r, cfw_draw_tar
     if (!env->apply) {
         return 0;
     }
+    /* Far-off images return before the depth shift can overflow. */
+    if (x < -65536 || x > 65536 || y < -65536 || y > 65536) return 0;
     cfw_rectlist rl;
     rl.n = 0;
-    return cfw_texture_draw_image_shifted(target.pixels, target.stride, target.width, target.height,
-                                          call, call_length, &rl, target.shift_x);
+    return cfw_texture_draw_image_clipped(target.pixels, target.stride, cfw_draw_bounds(&target),
+                                          id, x + target.shift_x, y, (uint8_t)options, &rl);
 }
 
-/* [font-id16][x s16][y s16][options8][length8][text] drawn with a font resource. */
+/* [font-id16][x extended][y extended][options8][length8][text] drawn with a
+ * font resource. Revision 35: x/y were s16; they may now be expressions. */
 static int cfw_draw_op_text(const cfw_draw_env *env, cfw_reader r, cfw_draw_target target) {
-    const uint8_t *call = r.p;
-    uint32_t call_length = READ_REMAINING(r);
+    cfw_expression_frame frame={env->walk->elapsed_ms,0};
     uint32_t id = READ_U16(r);
-    READ_SKIP(r, 5); /* x, y, options: decoded by the string renderer. */
+    int32_t x = cfw_read_extended(&r,&frame);
+    int32_t y = cfw_read_extended(&r,&frame);
+    uint32_t options = READ_U8(r);
     uint32_t length = READ_U8(r);
     const uint8_t *text = READ_BYTES(r, length);
     if (!text || !READ_DONE(r)) {
         return -1;
     }
+    env->walk->animation_pending |= frame.animation_pending;
 
     uint32_t size;
     const uint8_t *font = cfw_resource_get(env->ctx, id, &size);
@@ -501,10 +535,14 @@ static int cfw_draw_op_text(const cfw_draw_env *env, cfw_reader r, cfw_draw_targ
     if (!env->apply) {
         return 0;
     }
+    /* Far-off text returns before the depth shift can overflow; control bytes
+     * move the pen at most 255*20 pixels further. */
+    if (x < -65536 || x > 65536 || y < -65536 || y > 65536) return 0;
     cfw_rectlist rl;
     rl.n = 0;
-    return cfw_texture_draw_string_shifted(target.pixels, target.stride, target.width, target.height,
-                                           call, call_length, &rl, target.shift_x);
+    return cfw_texture_draw_string_clipped(target.pixels, target.stride, cfw_draw_bounds(&target),
+                                           id, x + target.shift_x, y, (uint8_t)options,
+                                           text, length, &rl);
 }
 
 /* Pixels whose target x+y is even use the first LUT, odd ones the second. Rows
@@ -514,11 +552,15 @@ static int cfw_draw_op_text(const cfw_draw_env *env, cfw_reader r, cfw_draw_targ
  * the recursive walker's stack frame. */
 __attribute__((noinline)) static void cfw_draw_remap_rows(cfw_draw_target target,
         uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint8_t *luts) {
+    cfw_texture_clip b = cfw_draw_bounds(&target);
     int32_t left = (int32_t)x + target.shift_x;
     int32_t right = left + (int32_t)w;
-    if (left < 0) left = 0;
-    if (right > (int32_t)target.width) right = target.width;
-    if (left >= right) return;
+    int32_t top = (int32_t)y, bottom = (int32_t)(y + h);
+    if (left < b.x0) left = b.x0;
+    if (right > b.x1) right = b.x1;
+    if (top < b.y0) top = b.y0;
+    if (bottom > b.y1) bottom = b.y1;
+    if (left >= right || top >= bottom) return;
     uint8_t packed_lut[256];
     #pragma clang loop unroll(disable)
     for (uint32_t parity = 0; parity < 2; parity++) {
@@ -531,7 +573,7 @@ __attribute__((noinline)) static void cfw_draw_remap_rows(cfw_draw_target target
                 packed_lut[(hi << 4) | lo] = (upper << 4) | lower;
             }
         }
-        for (uint32_t yy = y + ((y ^ parity) & 1); yy < y + h; yy += 2) {
+        for (int32_t yy = top + ((top ^ (int32_t)parity) & 1); yy < bottom; yy += 2) {
             uint8_t *row = target.pixels + yy * target.stride;
             int32_t start = left;
             if (start & 1) {
@@ -591,11 +633,12 @@ static int cfw_draw_op_rounded_rect(const cfw_draw_env *env, cfw_reader r, cfw_d
     if (x < -(int32_t)w-target.shift_x || x >= (int32_t)target.width-target.shift_x ||
         y < -(int32_t)h || y >= (int32_t)target.height) return 0;
     x += target.shift_x;
+    cfw_texture_clip b = cfw_draw_bounds(&target);
     if (radius > w / 2) radius = w / 2;
     if (radius > h / 2) radius = h / 2;
     int32_t inner_radius = radius ? (int32_t)radius - 1 : 0;
-    int32_t top = y < 0 ? -y : 0;
-    int32_t bottom = (int32_t)target.height - y;
+    int32_t top = y < b.y0 ? b.y0 - y : 0;
+    int32_t bottom = b.y1 - y;
     if (bottom > (int32_t)h) bottom = h;
     int32_t outer_inset = 0, inner_inset = 0;
     for (int32_t yy = top; yy < bottom; yy++) {
@@ -603,23 +646,24 @@ static int cfw_draw_op_rounded_rect(const cfw_draw_env *env, cfw_reader r, cfw_d
         int32_t left = x + outer_inset, right = x + (int32_t)w - outer_inset;
         uint8_t *row = target.pixels + (y + yy) * target.stride;
         if (border == DRAW_ROUNDED_RECT_NO_BORDER) {
-            cfw_draw_rounded_span(row, target.width, left, right, fill, 1);
+            cfw_draw_rounded_span(row, b.x0, b.x1, left, right, fill, 1);
         } else if (w <= 2 || h <= 2 || yy == 0 || yy == (int32_t)h - 1) {
-            cfw_draw_rounded_span(row, target.width, left, right, border, 0);
+            cfw_draw_rounded_span(row, b.x0, b.x1, left, right, border, 0);
         } else {
             inner_inset = cfw_draw_rounded_inset(yy - 1, h - 2, inner_radius, inner_inset);
             int32_t inner_left = x + 1 + inner_inset;
             int32_t inner_right = x + (int32_t)w - 1 - inner_inset;
-            cfw_draw_rounded_span(row, target.width, left, inner_left, border, 0);
-            cfw_draw_rounded_span(row, target.width, inner_left, inner_right, fill, 1);
-            cfw_draw_rounded_span(row, target.width, inner_right, right, border, 0);
+            cfw_draw_rounded_span(row, b.x0, b.x1, left, inner_left, border, 0);
+            cfw_draw_rounded_span(row, b.x0, b.x1, inner_left, inner_right, fill, 1);
+            cfw_draw_rounded_span(row, b.x0, b.x1, inner_right, right, border, 0);
         }
     }
     return 0;
 }
 
 /* [color8] fills the whole target, padding included. A clear has no position,
- * so depth does not apply. */
+ * so depth does not apply. Under a clip rect (revision 35) it fills just the
+ * clipped part of the target, which is how to fill a rectangle. */
 static int cfw_draw_op_clear(const cfw_draw_env *env, cfw_reader r, cfw_draw_target target) {
     uint32_t color = READ_U8(r);
     if (!READ_DONE(r) || color > 15) {
@@ -628,7 +672,14 @@ static int cfw_draw_op_clear(const cfw_draw_env *env, cfw_reader r, cfw_draw_tar
     if (!env->apply) {
         return 0;
     }
-    memset(target.pixels, (int)(color * 17u), target.stride * target.height);
+    if (!target.clipped) {
+        memset(target.pixels, (int)(color * 17u), target.stride * target.height);
+        return 0;
+    }
+    cfw_texture_clip b = cfw_draw_bounds(&target);
+    for (int32_t y = b.y0; y < b.y1; y++) {
+        cfw_draw_rounded_span(target.pixels + (uint32_t)y * target.stride, b.x0, b.x1, b.x0, b.x1, color, 0);
+    }
     return 0;
 }
 
@@ -643,7 +694,8 @@ static int cfw_draw_op_display_list(const cfw_draw_env *env, cfw_reader r, cfw_d
 
 /* ---- Call and sequence decoding ------------------------------------------ */
 
-/* [op8][flags8] [resource-target-id16 if DRAW_FLAG_RESOURCE_TARGET] [depth s8 if DRAW_FLAG_DEPTH] [op payload] */
+/* [op8][flags8] [resource-target-id16 if DRAW_FLAG_RESOURCE_TARGET] [depth s8 if DRAW_FLAG_DEPTH]
+ * [clip x s16, y s16, w u16, h u16 if DRAW_FLAG_CLIP] [op payload] */
 static int cfw_draw_call(customCfwContext *ctx, const uint8_t *p, uint32_t n,
                          cfw_draw_target target, int apply, cfw_draw_walk *walk) {
     if (!walk->remaining--) {
@@ -662,6 +714,8 @@ static int cfw_draw_call(customCfwContext *ctx, const uint8_t *p, uint32_t n,
             return -1;
         }
         int32_t inherited_shift = target.shift_x;
+        /* The new target starts unclipped: an inherited clip is in the old
+         * target's pixels. */
         if (cfw_draw_resource_target(ctx, id, &target)) {
             return -1;
         }
@@ -676,6 +730,25 @@ static int cfw_draw_call(customCfwContext *ctx, const uint8_t *p, uint32_t n,
         int32_t value = cfw_draw_right_lens() ? depth + 1 : depth;
         int32_t half = value < 0 ? (value - 1) / 2 : value / 2;
         target.shift_x += cfw_draw_right_lens() ? -half : half;
+    }
+
+    if (flags & DRAW_FLAG_CLIP) {
+        /* Revision 35. The rect is in call coordinates, so it moves with the
+         * call's depth shift, and it narrows any clip inherited from an
+         * enclosing play-list call. */
+        int32_t x = READ_S16(r) + target.shift_x;
+        int32_t y = READ_S16(r);
+        int32_t w = (int32_t)READ_U16(r);
+        int32_t h = (int32_t)READ_U16(r);
+        cfw_texture_clip clip = {x, y, x + w, y + h};
+        if (target.clipped) {
+            if (clip.x0 < target.clip.x0) clip.x0 = target.clip.x0;
+            if (clip.y0 < target.clip.y0) clip.y0 = target.clip.y0;
+            if (clip.x1 > target.clip.x1) clip.x1 = target.clip.x1;
+            if (clip.y1 > target.clip.y1) clip.y1 = target.clip.y1;
+        }
+        target.clip = clip;
+        target.clipped = 1;
     }
 
     if (!READ_IN_BOUNDS(r)) {

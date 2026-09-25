@@ -137,19 +137,30 @@ static void cfw_texture_make_lut(uint8_t options, uint8_t *lut) {
     }
 }
 
+/* The writable region of a draw, [x0,x1) x [y0,y1) in destination pixels:
+ * the whole panel, or a display-list target narrowed by a clip rect
+ * (revision 35). An empty region (x0 >= x1 or y0 >= y1) draws nothing. */
+typedef struct {
+    int32_t x0, y0, x1, y1;
+} cfw_texture_clip;
+
+static cfw_texture_clip cfw_texture_panel(uint32_t panel_w, uint32_t panel_h) {
+    cfw_texture_clip clip = {0, 0, (int32_t)panel_w, (int32_t)panel_h};
+    return clip;
+}
+
 /* Opaque identity-mapped surfaces need only a clipped packed-row copy. Keep
  * partial destination bytes intact; odd source alignment joins adjacent bytes.
  * The caller excludes self-copies, which retain the overlap-safe pixel path. */
-static void cfw_texture_copy_raw(uint8_t *shadow, uint32_t stride,
-                                  uint32_t panel_w, uint32_t panel_h,
+static void cfw_texture_copy_raw(uint8_t *shadow, uint32_t stride, cfw_texture_clip clip,
                                   int32_t x, int32_t y, const cfw_cached_image *image) {
-    int32_t sx = x < 0 ? -x : 0, sy = y < 0 ? -y : 0;
+    int32_t sx = x < clip.x0 ? clip.x0 - x : 0, sy = y < clip.y0 ? clip.y0 - y : 0;
     int32_t width = (int32_t)image->width - sx;
     int32_t height = (int32_t)image->height - sy;
-    if (x < 0) x = 0;
-    if (y < 0) y = 0;
-    if (width > (int32_t)panel_w - x) width = (int32_t)panel_w - x;
-    if (height > (int32_t)panel_h - y) height = (int32_t)panel_h - y;
+    x += sx;
+    y += sy;
+    if (width > clip.x1 - x) width = clip.x1 - x;
+    if (height > clip.y1 - y) height = clip.y1 - y;
     if (width <= 0 || height <= 0) return;
     uint32_t source_stride = (image->width + 1u) >> 1;
     for (int32_t row = 0; row < height; row++) {
@@ -176,10 +187,9 @@ static void cfw_texture_copy_raw(uint8_t *shadow, uint32_t stride,
 }
 
 /* Render a previously validated image, clipping signed coordinates to the
- * physical packed-4bpp shadow. Transparency tests the original source value,
- * before the LUT, so source color 0 is skipped even for an inverse ramp. */
-static void cfw_texture_render(uint8_t *shadow, uint32_t stride,
-                               uint32_t panel_w, uint32_t panel_h,
+ * writable region. Transparency tests the original source value, before the
+ * LUT, so source color 0 is skipped even for an inverse ramp. */
+static void cfw_texture_render(uint8_t *shadow, uint32_t stride, cfw_texture_clip clip,
                                int32_t x0, int32_t y0,
                                const cfw_cached_image *image,
                                const uint8_t *lut, int transparent) {
@@ -188,7 +198,7 @@ static void cfw_texture_render(uint8_t *shadow, uint32_t stride,
             int identity = 1;
             for (uint32_t i = 0; i < 16; i++) if (lut[i] != i) identity = 0;
             if (identity) {
-                cfw_texture_copy_raw(shadow, stride, panel_w, panel_h, x0, y0, image);
+                cfw_texture_copy_raw(shadow, stride, clip, x0, y0, image);
                 return;
             }
         }
@@ -197,7 +207,7 @@ static void cfw_texture_render(uint8_t *shadow, uint32_t stride,
             uint32_t j=reverse?image->width*image->height-1-i:i, yy=j/image->width, xx=j%image->width;
             uint8_t color=(image->rle[yy*((image->width+1u)>>1)+(xx>>1)]>>((xx&1u)?0:4))&15u;
             int32_t x=x0+(int32_t)xx,y=y0+(int32_t)yy;
-            if((transparent && !color) || x<0 || y<0 || (uint32_t)x>=panel_w || (uint32_t)y>=panel_h) continue;
+            if((transparent && !color) || x<clip.x0 || y<clip.y0 || x>=clip.x1 || y>=clip.y1) continue;
             uint8_t *b=shadow+(uint32_t)y*stride+((uint32_t)x>>1),mapped=lut[color];
             if(x&1) *b=(*b&0xf0u)|mapped;else *b=(*b&15u)|(mapped<<4);
         }
@@ -219,8 +229,7 @@ static void cfw_texture_render(uint8_t *shadow, uint32_t stride,
         for (uint32_t i = 0; i < count; i++, pixel++) {
             int32_t x = x0 + (int32_t)(pixel % image->width);
             int32_t y = y0 + (int32_t)(pixel / image->width);
-            if (!skip && x >= 0 && y >= 0 &&
-                (uint32_t)x < panel_w && (uint32_t)y < panel_h) {
+            if (!skip && x >= clip.x0 && y >= clip.y0 && x < clip.x1 && y < clip.y1) {
                 uint8_t *b = shadow + (uint32_t)y * stride + ((uint32_t)x >> 1);
                 if (x & 1) *b = (uint8_t)((*b & 0xf0u) | mapped);
                 else       *b = (uint8_t)((*b & 0x0fu) | (uint8_t)(mapped << 4));
@@ -231,8 +240,7 @@ static void cfw_texture_render(uint8_t *shadow, uint32_t stride,
 
 /* Render stock LVGL's raw A4-aligned glyph data (high nibble first, each row
  * byte-aligned). Unlike cached RLE images, glyph boxes can have signed offsets. */
-static void cfw_texture_render_a4(uint8_t *shadow, uint32_t stride,
-                                  uint32_t panel_w, uint32_t panel_h,
+static void cfw_texture_render_a4(uint8_t *shadow, uint32_t stride, cfw_texture_clip clip,
                                   int32_t x0, int32_t y0,
                                   const uint8_t *bitmap,
                                   uint32_t width, uint32_t height,
@@ -245,13 +253,13 @@ static void cfw_texture_render_a4(uint8_t *shadow, uint32_t stride,
     uint32_t row_stride = (width >> 1) + 1u;
     for (uint32_t sy = 0; sy < height; sy++) {
         int32_t y = y0 + (int32_t)sy;
-        if (y < 0 || (uint32_t)y >= panel_h) continue;
+        if (y < clip.y0 || y >= clip.y1) continue;
         const uint8_t *row = bitmap + sy * row_stride;
         for (uint32_t sx = 0; sx < width; sx++) {
             int32_t x = x0 + (int32_t)sx;
             uint8_t packed = row[sx >> 1];
             uint8_t color = (sx & 1u) ? (packed & 0x0fu) : (packed >> 4);
-            if ((transparent && color == 0) || x < 0 || (uint32_t)x >= panel_w)
+            if ((transparent && color == 0) || x < clip.x0 || x >= clip.x1)
                 continue;
             uint8_t mapped = lut[color];
             uint8_t *dst = shadow + (uint32_t)y * stride + ((uint32_t)x >> 1);
@@ -262,79 +270,64 @@ static void cfw_texture_render_a4(uint8_t *shadow, uint32_t stride,
 }
 
 static void cfw_texture_add_rect(cfw_rectlist *rl, int32_t x, int32_t y,
-                                 uint32_t width, uint32_t height,
-                                 uint32_t panel_w, uint32_t panel_h) {
+                                 uint32_t width, uint32_t height, cfw_texture_clip clip) {
     int32_t right = x + (int32_t)width;
     int32_t bottom = y + (int32_t)height;
-    int32_t left = x < 0 ? 0 : x;
-    int32_t top = y < 0 ? 0 : y;
-    if (right > (int32_t)panel_w) right = (int32_t)panel_w;
-    if (bottom > (int32_t)panel_h) bottom = (int32_t)panel_h;
+    int32_t left = x < clip.x0 ? clip.x0 : x;
+    int32_t top = y < clip.y0 ? clip.y0 : y;
+    if (right > clip.x1) right = clip.x1;
+    if (bottom > clip.y1) bottom = clip.y1;
     if (left < right && top < bottom)
         rl_add(rl, (uint32_t)left, (uint32_t)top,
                (uint32_t)(right - left), (uint32_t)(bottom - top));
 }
 
-/* Mode 19 payload: [resource-id:u16][x:u16][y:u16][options:u8]. */
-static int cfw_texture_draw_image_shifted(uint8_t *shadow, uint32_t stride,
-                                  uint32_t panel_w, uint32_t panel_h,
-                                  const uint8_t *src, uint32_t len,
-                                  cfw_rectlist *rl, int32_t shift_x) {
-    if (shadow == 0 || src == 0 || len != 7u || !cfw_fb_lease_active()) return -1;
+/* Draw cached image `id` at destination (x, y), already shifted for depth.
+ * Display-list IMAGE calls decode their own coordinates (revision 35: they may
+ * be expressions) and come here directly. */
+static int cfw_texture_draw_image_clipped(uint8_t *shadow, uint32_t stride, cfw_texture_clip clip,
+                                          uint32_t id, int32_t x, int32_t y, uint8_t options,
+                                          cfw_rectlist *rl) {
+    if (shadow == 0 || !cfw_fb_lease_active()) return -1;
     customCfwContext *ctx = getCustomCfwContext();
     cfw_cached_image image;
     uint32_t size;
-    const uint8_t *resource = cfw_resource_get(ctx, rd16(src), &size);
+    const uint8_t *resource = cfw_resource_get(ctx, id, &size);
     if (!resource || !cfw_texture_image_at(resource, size, 0, &image)) return -1;
-    int32_t x = (int32_t)(int16_t)rd16(src + 2u) + shift_x;
-    int32_t y = (int32_t)(int16_t)rd16(src + 4u);
-    uint8_t options = src[6];
     uint8_t lut[16];
     cfw_texture_make_lut(options, lut);
-    cfw_texture_render(shadow, stride, panel_w, panel_h, x, y, &image,
+    cfw_texture_render(shadow, stride, clip, x, y, &image,
                        lut, (options & CFW_TEXTURE_OPT_TRANSPARENT) != 0);
-    cfw_texture_add_rect(rl, x, y, image.width, image.height, panel_w, panel_h);
+    cfw_texture_add_rect(rl, x, y, image.width, image.height, clip);
     return 0;
 }
 
-/* Mode 20 payload: [resource-id:u16][x:u16][y:u16][options:u8][strlen:u8][string].
- * The font starts with 96 little-endian uint16 resource-relative image offsets for characters
- * 32..127. Bytes 1..31 adjust x by -10..20; byte 0 and bytes >127 are invalid. */
-static int cfw_texture_draw_string_shifted(uint8_t *shadow, uint32_t stride,
-                                   uint32_t panel_w, uint32_t panel_h,
-                                   const uint8_t *src, uint32_t len,
-                                   cfw_rectlist *rl, int32_t shift_x) {
-    if (shadow == 0 || src == 0 || len < 8u || !cfw_fb_lease_active()) return -1;
-    uint32_t font_id = rd16(src);
-    uint8_t options = src[6];
-    uint32_t string_len = src[7u];
-    if (len != 8u + string_len) return -1;
+/* Draw `string` with font resource `font_id` from destination (x, y), already
+ * shifted for depth. The font starts with 96 little-endian uint16
+ * resource-relative image offsets for characters 32..127. Bytes 1..31 adjust x
+ * by -10..20; byte 0 and bytes >127 are invalid. */
+static int cfw_texture_draw_string_clipped(uint8_t *shadow, uint32_t stride, cfw_texture_clip clip,
+                                           uint32_t font_id, int32_t x, int32_t y, uint8_t options,
+                                           const uint8_t *string, uint32_t string_len,
+                                           cfw_rectlist *rl) {
+    if (shadow == 0 || (string == 0 && string_len) || !cfw_fb_lease_active()) return -1;
     customCfwContext *ctx = getCustomCfwContext();
     uint32_t size;
     const uint8_t *table = cfw_resource_get(ctx, font_id, &size);
     if (!table || size < 193u || table[0] != 1) return -1;
-    const uint8_t *string = src + 8u;
-    int32_t x = (int32_t)(int16_t)rd16(src + 2u) + shift_x;
-    int32_t y = (int32_t)(int16_t)rd16(src + 4u);
 
     /* Validate every character/table entry/RLE stream before drawing any glyph. */
-    int32_t scan_x = x;
     uint8_t lut[16];
     cfw_texture_make_lut(options, lut);
     int transparent = (options & CFW_TEXTURE_OPT_TRANSPARENT) != 0;
     for (uint32_t i = 0; i < string_len; i++) {
         uint32_t ch = string[i];
-        if (ch >= 1u && ch <= 31u) {
-            scan_x += (int32_t)ch - 11;
-            continue;
-        }
+        if (ch >= 1u && ch <= 31u) continue;
         if (ch < 32u || ch > 127u) return -1;
         uint32_t image_offset = rd16(table + 1u + (ch - 32u) * 2u);
         cfw_cached_image image;
         if (image_offset < 193u || !cfw_texture_image_at(table, size, image_offset, &image)) return -1;
-        scan_x += (int32_t)image.width;
     }
-    (void)scan_x;
 
     for (uint32_t i = 0; i < string_len; i++) {
         uint32_t ch = string[i];
@@ -346,9 +339,9 @@ static int cfw_texture_draw_string_shifted(uint8_t *shadow, uint32_t stride,
         cfw_cached_image image;
         /* Already validated above; cache contents cannot change in this handler. */
         if (image_offset < 193u || !cfw_texture_image_at(table, size, image_offset, &image)) return -1;
-        cfw_texture_render(shadow, stride, panel_w, panel_h, x, y, &image,
+        cfw_texture_render(shadow, stride, clip, x, y, &image,
                            lut, transparent);
-        cfw_texture_add_rect(rl, x, y, image.width, image.height, panel_w, panel_h);
+        cfw_texture_add_rect(rl, x, y, image.width, image.height, clip);
         x += (int32_t)image.width;
     }
     return 0;
@@ -448,8 +441,7 @@ static int cfw_builtin_glyph(const uint8_t *font, uint32_t letter,
  * It draws through the stock background 20 px font chain. Bytes 1..31 retain
  * mode 20's inline x adjustments (-10..20); all other text is strict UTF-8.
  * Supplying the next real glyph to LVGL applies the built-in default kerning. */
-static int cfw_builtin_draw_string_shifted(uint8_t *shadow, uint32_t stride,
-                                   uint32_t panel_w, uint32_t panel_h,
+static int cfw_builtin_draw_string_clipped(uint8_t *shadow, uint32_t stride, cfw_texture_clip clip,
                                    const uint8_t *src, uint32_t len,
                                    cfw_rectlist *rl, int32_t shift_x) {
     if (shadow == 0 || src == 0 || len < 6u || !cfw_fb_lease_active()) return -1;
@@ -516,10 +508,10 @@ static int cfw_builtin_draw_string_shifted(uint8_t *shadow, uint32_t stride,
         int32_t gy = y + (line_height - base_line) - (int32_t)box_h -
                      cfw_texture_s16(dsc + CFW_GLYPH_OFS_Y);
         if (bitmap) {
-            cfw_texture_render_a4(shadow, stride, panel_w, panel_h,
+            cfw_texture_render_a4(shadow, stride, clip,
                                   gx, gy, bitmap, box_w, box_h,
                                   lut, transparent);
-            cfw_texture_add_rect(rl, gx, gy, box_w, box_h, panel_w, panel_h);
+            cfw_texture_add_rect(rl, gx, gy, box_w, box_h, clip);
             CFW_FONT_RELEASE(dsc);
         }
         x += (int32_t)rd16(dsc + CFW_GLYPH_ADV_W);
@@ -527,14 +519,21 @@ static int cfw_builtin_draw_string_shifted(uint8_t *shadow, uint32_t stride,
     return 0;
 }
 
+/* Mode 19 payload: [resource-id:u16][x:s16][y:s16][options:u8]. */
 static int cfw_texture_draw_image(uint8_t *pixels,uint32_t stride,uint32_t w,uint32_t h,const uint8_t *p,uint32_t n,cfw_rectlist *rl) {
-    return cfw_texture_draw_image_shifted(pixels,stride,w,h,p,n,rl,0);
+    if (p == 0 || n != 7u) return -1;
+    return cfw_texture_draw_image_clipped(pixels, stride, cfw_texture_panel(w, h), rd16(p),
+                                          (int16_t)rd16(p + 2u), (int16_t)rd16(p + 4u), p[6], rl);
 }
 
+/* Mode 20 payload: [resource-id:u16][x:s16][y:s16][options:u8][strlen:u8][string]. */
 static int cfw_texture_draw_string(uint8_t *pixels,uint32_t stride,uint32_t w,uint32_t h,const uint8_t *p,uint32_t n,cfw_rectlist *rl) {
-    return cfw_texture_draw_string_shifted(pixels,stride,w,h,p,n,rl,0);
+    if (p == 0 || n < 8u || n != 8u + p[7]) return -1;
+    return cfw_texture_draw_string_clipped(pixels, stride, cfw_texture_panel(w, h), rd16(p),
+                                           (int16_t)rd16(p + 2u), (int16_t)rd16(p + 4u), p[6],
+                                           p + 8u, p[7], rl);
 }
 
 static int cfw_builtin_draw_string(uint8_t *pixels,uint32_t stride,uint32_t w,uint32_t h,const uint8_t *p,uint32_t n,cfw_rectlist *rl) {
-    return cfw_builtin_draw_string_shifted(pixels,stride,w,h,p,n,rl,0);
+    return cfw_builtin_draw_string_clipped(pixels,stride,cfw_texture_panel(w,h),p,n,rl,0);
 }
