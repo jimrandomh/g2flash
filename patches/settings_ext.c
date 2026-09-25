@@ -476,7 +476,8 @@ __attribute__((naked)) void faceclaw_evenai_display_entry(void) {
 int settings_send_wrapper(int type, int sid, unsigned char *buf, unsigned len) {
     if (sid == 9) {
         // 33: the color-remap draw call takes two LUTs, chosen by x+y parity, to dither.
-        static const char caps[] = "Faceclaw/33";
+        // 34: unchanged brightness no longer invokes the stock panel setter every second.
+        static const char caps[] = "Faceclaw/34";
         len = pb_append_bytes_field(buf, len, SETTINGS_RESPONSE_CAPACITY,
                                     100u, (const unsigned char *)caps,
                                     (unsigned)sizeof(caps) - 1u);

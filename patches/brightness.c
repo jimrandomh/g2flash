@@ -71,7 +71,7 @@ static int brightness_service(void) {
         uint8_t visible=(request>>8)&1, desired=request&255;
         uint16_t duration=(request>>9)&4095;
         if (!b->active) {
-            b->active=1; b->from=2; b->level=2; b->visible=0; b->target=2; b->last_apply=0;
+            b->active=1; b->from=2; b->level=2; b->visible=0; b->target=2; b->applied_level=0;
         }
         if (visible!=b->visible || (visible && desired!=b->desired)) {
             int wake=visible && !b->visible;
@@ -89,9 +89,13 @@ static int brightness_service(void) {
         b->waiting=0; b->started=now;
     }
     uint8_t level=b->waiting?b->level:brightness_interpolate(b->from,b->target,now-b->started,b->duration);
-    /* Reassert after stock panel recovery as well as at each changed step. */
-    if (BRIGHTNESS_DISPLAY_ON && (level!=b->level || !b->last_apply || now-b->last_apply>=1000)) {
-        brightness_apply(level); b->last_apply=now?now:1;
+    /* The stock provider briefly blanks the panel even for an identical level.
+     * Write only a changed output, or once when acquiring/restoring ownership.
+     * Track the actual write separately from fade progress while powered off. */
+    if (!BRIGHTNESS_DISPLAY_ON) {
+        b->applied_level=0;
+    } else if (level!=b->applied_level) {
+        brightness_apply(level); b->applied_level=level;
     }
     b->level=level;
     /* Keep idle ownership cheap: only active transitions need 25 Hz. */

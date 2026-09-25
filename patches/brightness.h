@@ -6,7 +6,7 @@
  * a command/timer callback. Level 2 is the intentional fade endpoint. */
 typedef struct {
     uint32_t request, timer;
-    uint32_t started, last_apply, present_epoch;
+    uint32_t started, applied_level, present_epoch; /* applied_level=0 until written, or after observed power-off */
     uint16_t wait_epoch;
     uint16_t duration;
     uint8_t active, visible, waiting, level, from, target, desired;
