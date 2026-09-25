@@ -191,6 +191,12 @@ external Battery report and Service Changed), existing display/ANCS/ring
 regressions, and the freestanding Thumb relocation checks. The build pins the
 exact donor SHA, reviewed stock bytes and the existing MRAM ceiling.
 
+The [keyboard emulator verification](keyboard-emulator.md) additionally passes
+eight isolated ARM scenarios against the exact committed image using
+PaulMcMillan/g2-firmware-emulator. It covers production trampolines, relay and
+failure handling with explicit stock-function shims. Full-system boot, real
+Bluetooth coexistence and iOS background delivery remain unverified.
+
 Hardware acceptance still required before calling this a supported firmware:
 
 1. Verify dormant boot, OTA availability, phone and R1 reconnect on both lenses.

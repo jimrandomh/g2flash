@@ -1,0 +1,64 @@
+{
+  "emulator_commit": "f30527c0b7e6fa6e9be06e7067e49468197fa258",
+  "image_sha256": "4c7bf9a552df1a42f26b3378425c7c2121ca4058fed7283ec863c3f8d2cd13fe",
+  "emulator_sources": {
+    "src/g2emu/cfw_symbols.py": "a10f80d1b966868671d8573e39fe1e4fadf78391dc4c5996e3e329d610ce3297",
+    "src/g2emu/unicorn_harness.py": "4affbed0541bf990b7399d30993c6793ed126bebc0875adeffa9474d0af7936c",
+    "src/g2emu/firmware.py": "fc929c6b4d22974a614372a8f5597ba3eb9a8e7b9b978240f4038e2c23cab5c1"
+  },
+  "unicorn_version": "2.1.4",
+  "python_version": "3.14.7",
+  "injected_sha256": "d19649b539d643eb0705197b87b19825d8e21c99b3271a47cd4b009aa7391cb2",
+  "hook_sites_verified": 5,
+  "scope": "isolated ARM execution with explicit synthetic 2.3.0.24 stock imports; not boot/radio/iOS qualification",
+  "results": [
+    {
+      "scenario": "dormant",
+      "passed": true,
+      "executed_instruction_addresses": 108,
+      "stock_import_calls": 4
+    },
+    {
+      "scenario": "pairing_and_routing",
+      "passed": true,
+      "executed_instruction_addresses": 1381,
+      "stock_import_calls": 200
+    },
+    {
+      "scenario": "io_capability",
+      "passed": true,
+      "executed_instruction_addresses": 1182,
+      "stock_import_calls": 58
+    },
+    {
+      "scenario": "att_requests",
+      "passed": true,
+      "executed_instruction_addresses": 1396,
+      "stock_import_calls": 251
+    },
+    {
+      "scenario": "fragments_overflow_and_oom",
+      "passed": true,
+      "executed_instruction_addresses": 1396,
+      "stock_import_calls": 240
+    },
+    {
+      "scenario": "timeout_and_disable",
+      "passed": true,
+      "executed_instruction_addresses": 1500,
+      "stock_import_calls": 158
+    },
+    {
+      "scenario": "scan_and_capacity",
+      "passed": true,
+      "executed_instruction_addresses": 1101,
+      "stock_import_calls": 80
+    },
+    {
+      "scenario": "allocation_failure",
+      "passed": true,
+      "executed_instruction_addresses": 224,
+      "stock_import_calls": 7
+    }
+  ]
+}
