@@ -475,8 +475,8 @@ __attribute__((naked)) void faceclaw_evenai_display_entry(void) {
 
 int settings_send_wrapper(int type, int sid, unsigned char *buf, unsigned len) {
     if (sid == 9) {
-        // 24: display-task panel queries/pokes/patterns, bounded result replies.
-        static const char caps[] = "Faceclaw/29";
+        // 32: restore the complete stock brightness sequence after the rev-31 regression.
+        static const char caps[] = "Faceclaw/32";
         len = pb_append_bytes_field(buf, len, SETTINGS_RESPONSE_CAPACITY,
                                     100u, (const unsigned char *)caps,
                                     (unsigned)sizeof(caps) - 1u);

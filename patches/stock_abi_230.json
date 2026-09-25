@@ -38,6 +38,12 @@
       "0x20065cf0": 1,
       "0x20065cf4": 1
     },
+    "brightness.c": {
+      "0x00470461": 1,
+      "0x004e3d9b": 1,
+      "0x20075e09": 1,
+      "0x20077818": 1
+    },
     "cfw_context.c": {
       "0x20000000": 1
     },
@@ -3479,6 +3485,58 @@
         }
       ],
       "evidence": "docs/panel-diagnostics.md; full donor guards added for callees, pointer literals and templates"
+    },
+    {
+      "old": null,
+      "new": "0x00470460",
+      "method": "donor-disassembly: brightness-control-investigation",
+      "uses": [
+        {
+          "file": "brightness.c",
+          "address": "0x00470461",
+          "count": 1
+        }
+      ],
+      "stock_guard_size": 632
+    },
+    {
+      "old": null,
+      "new": "0x004e3d9a",
+      "method": "donor-disassembly: brightness-control-investigation",
+      "uses": [
+        {
+          "file": "brightness.c",
+          "address": "0x004e3d9b",
+          "count": 1
+        }
+      ],
+      "stock_guard_size": 92
+    },
+    {
+      "old": null,
+      "new": "0x20075e09",
+      "method": "donor-disassembly: brightness-control-investigation",
+      "uses": [
+        {
+          "file": "brightness.c",
+          "address": "0x20075e09",
+          "count": 1
+        }
+      ],
+      "stock_guard_size": 10
+    },
+    {
+      "old": null,
+      "new": "0x20077818",
+      "method": "donor-disassembly: brightness-control-investigation",
+      "uses": [
+        {
+          "file": "brightness.c",
+          "address": "0x20077818",
+          "count": 1
+        }
+      ],
+      "stock_guard_size": 4
     }
   ],
   "guards": [
@@ -4021,6 +4079,36 @@
       "address": "0x007a071c",
       "bytes": "00000000000000000100000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000010000000000000001000000000000000000000001000000000000000100000000000000010000000000000000000000",
       "label": "Panel diagnostics: JBD command/data/read/addressed-read request templates"
+    },
+    {
+      "address": "0x00470460",
+      "bytes": "2de9f84185b004000f001600652c01d3642402e0022c00d20224fff707ff0500002000201f2c31d200203860a5f24d11a01e41430e311c20b1fbf0f707f24d173760cdf754f980070dd5049503970294b54801904ff409700090b44b834a84490320cdf7ebfbcdf742f9c00703d4cdf73ef9400708d5ae490195009723000a005ff04c60ccf786fd002030e0242000fb04f0a0f215404621b0fbf1f8c7f800803560cdf724f980070ed50495cdf80c800294a048019040f22e2000909b4b6b4a6b490320cdf7bafbcdf711f9c00703d4cdf70df9400709d597490195cdf8008023000a005ff04c60ccf754fd002006b0bde8f0811859770000e0dd45520000004c0000003f0000008c7d0720f45f7200789f7900b4a77000989f7900002b7b0030b585b0f5f7e2fb01281dd0cdf7dff880070ad58148019040f236200090804b4a4a4b490220cdf779fbcdf7d0f8c00703d4cdf7ccf8400705d57a490a005ff00060ccf717fd69e000205b4c2078002802d151484468ffe7a07a01283ed1e06825692d185b2d00db5a257ff05900854200da0500cdf7abf880070fd5049520690390e06802906848019040f249200090634b2e4a2e490320cdf740fbcdf797f8c00703d4cdf793f8400709d55f4a019520690090e36811005ff04c60ccf7dafc01204af060fc5a48d0e90023cde900230095694601204af0dbfc1fe0cdf777f880070ad55348019040f24f2000904c4b164a17490320cdf711fbcdf768f8c00703d4cdf764f8400705d54b490a005ff04060ccf7affc01204af072fc05b030bdb89f790010b50400032c01d30224ffe7f5f750fbc0b2012802d14048005d01e03f48005d10bd00006ca4730040fe7000b4b07b000d2801d3",
+      "label": "brightness: calibrated level to current/luminance conversion"
+    },
+    {
+      "address": "0x004e3d9a",
+      "bytes": "1cb5dff8c8442368002b23d159f7d2fc80070dd5dff8bc040190d1200090dff82035dff8b424dff8b414012059f769ff59f7c0fcc00703d459f7bcfc400706d5dff8a0140a005ff0806059f706f95ff0ff3002e023689b69984716bd",
+      "label": "brightness: ULED brightness provider wrapper"
+    },
+    {
+      "address": "0x00470020",
+      "bytes": "dff81417487000207047",
+      "label": "brightness: saved level byte getter"
+    },
+    {
+      "address": "0x0047b08c",
+      "bytes": "18780720",
+      "label": "brightness: display-task on/off flag literal"
+    },
+    {
+      "address": "0x00470738",
+      "bytes": "085e0720",
+      "label": "brightness: settings base literal (level at +1)"
+    },
+    {
+      "address": "0x0047a88e",
+      "bytes": "0dd1002001900020009001aa69460a98f5f7dffd009a01990a9869f077fa",
+      "label": "brightness: display event 4 conversion/provider calling convention"
     }
   ],
   "patch_sites": [

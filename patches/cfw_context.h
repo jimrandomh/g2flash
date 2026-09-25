@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include "message_transport.h"
 #include "panel.h"
+#include "brightness.h"
 
 /* Persistent CFW-owned state, independent of EvenHub image containers. The
  * full-panel shadow is an owned heap allocation. This context is anchored in
@@ -138,6 +139,7 @@ typedef struct {
     uint32_t timer_paint_average_us; /* published to the display-task debug overlay */
     uint8_t timer_paint_count;
     uint8_t timer_paint_next;
+    cfw_brightness_state brightness;
 } customCfwContext;
 
 #define CFW_CTX_SLOT  0x2029f59cU    /* first word of the CFW-reserved TLSF tail */

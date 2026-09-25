@@ -166,6 +166,7 @@ typedef enum {
     /* [29][count16]{[id16][width16][height16]} Create zeroed raw image surfaces.
      * Each resource is at most 64 KiB. Recreating an identical existing surface preserves its pixels. */
     CFW_MSG_CREATE_SURFACE = 29,
+    CFW_MSG_BRIGHTNESS = 30,
 } cfw_message_type;
 
 /* The high bit historically selected separate lens coordinates in bbox/copy messages.
@@ -289,6 +290,7 @@ static int image_dispatch(const uint8_t *src, uint32_t srclen, cfw_rectlist *rl)
 static int is_composition_message(const uint8_t *src, uint32_t srclen) {
     if (src == 0 || srclen == 0) return 0;
     cfw_message_type mode = (cfw_message_type)(src[0] & CFW_MSG_TYPE_MASK);
+
     return mode == CFW_MSG_CLEANUP || mode == CFW_MSG_PRESENT;
 }
 
@@ -423,6 +425,8 @@ static int image_dispatch(const uint8_t *src, uint32_t srclen, cfw_rectlist *rl)
     if (src == 0 || srclen < 1) return -1;
 
     cfw_message_type mode = (cfw_message_type)(src[0] & CFW_MSG_TYPE_MASK);
+
+    if (mode == CFW_MSG_BRIGHTNESS) return brightness_control(src, srclen);
 
     /* A new staged frame must not leak through an animation redraw before
      * its PRESENT. All of these paths execute under image_mutex. */
@@ -607,6 +611,7 @@ static int image_dispatch(const uint8_t *src, uint32_t srclen, cfw_rectlist *rl)
             return 0;
         }
         if(srclen!=1) return -1;
+        __atomic_add_fetch(&ctx->brightness.present_epoch,1,__ATOMIC_RELEASE);
         return cfw_animation_present(ctx,rl,1);
     }
     return -1;
@@ -710,6 +715,7 @@ static int cfw_cleanup_session(void) {
 
     /* Give the ambient light sensor back to the stock auto-brightness machine. */
     als_cleanup_session();
+    brightness_cleanup();
 
     int compass_was_forwarding = ctx->compass_forward != 0;
     ctx->compass_forward = 0;
@@ -741,6 +747,11 @@ static int cfw_cleanup_session(void) {
  * overwriting it with stale LVGL content. Lease release/expiry restores the transparent stock pass-through. */
 void display_copy_hook(void) {
     panel_service();
+    if (brightness_service()) {
+        customCfwContext *ctx=peekCustomCfwContext();
+        if (ctx) { ctx->direct_pending=0; ctx->direct_shadow=0; }
+        return;
+    }
     customCfwContext *ctx = peekCustomCfwContext();
     if (ctx && ctx->panel.pattern) {
         ctx->direct_pending = 0;

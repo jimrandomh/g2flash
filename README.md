@@ -369,3 +369,31 @@ Thanks to kalanihelekunihi for [evenRealities-openCFW](https://github.com/kalani
 CFW `ringbat17` exposes the stock R1 battery cache in settings field 106 and
 read-only image-handler mode 17. Faceclaw shows it as `R1` in the top bar.
 See [the wire contract and stock-firmware evidence](docs/ring-battery.md).
+
+### Transient brightness (Faceclaw/32)
+
+Private mode 30 is `[30, 1, level, visible, duration_lo, duration_hi]`:
+`level` is 2–100, `visible` is 0/1, and duration is 0–3000 ms (little endian).
+It requires the framebuffer lease. Faceclaw pairs it with passive ALS mode 16,
+which suppresses stock auto adjustment, and computes the configurable light
+curve on the phone. Mode 30 does not save stock settings or modify ALS learning.
+
+Panel writes run in the existing display-copy hook using the donor's complete
+calibrated brightness conversion/provider, including display enable and SYNC.
+Revision 32 restores the hardware path from revision 30 after revision 31's
+register-only writer caused the display to remain dark on hardware. Matching
+brightness registers do not establish that the panel is displaying. The
+injected blob is byte-identical to revision 30 except for the capability string.
+The small brightness-step flicker may return; the flicker optimization is
+withdrawn pending a validated panel update sequence.
+
+A local smoothstep fade runs every 40 ms. Sleep retains the physical frame
+until brightness reaches 2, then clears it; wake waits for a subsequent inbound
+PRESENT before starting. Duplicate targets are idempotent; new targets reverse
+from the current level. Lease expiry or cleanup restores saved stock brightness.
+Idle ownership reapplies brightness once a second, including after stock panel
+recovery. Transport ACKs indicate command acceptance, not fade completion or
+physical readback.
+
+Host tests cover interpolation, reversal, ordering, malformed commands, and
+cleanup. Device validation of brightness/fade timing is still required.

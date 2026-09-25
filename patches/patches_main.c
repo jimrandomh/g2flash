@@ -34,6 +34,7 @@
 #include "zlib_glue.c"
 #include "message_transport.c"
 #include "panel.c"
+#include "brightness.c"
 #include "compass.c"
 #include "ring_battery.c"
 #include "settings_ext.c"
