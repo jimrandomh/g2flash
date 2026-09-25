@@ -475,8 +475,8 @@ __attribute__((naked)) void faceclaw_evenai_display_entry(void) {
 
 int settings_send_wrapper(int type, int sid, unsigned char *buf, unsigned len) {
     if (sid == 9) {
-        // 32: restore the complete stock brightness sequence after the rev-31 regression.
-        static const char caps[] = "Faceclaw/32";
+        // 33: the color-remap draw call takes two LUTs, chosen by x+y parity, to dither.
+        static const char caps[] = "Faceclaw/33";
         len = pb_append_bytes_field(buf, len, SETTINGS_RESPONSE_CAPACITY,
                                     100u, (const unsigned char *)caps,
                                     (unsigned)sizeof(caps) - 1u);

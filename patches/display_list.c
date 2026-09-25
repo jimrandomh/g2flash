@@ -1,4 +1,3 @@
-/* Revision 29. All calls inherit a target; a call-local override is scoped. */
 #include "resource_cache.h"
 
 static int cfw_draw_right_lens(void);
@@ -508,45 +507,54 @@ static int cfw_draw_op_text(const cfw_draw_env *env, cfw_reader r, cfw_draw_targ
                                            call, call_length, &rl, target.shift_x);
 }
 
-/* Expand the nibble LUT once; whole destination bytes then need one lookup.
- * Keep this leaf out of the recursive walker's stack frame. */
+/* Pixels whose target x+y is even use the first LUT, odd ones the second. Rows
+ * sharing a parity are remapped in one pass, after expanding that parity's
+ * nibble LUTs once so whole destination bytes need one lookup. Rebuilding the
+ * table per pass keeps this leaf's stack at one 256-byte table; keep it out of
+ * the recursive walker's stack frame. */
 __attribute__((noinline)) static void cfw_draw_remap_rows(cfw_draw_target target,
-        uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint8_t *lut) {
+        uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint8_t *luts) {
     int32_t left = (int32_t)x + target.shift_x;
     int32_t right = left + (int32_t)w;
     if (left < 0) left = 0;
     if (right > (int32_t)target.width) right = target.width;
     if (left >= right) return;
     uint8_t packed_lut[256];
-    for (uint32_t hi = 0; hi < 16; hi++) {
-        uint32_t upper = (lut[hi >> 1] >> ((hi & 1) ? 0 : 4)) & 15u;
-        for (uint32_t lo = 0; lo < 16; lo++) {
-            uint32_t lower = (lut[lo >> 1] >> ((lo & 1) ? 0 : 4)) & 15u;
-            packed_lut[(hi << 4) | lo] = (upper << 4) | lower;
+    #pragma clang loop unroll(disable)
+    for (uint32_t parity = 0; parity < 2; parity++) {
+        /* The high nibble is the even-x pixel, so it takes the even LUT on even rows. */
+        const uint8_t *hi_lut = luts + (parity ? 8 : 0), *lo_lut = luts + (parity ? 0 : 8);
+        for (uint32_t hi = 0; hi < 16; hi++) {
+            uint32_t upper = (hi_lut[hi >> 1] >> ((hi & 1) ? 0 : 4)) & 15u;
+            for (uint32_t lo = 0; lo < 16; lo++) {
+                uint32_t lower = (lo_lut[lo >> 1] >> ((lo & 1) ? 0 : 4)) & 15u;
+                packed_lut[(hi << 4) | lo] = (upper << 4) | lower;
+            }
         }
-    }
-    for (uint32_t yy = y; yy < y + h; yy++) {
-        uint8_t *row = target.pixels + yy * target.stride;
-        int32_t start = left;
-        if (start & 1) {
-            uint8_t *p = row + (start >> 1);
-            *p = (*p & 0xf0u) | (packed_lut[*p] & 15u);
-            start++;
+        for (uint32_t yy = y + ((y ^ parity) & 1); yy < y + h; yy += 2) {
+            uint8_t *row = target.pixels + yy * target.stride;
+            int32_t start = left;
+            if (start & 1) {
+                uint8_t *p = row + (start >> 1);
+                *p = (*p & 0xf0u) | (packed_lut[*p] & 15u);
+                start++;
+            }
+            uint8_t *p = row + (start >> 1), *end = row + (right >> 1);
+            while (p < end) { *p = packed_lut[*p]; p++; }
+            if (start < right && (right & 1)) *p = (*p & 15u) | (packed_lut[*p] & 0xf0u);
         }
-        uint8_t *p = row + (start >> 1), *end = row + (right >> 1);
-        while (p < end) { *p = packed_lut[*p]; p++; }
-        if (start < right && (right & 1)) *p = (*p & 15u) | (packed_lut[*p] & 0xf0u);
     }
 }
 
-/* [x16][y16][w16][h16][lut: sixteen packed nibbles] */
+/* [x16][y16][w16][h16][even-parity lut: sixteen packed nibbles][odd-parity lut]
+ * Parity is of the destination pixel's x+y, so two different LUTs dither. */
 static int cfw_draw_op_remap_colors(const cfw_draw_env *env, cfw_reader r, cfw_draw_target target) {
     uint32_t x = READ_U16(r);
     uint32_t y = READ_U16(r);
     uint32_t w = READ_U16(r);
     uint32_t h = READ_U16(r);
-    const uint8_t *lut = READ_BYTES(r, 8);
-    if (!lut || !READ_DONE(r)) {
+    const uint8_t *luts = READ_BYTES(r, 16);
+    if (!luts || !READ_DONE(r)) {
         return -1;
     }
     if (!cfw_draw_rect_in_target(&target, x, y, w, h)) {
@@ -555,7 +563,7 @@ static int cfw_draw_op_remap_colors(const cfw_draw_env *env, cfw_reader r, cfw_d
     if (!env->apply) {
         return 0;
     }
-    cfw_draw_remap_rows(target, x, y, w, h, lut);
+    cfw_draw_remap_rows(target, x, y, w, h, luts);
     return 0;
 }
 
