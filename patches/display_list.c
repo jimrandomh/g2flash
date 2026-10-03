@@ -34,6 +34,8 @@ typedef enum {
 } cfw_draw_bbox_flags;
 
 #define DRAW_ROUNDED_RECT_NO_BORDER 16u
+/* Revision 36: no trailing outside-color byte, so the corners stay as they are. */
+#define DRAW_ROUNDED_RECT_NO_OUTSIDE 16u
 
 /* `clip` (revision 35) narrows every write to a rectangle in shifted target
  * pixels. It is only meaningful while `clipped` is set, so zero-initialized
@@ -609,8 +611,11 @@ static int cfw_draw_op_remap_colors(const cfw_draw_env *env, cfw_reader r, cfw_d
     return 0;
 }
 
-/* [x extended][y extended][w16][h16][radius16][fill8][border8]
- * The fill is max-blended over existing pixels; border DRAW_ROUNDED_RECT_NO_BORDER draws no outline. */
+/* [x extended][y extended][w16][h16][radius16][fill8][border8][outside8, optional]
+ * The fill is max-blended over existing pixels, so fill 0 leaves the interior
+ * as it is; border DRAW_ROUNDED_RECT_NO_BORDER draws no outline. The optional
+ * outside color (revision 36) overwrites the bounding box's pixels outside the
+ * rounded shape, e.g. to cut square content underneath to the corners. */
 static int cfw_draw_op_rounded_rect(const cfw_draw_env *env, cfw_reader r, cfw_draw_target target) {
     cfw_expression_frame frame={env->walk->elapsed_ms,0};
     int32_t x=cfw_read_extended(&r,&frame);
@@ -620,6 +625,13 @@ static int cfw_draw_op_rounded_rect(const cfw_draw_env *env, cfw_reader r, cfw_d
     uint32_t radius = READ_U16(r);
     uint32_t fill = READ_U8(r);
     uint32_t border = READ_U8(r);
+    uint32_t outside = DRAW_ROUNDED_RECT_NO_OUTSIDE;
+    if (READ_IN_BOUNDS(r) && READ_REMAINING(r) == 1) {
+        outside = READ_U8(r);
+        if (outside > 15) {
+            return -1;
+        }
+    }
     if (!READ_DONE(r)) {
         return -1;
     }
@@ -645,6 +657,10 @@ static int cfw_draw_op_rounded_rect(const cfw_draw_env *env, cfw_reader r, cfw_d
         outer_inset = cfw_draw_rounded_inset(yy, h, radius, outer_inset);
         int32_t left = x + outer_inset, right = x + (int32_t)w - outer_inset;
         uint8_t *row = target.pixels + (y + yy) * target.stride;
+        if (outside != DRAW_ROUNDED_RECT_NO_OUTSIDE) {
+            cfw_draw_rounded_span(row, b.x0, b.x1, x, left, outside, 0);
+            cfw_draw_rounded_span(row, b.x0, b.x1, right, x + (int32_t)w, outside, 0);
+        }
         if (border == DRAW_ROUNDED_RECT_NO_BORDER) {
             cfw_draw_rounded_span(row, b.x0, b.x1, left, right, fill, 1);
         } else if (w <= 2 || h <= 2 || yy == 0 || yy == (int32_t)h - 1) {

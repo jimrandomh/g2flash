@@ -478,7 +478,8 @@ int settings_send_wrapper(int type, int sid, unsigned char *buf, unsigned len) {
         // 33: the color-remap draw call takes two LUTs, chosen by x+y parity, to dither.
         // 34: unchanged brightness no longer invokes the stock panel setter every second.
         // 35: draw calls take a clip rect (flag 4); image/text x/y may be expressions.
-        static const char caps[] = "Faceclaw/35";
+        // 36: rounded rectangles take an optional outside color for the corners.
+        static const char caps[] = "Faceclaw/36";
         len = pb_append_bytes_field(buf, len, SETTINGS_RESPONSE_CAPACITY,
                                     100u, (const unsigned char *)caps,
                                     (unsigned)sizeof(caps) - 1u);
