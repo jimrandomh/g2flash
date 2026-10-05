@@ -72,8 +72,8 @@ APP_LOAD_ADDR = 0x00438000    # where the bootloader programs the main app (XIP)
 MRAM_END      = 0x00800000    # end of Apollo510b 4 MB internal MRAM
 OTA_FLAG_ADDR = 0x007FE000    # OTA magic word (last 8 KB) -- app must stay below
 APP_PREAMBLE  = 0x20          # 32-byte preamble; bootloader programs payload[0x20:]
-# Conservative ceiling: leave the top ~56 KB below the flag for BLE-bond/KV NV.
-APP_MAX_END   = 0x007F0000
+# Conservative ceiling: leave some space below the max size
+APP_MAX_END   = 0x007F8000
 
 # how far to go: 'discover' | 'heartbeat' | 'file_check' | 'flash' | 'done'
 STAGES = ["discover", "heartbeat", "file_check", "flash", "done"]
