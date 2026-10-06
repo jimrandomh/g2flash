@@ -479,7 +479,8 @@ int settings_send_wrapper(int type, int sid, unsigned char *buf, unsigned len) {
         // 34: unchanged brightness no longer invokes the stock panel setter every second.
         // 35: draw calls take a clip rect (flag 4); image/text x/y may be expressions.
         // 36: rounded rectangles take an optional outside color for the corners.
-        static const char caps[] = "Faceclaw/36";
+        // 37: image mode 31 enters EvenHub with the fixed startup page and always ACKs.
+        static const char caps[] = "Faceclaw/37";
         len = pb_append_bytes_field(buf, len, SETTINGS_RESPONSE_CAPACITY,
                                     100u, (const unsigned char *)caps,
                                     (unsigned)sizeof(caps) - 1u);

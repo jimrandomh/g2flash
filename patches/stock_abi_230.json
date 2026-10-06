@@ -71,6 +71,10 @@
       "0x2020219c": 2,
       "0x2027299c": 1
     },
+    "evenhub_enter.c": {
+      "0x00465d4d": 1,
+      "0x00465f11": 1
+    },
     "gesture_fwd.c": {
       "0x004447e9": 1,
       "0x0045decb": 1,
@@ -330,6 +334,11 @@
           "count": 1
         },
         {
+          "file": "evenhub_enter.c",
+          "address": "0x00465d4d",
+          "count": 1
+        },
+        {
           "file": "message_transport.c",
           "address": "0x00465d4d",
           "count": 1
@@ -362,6 +371,11 @@
       "new": "0x00465f10",
       "method": "strict-signature",
       "uses": [
+        {
+          "file": "evenhub_enter.c",
+          "address": "0x00465f11",
+          "count": 1
+        },
         {
           "file": "message_transport.c",
           "address": "0x00465f11",

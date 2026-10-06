@@ -37,6 +37,7 @@
 #include "brightness.c"
 #include "compass.c"
 #include "ring_battery.c"
+#include "evenhub_enter.c"
 #include "settings_ext.c"
 #include "mic_control.c"
 #include "als_sensor.c"

@@ -167,6 +167,10 @@ typedef enum {
      * Each resource is at most 64 KiB. Recreating an identical existing surface preserves its pixels. */
     CFW_MSG_CREATE_SURFACE = 29,
     CFW_MSG_BRIGHTNESS = 30,
+    /* [31] Enter EvenHub showing Faceclaw's fixed startup page, whatever the
+     * display state was (see evenhub_enter.c). Idempotent; replaces the phone's
+     * stock CreateStartUpPage, which never ACKs if the page already exists. */
+    CFW_MSG_ENTER_EVENHUB = 31,
 } cfw_message_type;
 
 /* The high bit historically selected separate lens coordinates in bbox/copy messages.
@@ -278,6 +282,7 @@ static void mic_cleanup_session(void);   /* mic_control.c (same TU): mic hw + le
 static void als_cleanup_session(void);   /* als_sensor.c (same TU): passive ALS teardown */
 int ring_battery_control(const uint8_t *src, uint32_t srclen); /* mode 17 */
 int als_control(const uint8_t *src, uint32_t srclen); /* als_sensor.c: mode 16 */
+int evenhub_enter_control(const uint8_t *src, uint32_t srclen); /* evenhub_enter.c: mode 31 */
 
 static int decode_image_rle(const uint8_t *src, uint32_t size, uint8_t *base, uint32_t stride, uint32_t rowbytes, uint32_t rows);
 static void present_composition(uint32_t w, uint32_t h, cfw_rectlist *rl);
@@ -574,6 +579,8 @@ static int image_dispatch(const uint8_t *src, uint32_t srclen, cfw_rectlist *rl)
     if (mode == CFW_MSG_RING_BATTERY) {
         return ring_battery_control(src, srclen);
     }
+
+    if (mode == CFW_MSG_ENTER_EVENHUB) return evenhub_enter_control(src, srclen);
 
     if (mode == CFW_MSG_AMBIENT_LIGHT) {
         /* Ambient light sensor query / passive polling control (no display change).
