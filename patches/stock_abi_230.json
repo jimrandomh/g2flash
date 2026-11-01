@@ -76,7 +76,6 @@
       "0x00465f11": 1
     },
     "gesture_fwd.c": {
-      "0x004447e9": 1,
       "0x0045decb": 1,
       "0x00467291": 1,
       "0x004ef959": 1,
@@ -278,19 +277,6 @@
         }
       ],
       "stock_guard_size": 44
-    },
-    {
-      "old": "0x004448e0",
-      "new": "0x004447e8",
-      "method": "strict-signature",
-      "uses": [
-        {
-          "file": "gesture_fwd.c",
-          "address": "0x004447e9",
-          "count": 1
-        }
-      ],
-      "stock_guard_size": 34
     },
     {
       "old": "0x00458382",
@@ -3609,11 +3595,6 @@
       "label": "stock dependency 00443048 -> 00443048"
     },
     {
-      "address": "0x004447e8",
-      "bytes": "80b528f0c5fd012807d028f059fe012803d02af02ffc012801d1012000e0002002bd",
-      "label": "stock dependency 004448e0 -> 004447e8"
-    },
-    {
       "address": "0x0045855e",
       "bytes": "70b5040000256c4e4ff47a713068eaf710fd002809d121006948006844f018fc05003068eaf738fd0ae0654821f0b0fc40f23a4254494da044f053fdaff30080280070bd",
       "label": "stock dependency 00458382 -> 0045855e"
@@ -4211,6 +4192,11 @@
       "write_size": 2
     },
     {
+      "address": "0x0047c1e4",
+      "old": "fff754fb",
+      "write_size": 4
+    },
+    {
       "address": "0x0048dae8",
       "old": "5ff43432",
       "write_size": 4
@@ -4309,6 +4295,10 @@
     {
       "old": "0x0045e6e8",
       "reason": "Removed idle-mode dependency."
+    },
+    {
+      "old": "0x004448e0",
+      "reason": "Faceclaw/38: the idle policy's busy check is no longer read; head-tilt records are forwarded from the UI dispatcher hook, which gates on the head-up switch only."
     }
   ],
   "assembly_targets": {
@@ -4442,7 +4432,7 @@
     {
       "old": "0x0045f006",
       "new": "0x00467cf4",
-      "description": "bl headup_gate (head-up sensor event -> EvenHub sys event 12 under lease)",
+      "description": "bl headup_gate (idle input gate: tap/long/release -> field-102 events, stock result kept)",
       "old_callee": "0x0046f136",
       "new_callee": "0x0046f402"
     },

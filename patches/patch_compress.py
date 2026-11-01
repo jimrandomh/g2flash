@@ -24,7 +24,8 @@ Build a CFW image for g2_2.3.0.24 with:
       mic_control.c for the contract and its hardware validation gate, and
   (11) LE 2M support, a 7.5 ms / latency-0 fast connection profile, and persistent
       fast-mode requests so the stock 60-second slow-mode timer cannot throttle
-      custom image traffic.
+      custom image traffic; the "already fast" test only accepts a live link of
+      <= 11.25 ms with latency 0 (ble_link.c), so 15/30 ms links get the request.
 
 REBASED 2.2.9.22 -> 2.3.0.24 (2026-09-19). See docs/firmware-rebase-2.3.0.md
 and stock_abi_230.json for the complete site inventory and behavior review.
@@ -85,10 +86,14 @@ BLE_2M_SITE = (0x4c9b3c, "7c205070")  # movs r0,#0x7c; strb r0,[r2,#1]
 BLE_FAST_INTERVAL_SITE = (0x7bcba0, "0c0018000000580205000000")
 # _connectParamReq_impl saves mode in r5 and the new generation argument in r7.
 # Force 0xa3 (fast), including when the delayed 0xa4 (slow) request arrives.
-# Keep the normal connection validation, already-fast check and deferral logic.
+# Keep the normal connection validation and deferral logic.
 # This intentionally applies while idle too; Android can still negotiate another
 # interval, and the phone must request 2M PHY to use the newly exposed feature.
 BLE_FORCE_FAST_SITE = (0x47bdb4, "05000f00f9f722fb")
+# The fast branch's "already fast" test (stock: interval < 31.25 ms and latency
+# 0) ends the request without sending it, so a 15/30 ms link was never asked for
+# 7.5 ms. ble_link.c's classifier only accepts <= 11.25 ms with latency 0.
+BLE_CLASSIFY_BL_SITE = (0x47c1e4, "fff754fb")  # bl 0x47b890 link classifier
 
 # Reserve the final 1 KiB of the stock primary TLSF arena for CFW-owned fixed
 # state. Stock initializes [0x2027299c,0x2029f99c) with size 0x2d000 at
@@ -169,14 +174,14 @@ DISPLAY_START_BL_SITES = {
     0x467d68: ("02f083fc", "faceclaw_display_start"),
     0x467e28: ("02f023fc", "faceclaw_display_start_headup"),
 }
-# The stock idle gate call in that same touch branch. The dispatcher frees the
-# message when the gate fails -- which it does while an EvenHub page is on
-# screen, so a soft-sleeping phone never hears about a head-up. Wrap the gate
-# call: the stock result is passed through unchanged and a head-up is also
-# forwarded as EvenHub sys event 12 under the Faceclaw framebuffer lease.
+# The stock idle gate call in that same touch branch: SVC_Settings_AppLaunchCheck,
+# which fails only for OTA, silent mode or product test. Wrap it: the stock
+# result is passed through unchanged, and when it returns 1 idle tap /
+# long-press / release are forwarded (2.3.0 removed the separate idle-mode
+# call). Head-tilt records only reach this dispatcher with no page up; with a
+# page up they go through the UI dispatcher (GESTURE_RING_PRESS_SITE below),
+# which forwards head up / head down as sys events 12 / 15 (Faceclaw/38).
 HEADUP_GATE_BL_SITE = (0x467cf4, "07f085fb")  # bl FUN_0046f402 -> headup_gate
-# 2.3.0 removed the separate idle-mode call; this same hook now forwards idle
-# tap / long-press / release when the stock gate returns 1.
 # Menu remains tap-then-long-press. Plain subtype 3 posts UI event 8;
 # subtype 0xe posts release event 0x4a; the new subtype 0x11 starts at 0x44499c.
 # r6 holds the raw input record at all three sites. Hook the state getter before
@@ -459,6 +464,9 @@ def layout(img):
          "fast connection interval min=max=7.5 ms; latency remains 0"),
         (g2f(BLE_FORCE_FAST_SITE[0]), BLE_FORCE_FAST_SITE[1], "a3 25",
          "_connectParamReq_impl: force requested mode to fast (0xa3); disables idle slow requests"),
+        (g2f(BLE_CLASSIFY_BL_SITE[0]), BLE_CLASSIFY_BL_SITE[1],
+         enc_bl(BLE_CLASSIFY_BL_SITE[0], base + _fn(built, "ble_classify_link")["offset"]),
+         "bl ble_classify_link (only a <= 11.25 ms / latency-0 link is 'already fast')"),
         (g2f(PRIMARY_TLSF_SIZE_SITE[0]), PRIMARY_TLSF_SIZE_SITE[1],
          PRIMARY_TLSF_CFW_SIZE,
          "reserve final 1 KiB of primary TLSF arena for CFW context anchor"),
@@ -473,11 +481,11 @@ def layout(img):
           for site, (orig, name) in DISPLAY_START_BL_SITES.items()],
         (g2f(HEADUP_GATE_BL_SITE[0]), HEADUP_GATE_BL_SITE[1],
          enc_bl(HEADUP_GATE_BL_SITE[0], headup_gate_addr),
-         "bl headup_gate (head-up sensor event -> EvenHub sys event 12 under lease)"),
+         "bl headup_gate (idle input gate: tap/long/release -> field-102 events, stock result kept)"),
         # Source-qualified long-press, tap-then-long-press, and release forwarding.
         (g2f(GESTURE_RING_PRESS_SITE[0]), GESTURE_RING_PRESS_SITE[1],
          enc_bl(GESTURE_RING_PRESS_SITE[0], ring_press_addr),
-         "bl gesture_ring_press_mode (observe ring touch-down, preserve stock dispatch)"),
+         "bl gesture_ring_press_mode (ring touch-down 14, head up 12 / down 15; stock dispatch preserved)"),
         (g2f(GESTURE_PRESS_SITE[0]), GESTURE_PRESS_SITE[1],
          enc_bl(GESTURE_PRESS_SITE[0], press_addr),
          "bl gesture_press (owned event 9 before stock menu gate)"),

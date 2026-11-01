@@ -215,8 +215,8 @@ static void faceclaw_send_gesture_event(customCfwContext *ctx, unsigned event, u
  * so unlike the double-tap wake there is no CLAIM/fallback handshake, and the
  * stock branch still runs (and frees the record) exactly as before.
  *
- * 2.3.0 removed the old mode check. headup_gate_impl now calls this helper
- * only when the stock idle gate returns 1, before the record is freed:
+ * 2.3.0 removed the old mode check. headup_gate_impl (gesture_fwd.c) calls this
+ * helper only when the stock idle gate returns 1, before the record is freed:
  * u16 raw source at +2 (0/1 = temple touchpads, 4 = ring), u32 gesture subtype
  * at +4 -- the same record the UI dispatcher reads (from +2) while an app is
  * running. The caller preserves the stock gate result and register state. */
@@ -438,7 +438,8 @@ __attribute__((naked)) void faceclaw_evenai_display_entry(void) {
 //   3 -> head-up wake reported as field-102 event 5 (was indistinguishable
 //        from the double-tap event 1), and the IMU head-up forwarded as EvenHub
 //        sys event 12 while an EvenHub page is on screen (soft sleep) under the
-//        framebuffer lease (gesture_fwd.c headup_gate).
+//        framebuffer lease (gesture_fwd.c; since Faceclaw/38 from the UI
+//        dispatcher hook, plus head-down as sys event 15).
 //   4 -> private SID-f0 packet probe before TPL reconstruction; latest payload
 //        size and CRC-16 are shown in the debug overlay.
 //   5 -> SID-f0 options byte selects lenses; bridge forwarding and per-lens
@@ -480,7 +481,10 @@ int settings_send_wrapper(int type, int sid, unsigned char *buf, unsigned len) {
         // 35: draw calls take a clip rect (flag 4); image/text x/y may be expressions.
         // 36: rounded rectangles take an optional outside color for the corners.
         // 37: image mode 31 enters EvenHub with the fixed startup page and always ACKs.
-        static const char caps[] = "Faceclaw/37";
+        // 38: head up (12) / head down (15, new) forwarded from the UI dispatcher
+        //     while a page is up; fast BLE profile requested unless the link is
+        //     already <= 11.25 ms with latency 0.
+        static const char caps[] = "Faceclaw/38";
         len = pb_append_bytes_field(buf, len, SETTINGS_RESPONSE_CAPACITY,
                                     100u, (const unsigned char *)caps,
                                     (unsigned)sizeof(caps) - 1u);

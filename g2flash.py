@@ -156,7 +156,12 @@ def auth_frames():
     stock app capture sent this DEVICE_SETTINGS/AUTHENTICATION(4) message after
     enabling CCCDs; its success response echoes the magic id.
     """
+    # The magic is written as a single protobuf varint byte, so it must stay in
+    # 1..127: a byte with bit 7 set is a continuation byte and the request is
+    # malformed (and the echoed id would be two bytes, never matching).
     magic=_nextseq()
+    if magic==0 or magic>=0x80:
+        _reset_seq(); magic=_nextseq()
     pb=bytes([0x08,0x04,0x10,magic,0x1a,0x04,0x08,0x01,0x10,0x04])
     return magic, frames(0x80,pb,seq=magic)
 
@@ -793,6 +798,10 @@ def flash_lens(tp, img, segs, stop_before):
                     tp.set_notify(CTRL[0],CTRL[2],True)
                     time.sleep(2.5)
                     while not tp.notes.empty(): tp.notes.get()
+                    # Same order as flash_lens: the OTA block counter is wherever the
+                    # timeout left it, so reset it before the authentication request
+                    # borrows it as the single-byte magic, and again before BEGIN.
+                    _reset_seq()
                     authenticate(tp)
                     _reset_seq()
                     while not tp.notes.empty(): tp.notes.get()

@@ -42,6 +42,7 @@
 #include "mic_control.c"
 #include "als_sensor.c"
 #include "gesture_fwd.c"
+#include "ble_link.c"
 #include "debug.c"
 
 #include "ancs_relay.c"

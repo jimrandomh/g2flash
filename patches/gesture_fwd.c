@@ -11,22 +11,40 @@ typedef int (*gesture_sysevt_t)(int, int, int, int, int, int);
 #define GESTURE_FW_SYSEVT ((gesture_sysevt_t)0x004ef959u)
 #define GESTURE_UI_CTX (*(void *volatile *)0x200777fcu)
 #define GESTURE_APP_EVENHUB 0xe0
-#define GESTURE_ET_HEAD_UP 12
+#define GESTURE_ET_HEAD_UP 12   /* IMU sub-event 6 */
 #define GESTURE_ET_RING_PRESS 14 /* 13 was used by an experimental temple edge */
+#define GESTURE_ET_HEAD_DOWN 15 /* IMU sub-event 7, the head returning after a lift */
+#define GESTURE_SUBTYPE_RING_PRESS 0x0du
+#define GESTURE_SUBTYPE_HEAD_UP    6u
+#define GESTURE_SUBTYPE_HEAD_DOWN  7u
+typedef unsigned (*headup_switch_t)(void);
+#define HEADUP_FW_SWITCH ((headup_switch_t)0x00467291u) /* FUN_00467290: settings->head_up_switch */
 
 /* Wrap the dispatcher's mode lookup at 0x44484a. r6 holds the full input
- * record, including its u16 source and unaligned u32 subtype. The return
- * value is still the original mode pointer, and stock dispatch continues.
- * Event 14 is ring-specific: the stock SysEvent sender leaves its source 0
- * (unspecified), so the phone derives ring provenance from this event ID.
- */
+ * record: u16 source at +0, unaligned u32 subtype at +2. The return value is
+ * still the original mode pointer, and stock dispatch continues.
+ *
+ * Ring touch-down (source 4, subtype 0x0d) goes out as event 14. It is
+ * ring-specific: the stock SysEvent sender leaves its source 0 (unspecified),
+ * so the phone derives ring provenance from the event ID.
+ *
+ * While an app owns the screen the IMU head-tilt records come through this
+ * dispatcher, never through the display thread's idle policy (which only
+ * sees them with no page up, where stock opens its own dashboard). A lift
+ * (sub-event 6) goes out as event 12 and the head returning (7) as event 15,
+ * gated by the stock head-up switch as the idle policy gates its own. */
 int *gesture_ring_press_mode_impl(void *ctx, const unsigned char *event)
 {
     int *mode = GESTURE_FW_MODE(ctx);
-    if (event && event[0] == 4 && event[1] == 0 &&
-        event[2] == 0x0d && event[3] == 0 && event[4] == 0 && event[5] == 0 &&
-        mode && *mode == GESTURE_APP_EVENHUB && cfw_fb_lease_active()) {
+    if (!event || !mode || *mode != GESTURE_APP_EVENHUB || !cfw_fb_lease_active()) return mode;
+    uint32_t subtype = (uint32_t)event[2] | ((uint32_t)event[3] << 8) |
+                       ((uint32_t)event[4] << 16) | ((uint32_t)event[5] << 24);
+    if (event[0] == 4 && event[1] == 0 && subtype == GESTURE_SUBTYPE_RING_PRESS) {
         GESTURE_FW_SYSEVT(0, 0, 0, GESTURE_ET_RING_PRESS, 0, 4);
+    } else if ((subtype == GESTURE_SUBTYPE_HEAD_UP || subtype == GESTURE_SUBTYPE_HEAD_DOWN) &&
+               HEADUP_FW_SWITCH() != 0) {
+        GESTURE_FW_SYSEVT(0, 0, 0, subtype == GESTURE_SUBTYPE_HEAD_UP ? GESTURE_ET_HEAD_UP
+                                                                       : GESTURE_ET_HEAD_DOWN, 0, 0);
     }
     return mode;
 }
@@ -79,46 +97,22 @@ GESTURE_ENTRY(gesture_release, "10")
 GESTURE_ENTRY(gesture_short_long, "11")
 #undef GESTURE_ENTRY
 
-/* Head-up (IMU head-tilt) forwarding while an EvenHub page is on screen.
- *
- * The IMU driver posts sensor sub-event 6 (head up) to the display thread's
- * dispatcher as a type-7 message. That dispatcher first calls the stock gate
- * FUN_0046f402 (`bl` at 0x467cf4) and frees the message when the gate fails,
- * which it does while an EvenHub page is on screen: a phone that blanked the
- * page but kept the session (soft sleep) never hears about the head-up. With
- * no page on screen the stock idle path launches the dashboard instead, which
- * faceclaw_display_start_headup (settings_ext.c) already defers to the phone.
- *
- * headup_gate wraps the gate call: the stock result is passed through
- * unchanged, and a head-up is additionally forwarded as EvenHub sys event 12
- * under the framebuffer lease with EvenHub foreground (faceclaw_gesture_event),
- * when the stock head-up switch is on and the stock idle path would itself
- * have acted on it (FUN_004447e8 == 0: not mid-OTA/onboarding). */
-#define HEADUP_SUBEVENT_UP    6
-
-typedef unsigned (*headup_switch_t)(void);
-typedef int (*headup_busy_t)(void);
-#define HEADUP_FW_SWITCH ((headup_switch_t)0x00467291u) /* FUN_00467290: settings->head_up_switch */
-#define HEADUP_FW_BUSY   ((headup_busy_t)0x004447e9u)   /* FUN_004447e8: 1 while the stock idle path ignores head-up */
+/* Idle-input forwarding at the display thread's type-7 input dispatcher: the
+ * `bl SVC_Settings_AppLaunchCheck` at 0x467cf4 (FUN_0046f402, which fails only
+ * for OTA, silent mode or product test). The stock result passes through
+ * unchanged; when it is 1 the record (u16 source at +2, u32 subtype at +4) is
+ * handed to faceclaw_idle_input_forward before the stock idle policy acts on
+ * it and frees it. Head-tilt records only reach this dispatcher with no page
+ * up, where that policy opens the stock dashboard (faceclaw_display_start_headup
+ * in settings_ext.c defers it to the phone under the wake lease); with a page
+ * up they go through the UI dispatcher hook above instead. */
 
 int headup_gate_impl(int stock_result, const unsigned char *message);
 
 int headup_gate_impl(int stock_result, const unsigned char *message)
 {
-    static const unsigned char headup_source[1] = { 0 };
-    if (message) {
-        const unsigned char *payload = *(const unsigned char *const *)(message + 8);
-        if (stock_result == 1) {
-            faceclaw_idle_input_forward(payload);
-            return stock_result;
-        }
-        if (payload) {
-            uint32_t subtype = (uint32_t)payload[4] | ((uint32_t)payload[5] << 8) |
-                               ((uint32_t)payload[6] << 16) | ((uint32_t)payload[7] << 24);
-            if (subtype == HEADUP_SUBEVENT_UP && HEADUP_FW_SWITCH() != 0 && HEADUP_FW_BUSY() == 0) {
-                faceclaw_gesture_event(headup_source, GESTURE_ET_HEAD_UP);
-            }
-        }
+    if (message && stock_result == 1) {
+        faceclaw_idle_input_forward(*(const unsigned char *const *)(message + 8));
     }
     return stock_result;
 }
