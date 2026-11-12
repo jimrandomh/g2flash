@@ -171,6 +171,10 @@ typedef enum {
      * display state was (see evenhub_enter.c). Idempotent; replaces the phone's
      * stock CreateStartUpPage, which never ACKs if the page already exists. */
     CFW_MSG_ENTER_EVENHUB = 31,
+    /* [32][dev u8][event_id u32 LE][diffx u8][speed u8] inject a stock input
+     * event (message 0x108) so the phone can drive the stock UI with no
+     * ring and nobody touching a temple. See input_inject.c. */
+    CFW_MSG_INJECT_INPUT = 32,
 } cfw_message_type;
 
 /* The high bit historically selected separate lens coordinates in bbox/copy messages.
@@ -283,6 +287,7 @@ static void als_cleanup_session(void);   /* als_sensor.c (same TU): passive ALS 
 int ring_battery_control(const uint8_t *src, uint32_t srclen); /* mode 17 */
 int als_control(const uint8_t *src, uint32_t srclen); /* als_sensor.c: mode 16 */
 int evenhub_enter_control(const uint8_t *src, uint32_t srclen); /* evenhub_enter.c: mode 31 */
+int cfw_inject_input(const uint8_t *src, uint32_t srclen); /* input_inject.c: mode 32 */
 
 static int decode_image_rle(const uint8_t *src, uint32_t size, uint8_t *base, uint32_t stride, uint32_t rowbytes, uint32_t rows);
 static void present_composition(uint32_t w, uint32_t h, cfw_rectlist *rl);
@@ -358,6 +363,35 @@ static void cfw_animation_tick(void *arg) {
     CFW_IMAGE_MUTEX_GIVE(mutex);
 }
 static int image_worker(const uint8_t *src, uint32_t size, uint8_t origin) {
+    /* Mode 32 is dispatched here, before the image mutex is created or taken,
+     * and this is its only dispatch path.
+     *
+     * It must not run under the lock: cfw_inject_input calls stock
+     * SendDataToBoth, which is not a non-blocking enqueue — two CommonMalloc
+     * retry loops and a 2000 ms blocking queue put, roughly 4 s worst case.
+     * The mutex below is taken with an infinite timeout inside the synchronous
+     * receive handler, so one slow send would stall every inbound CFW record
+     * on both ingress paths, make cfw_animation_tick miss its zero-timeout
+     * take, and pin the parser's receive buffer for the duration. The rate
+     * limiter bounds how often the call is entered, not how long it takes.
+     *
+     * Nothing else in the locked region applies: injection stages nothing,
+     * presents nothing and touches no rect-list state. The size guard mirrors
+     * the panel_queue branch below, and the mode is derived as image_dispatch
+     * derives it, mask included. */
+    if (size && (cfw_message_type)(src[0] & CFW_MSG_TYPE_MASK) == CFW_MSG_INJECT_INPUT) {
+        /* The keepalive reset is the one thing from the locked region that
+         * injection still needs. An injecting client is not the stock Even
+         * app: it sends no sid-0x0c heartbeats and takes no lease, so these
+         * records are all that holds the EvenHub session open, and without the
+         * kick the heartbeat teardown fires under an operator who is actively
+         * navigating. Safe outside the lock where SendDataToBoth is not: the
+         * leaf takes no arguments, takes no lock, cannot block, and zeroes one
+         * global nothing here reads. */
+        FW_KEEPALIVE_RESET();
+        return cfw_inject_input(src, size);
+    }
+
     customCfwContext *ctx = getCustomCfwContext();
     if (!ctx) return -1;
     uint32_t mutex = __atomic_load_n(&ctx->image_mutex, __ATOMIC_ACQUIRE);
@@ -432,6 +466,10 @@ static int image_dispatch(const uint8_t *src, uint32_t srclen, cfw_rectlist *rl)
     cfw_message_type mode = (cfw_message_type)(src[0] & CFW_MSG_TYPE_MASK);
 
     if (mode == CFW_MSG_BRIGHTNESS) return brightness_control(src, srclen);
+
+    /* CFW_MSG_INJECT_INPUT (32) is dispatched in image_worker, before the
+     * image mutex is taken, because the stock send it performs can block for
+     * seconds. Everything below this point runs under that mutex. */
 
     /* A new staged frame must not leak through an animation redraw before
      * its PRESENT. All of these paths execute under image_mutex. */

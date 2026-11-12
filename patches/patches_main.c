@@ -39,6 +39,7 @@
 #include "ring_battery.c"
 #include "evenhub_enter.c"
 #include "settings_ext.c"
+#include "input_inject.c"
 #include "mic_control.c"
 #include "als_sensor.c"
 #include "gesture_fwd.c"

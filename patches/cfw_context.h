@@ -147,6 +147,7 @@ typedef struct {
     uint8_t timer_paint_count;
     uint8_t timer_paint_next;
     cfw_brightness_state brightness;
+    uint32_t inject_last_tick; /* input_inject.c: FW_MS_TICK of the last accepted injection */
 } customCfwContext;
 
 #define CFW_CTX_SLOT  0x2029f59cU    /* first word of the CFW-reserved TLSF tail */
