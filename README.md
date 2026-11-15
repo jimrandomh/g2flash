@@ -295,10 +295,12 @@ Thanks to kalanihelekunihi for [evenRealities-openCFW](https://github.com/kalani
 
 ### Experimental BLE keyboard bridge
 
-The `keyboard` branch adds `GLASSLYCFW/39`: an explicitly enabled right-lens
-BLE keyboard connection with HID reports relayed to the phone alongside ring
-input. The companion driver and CLI are in `demos/keyboard*.ts`. See
+`Faceclaw/39` adds an explicitly enabled right-lens BLE keyboard connection,
+with HID reports relayed to the phone alongside ring input. It comes from
+[tetramo-labs/g2flash](https://github.com/tetramo-labs/g2flash), where it has
+been installed and used with physical keyboards; this repository's build of it
+has only been through the offline checks and the emulator scenarios. Faceclaw
+drives it from `app/g2/keyboard/`; a reference client and CLI are in
+`demos/keyboard*.ts`. See
 [setup, protocol and validation limits](docs/keyboard.md) and the
-[donor ABI review](docs/keyboard-abi.md). Offline tests, physical installation
-and encrypted input from one BLE keyboard pass. Three-link coexistence,
-broader keyboard compatibility and native iOS delivery remain unvalidated.
+[donor ABI review](docs/keyboard-abi.md).

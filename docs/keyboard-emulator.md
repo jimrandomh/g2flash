@@ -1,5 +1,12 @@
 # Keyboard ARM emulator verification
 
+Re-run on 2026-11-14 against this repository's Faceclaw/39 image
+(`e43be9d04031d261574f96d45cb1e0edd67bfb39f0213f323ff82d8560ae454d`) with the
+same emulator commit and Unicorn 2.1.4: all eight scenarios pass, and
+[keyboard-emulator-result.json](keyboard-emulator-result.json) is that run's
+output. The rest of this page is the original write-up for the tetramo-labs
+image.
+
 Verified on 2026-09-24 with [PaulMcMillan/g2-firmware-emulator](https://github.com/PaulMcMillan/g2-firmware-emulator)
 at commit `f30527c0b7e6fa6e9be06e7067e49468197fa258`, using its
 `CfwUnicornHarness`, manifest loader, Thumb branch decoder and allocator.

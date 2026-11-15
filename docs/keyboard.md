@@ -1,18 +1,23 @@
 # BLE keyboard bridge — experimental, revision 39
 
-The `keyboard` branch implements a right-lens BLE central connection alongside
-the existing R1 ring. HID reports travel over the glasses' private GATT protocol
-to the companion app. The keyboard pairs to the **glasses**, not to iOS's system
-keyboard service.
+Revision 39 implements a right-lens BLE central connection alongside the
+existing R1 ring. HID reports travel over the glasses' private GATT protocol
+to the companion app. The keyboard pairs to the **glasses**, not to the
+phone's system keyboard service.
 
-This is an implementation for hardware bring-up, **not a hardware-validated
-release**. The first physical installation passed OTA verification, subsequent
-BLE authentication and a disabled-keyboard status query; see the installation
-record below. The host tests cannot
-prove that the controller will maintain phone + ring + keyboard connections,
-that a particular keyboard's pairing succeeds, or that iOS wakes the native
-app correctly. The [investigation](ble-keyboard-investigation.md) explains the
-remaining controller and iOS questions.
+The firmware side was written for
+[tetramo-labs/g2flash](https://github.com/tetramo-labs/g2flash) (GLASSLYCFW/39)
+and is carried here unchanged apart from build glue; the wire contract is the
+same, so either project's client can drive either firmware. The hardware
+records further down are from that project's build. **This repository's build
+(Faceclaw/39) has passed the offline checks and the emulator scenarios but has
+not been flashed**: see [Status of this build](#status-of-this-build).
+
+The host tests cannot prove that the controller will maintain phone + ring +
+keyboard connections, that a particular keyboard's pairing succeeds, or that
+iOS wakes the native app correctly. The
+[investigation](ble-keyboard-investigation.md) explains the remaining
+controller and iOS questions.
 
 ## Implemented
 
@@ -72,7 +77,7 @@ control, connection and ATT records while diagnosing setup failures.
 `keyboard-client.ts` is transport-independent. `keyboard.ts` supplies its G2 BLE
 transport and subscribes to **raw right-lens sid-0x09 notifications**, extracting
 field 131. The ordinary settings ACK acknowledges parsing only; field 131 is the
-actual command result. The client needs `GLASSLYCFW/39` or later. `status` and
+actual command result. The client needs `Faceclaw/39` or later. `status` and
 `disable` do not enable a connection.
 
 Native integration must implement the same field framing and store the discovered
@@ -185,14 +190,13 @@ the existing device tools before a fresh pairing.
 Offline checks:
 
 ```sh
-python3 patches/host/run_vector_tests.py
+python3 patches/host/run_keyboard_tests.py
 python3 patches/gen_patches.py g2_2.3.0.24.bin /tmp/keyboard-patches.json
 ```
 
 The suite runs sanitizer-backed production C state-machine tests, TypeScript
-protocol/descriptor tests, a simulated HOGP server (long reads, multiple reports,
-external Battery report and Service Changed), existing display/ANCS/ring
-regressions, and the freestanding Thumb relocation checks. The build pins the
+protocol/descriptor tests and a simulated HOGP server (long reads, multiple
+reports, external Battery report and Service Changed). The build pins the
 exact donor SHA, reviewed stock bytes and the existing MRAM ceiling.
 
 The [keyboard emulator verification](keyboard-emulator.md) additionally passes
@@ -201,7 +205,27 @@ PaulMcMillan/g2-firmware-emulator. It covers production trampolines, relay and
 failure handling with explicit stock-function shims. Full-system boot, real
 Bluetooth coexistence and iOS background delivery remain unverified.
 
-### First physical installation — 2026-09-24 (Pacific)
+### Status of this build
+
+Image SHA-256
+`e43be9d04031d261574f96d45cb1e0edd67bfb39f0213f323ff82d8560ae454d`
+(Faceclaw/39, 2026-11-14). `run_keyboard_tests.py` and all eight
+[emulator scenarios](keyboard-emulator.md) pass against it. It has not been
+installed on glasses. The five hook sites and the registers each trampoline
+relies on were re-read against the stock disassembly for this port. The
+context slot the dispatcher hook reads sits inside a startup zero-init range
+(`[0x2013519c, 0x2037a924)`, region table at `0x7914f0`), so after any reset
+the hooks are dormant until a keyboard control arrives.
+
+What does not carry over from the tetramo-labs results: the rest of the patch
+set (display lists, resource cache, ANCS relay, BLE link profile) is this
+repository's, so their coexistence testing was against different neighbours.
+In particular this firmware's ANCS relay is also a GATT client, on the phone
+link. The keyboard dispatcher returns before the stock handlers the relay
+hooks into, and the relay is bound to its own connection id, but the two have
+not run together on a device.
+
+### First physical installation (tetramo-labs build) — 2026-09-24 (Pacific)
 
 Installed image SHA-256
 `4c7bf9a552df1a42f26b3378425c7c2121ca4058fed7283ec863c3f8d2cd13fe`
@@ -220,7 +244,7 @@ the CLI now explicitly exits after session teardown, and a subsequent scan
 exited normally. This is one successful
 installation and dormant control check, not general hardware qualification.
 
-### First physical keyboard input — 2026-09-24 (Pacific)
+### First physical keyboard input (tetramo-labs build) — 2026-09-24 (Pacific)
 
 A retry connected the generic BLE device advertised as `Bluetooth Keyboard`
 through the right lens. The glasses reported connection-open, encryption

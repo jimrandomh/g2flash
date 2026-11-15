@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { G2Session } from "g2-kit/ble";
-import { findLenDelimField, queryGlasslyCfw } from "./glassly-cfw";
+import { findLenDelimField, queryFaceclawCfw } from "./faceclaw-cfw";
 import { KeyboardClient } from "./keyboard-client";
 import { KeyboardOp } from "./keyboard-protocol";
 import { createInterface } from "node:readline/promises";
@@ -33,8 +33,8 @@ const session = await G2Session.open();
 let off: (() => void) | undefined;
 let client: KeyboardClient | undefined;
 try {
-  const cfw = await queryGlasslyCfw(session, 29);
-  if (!cfw || cfw.revision < 39) throw new Error("Keyboard bridge requires GLASSLYCFW/39 or later");
+  const cfw = await queryFaceclawCfw(session, 29);
+  if (!cfw || cfw.revision < 39) throw new Error("Keyboard bridge requires Faceclaw/39 or later");
   const seen = new Set<string>();
   let lastDebugStatus = "";
   client = new KeyboardClient({ async send(pb, magic) {

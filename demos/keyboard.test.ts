@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { HidKeys, parseReportMap, reportKeys } from "./keyboard-hid";
 import { KeyboardRecords, keyboardControl, le16, u16 } from "./keyboard-protocol";
 import { KeyboardClient, attributeUuid } from "./keyboard-client";
-import { findLenDelimField } from "./glassly-cfw";
+import { findLenDelimField } from "./faceclaw-cfw";
 
 const boot = Uint8Array.from([
   0x05,1,0x09,6,0xa1,1,0x05,7,0x19,0xe0,0x29,0xe7,0x15,0,0x25,1,0x75,1,0x95,8,0x81,2,

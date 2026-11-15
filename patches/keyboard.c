@@ -159,7 +159,7 @@ void keyboard_apply_control(const uint8_t *data, uint32_t len) {
         s=cfw_malloc(sizeof *s);
         if (!s) return;
         for (unsigned i=0;i<sizeof *s;i++) ((uint8_t *)s)[i]=0;
-        s->timer=FW_TIMER_NEW(CFW_FN_ADDR(kb_tick),0,s,0);
+        s->timer=FW_TIMER_NEW((void *)&kb_tick,0,s,0);
         if (!s->timer) { FW_FREE(s); return; }
         kb_state *expected=0;
         if (!__atomic_compare_exchange_n((kb_state **)&ctx->keyboard,&expected,s,0,
