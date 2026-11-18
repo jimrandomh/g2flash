@@ -109,7 +109,7 @@ static int panel_queue(const uint8_t *src, uint32_t size, uint8_t origin) {
     customCfwContext *ctx=getCustomCfwContext();
     if (!ctx) return -1;
     FW_DISPLAY_WAIT();
-    if (ctx->direct_pending || ctx->panel.pending) return -1;
+    if (cfw_display_busy(ctx)) return -1;
     if (src[0]!=23) {
         if (!ctx->panel.watchdog) ctx->panel.watchdog=panel_create_watchdog();
         if (!ctx->panel.watchdog || FW_TIMER_START(ctx->panel.watchdog,1000)!=0) {

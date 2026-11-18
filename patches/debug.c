@@ -68,7 +68,8 @@ static uint32_t cfw_time_end(const uint32_t *t) {
     return dc / cyc_per_us;
 }
 
-/* Timer-task writer; publish a single aligned average for the display task.
+/* Written by the animation tick and read by the overlay of a later present,
+ * both under the image mutex.
  * Divide each sample first so even ten UINT32_MAX samples cannot overflow.
  * Until the ring fills, average only the paints that have actually completed. */
 static void cfw_record_timer_paint(customCfwContext *ctx, uint32_t us) {
@@ -138,8 +139,11 @@ static void append_heap_kib(char *out, cfw_heap_stats stats, uint32_t maxlen) {
  * Second: microphone session state and tap counters (mic_append_overlay).
  * Third: total free / maximum malloc request for each heap, in whole KiB.
  * Heap snapshots are approximate; failed validation displays ?/?. Suppressed
- * when diag_hide is set (mode 7). */
-static void cfw_draw_flags(uint8_t *disp, uint32_t w, uint32_t h) {
+ * when diag_hide is set (mode 7).
+ *
+ * Drawn by the presenter as the last step of a frame. Not inlined, so its text
+ * buffer stays out of the frame that the display-list recursion sits on. */
+__attribute__((noinline)) static void cfw_draw_flags(uint8_t *disp, uint32_t w, uint32_t h) {
     customCfwContext *ctx = getCustomCfwContext();
     if (ctx == 0 || ctx->diag_hide) return;
 

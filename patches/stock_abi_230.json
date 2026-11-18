@@ -167,6 +167,7 @@
       "0x007c5ee4": 1
     },
     "zlib_glue.c": {
+      "0x00442b2b": 1,
       "0x00442b65": 1,
       "0x00442c4d": 1,
       "0x00442c8d": 1,
@@ -3400,6 +3401,11 @@
           "file": "panel.c",
           "address": "0x00442b2b",
           "count": 1
+        },
+        {
+          "file": "zlib_glue.c",
+          "address": "0x00442b2b",
+          "count": 1
         }
       ],
       "evidence": "docs/panel-diagnostics.md; full donor guards added for callees, pointer literals and templates"
@@ -4354,6 +4360,11 @@
       "address": "0x007c5184",
       "bytes": "090001000000",
       "label": "keyboard: unchanged application security flags/key distribution"
+    },
+    {
+      "address": "0x00442b2a",
+      "bytes": "38b50400fff748fe002802d07ff0050505e00025002c02d0200009f020fa280032bd",
+      "label": "direct present: osDelay, whole routine (presenter waits a tick at a time for the display task)"
     }
   ],
   "patch_sites": [

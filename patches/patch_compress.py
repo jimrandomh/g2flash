@@ -9,7 +9,7 @@ Build a CFW image for g2_2.3.0.24 with:
       Even-AI suppression while that lease is valid, and
   (5) Faceclaw-lease-gated source-qualified long-press, release, and 2.2.9
       tap-then-long-press forwarding, and
-  (6) a full-panel 640x480 packed-4bpp shadow copied directly into the physical
+  (6) full-panel 640x480 packed-4bpp frames composed directly in the physical
       framebuffer, and
   (7) stock wear-state notifications outside onboarding plus a current-state query, and
   (8) Faceclaw compass heading + sample diagnostics from the sensor hub while
@@ -200,7 +200,8 @@ EVENAI_ENTRY_SITE      = (0x4f9196, "7fb50600")
 # The display task copies the composed 576x288 A4 buffer into the physical
 # 640x480 framebuffer at two switch cases. Redirect both calls through
 # display_copy_hook: ordinary refreshes pass through, while a pending Faceclaw
-# shadow replaces the stock compositor copy immediately before panel refresh.
+# present is drawn into the framebuffer there instead, immediately before panel
+# refresh, in place of the stock compositor copy.
 DISPLAY_COPY_BL_SITES = {
     0x47a78e: "f6f787f9",   # queue message type 3 -> bl FUN_00470aa0
     0x47a8ca: "f6f7e9f8",   # queue message type 6 -> bl FUN_00470aa0

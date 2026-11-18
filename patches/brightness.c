@@ -84,7 +84,7 @@ static int brightness_service(void) {
         b->visible=visible; b->desired=desired;
     }
     if (!b->active) return 0;
-    if (b->waiting && ctx->direct_pending &&
+    if (b->waiting && __atomic_load_n(&ctx->direct_pending,__ATOMIC_ACQUIRE) &&
         (__atomic_load_n(&b->present_epoch,__ATOMIC_ACQUIRE)&1023u)!=b->wait_epoch) {
         b->waiting=0; b->started=now;
     }

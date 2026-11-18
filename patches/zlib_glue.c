@@ -92,7 +92,7 @@ typedef enum {
     /* [11] cleanup the custom-app session before disconnect: release
      * leases/direct-framebuffer ownership, stop and delete
      * CFW timers, stop custom buzzer/compass activity, release
-     * owned framebuffer shadow, and restore stock behavior. The
+     * the owned screen buffer, and restore stock behavior. The
      * singleton CFW context and sticky allocation flag remain. */
     CFW_MSG_CLEANUP = 11,
     /* Retired message ID; rejected. */
@@ -160,8 +160,9 @@ typedef enum {
     /* [27][resource-id16] Validate and set the root display list.
      * ID 65535 clears the root. The resource graph is validated before changing the root. */
     CFW_MSG_SET_ROOT_DISPLAY_LIST = 27,
-    /* [28] Copy the screen buffer to the composition buffer, replay the root
-     * display list for this lens, then present to the physical framebuffer under the display gate. */
+    /* [28] Compose the frame straight into the physical framebuffer while the
+     * display task waits: the screen buffer as it is, or the root display list
+     * replayed for this lens. The display task then sends it to the panel. */
     CFW_MSG_PRESENT = 28,
     /* [29][count16]{[id16][width16][height16]} Create zeroed raw image surfaces.
      * Each resource is at most 64 KiB. Recreating an identical existing surface preserves its pixels. */
@@ -194,6 +195,7 @@ typedef int  (*timer_start_fn)(uint32_t handle, uint32_t ms); /* osTimer start (
 typedef uint32_t (*timer_new_fn)(void *cb, uint32_t type, void *arg, void *attr); /* osTimerNew-> handle */
 typedef int  (*timer_stop_fn)(uint32_t handle);     /* osTimer stop */
 typedef int  (*timer_delete_fn)(uint32_t handle);   /* osTimer delete */
+typedef int  (*delay_fn)(uint32_t ms);              /* osDelay: block the calling task */
 typedef void (*app_start_fn)(unsigned app_id, void *arg, unsigned arg_len, void *cb);
 typedef void (*keepalive_reset_fn)(void);           /* zero the EvenHub keepalive counter */
 typedef void (*display_gate_fn)(void);               /* display semaphore take/give */
@@ -214,6 +216,7 @@ static int cfw_draw_right_lens(void) { return FW_SIDE()==1; }
 #define FW_TIMER_NEW   ((timer_new_fn)0x00442b65U)    /* FUN_00442b64 osTimerNew(cb,type,arg,attr) */
 #define FW_TIMER_STOP  ((timer_stop_fn)0x00442c8dU)   /* FUN_00442c8c osTimerStop(handle) */
 #define FW_TIMER_DELETE ((timer_delete_fn)0x00442cf3U) /* FUN_00442cf2 osTimerDelete(handle) */
+#define FW_DELAY_MS    ((delay_fn)0x00442b2bU)        /* FUN_00442b2a osDelay(ticks); the tick is 1 ms */
 #define FW_APP_START ((app_start_fn)0x0046a673U)       /* FUN_0046a672 REQUEST_DISPLAY_START_UP */
 #define FW_KEEPALIVE_RESET ((keepalive_reset_fn)0x004f7cdfU) /* FUN_004f7cde: EvenHub keepalive
                                                      * counter (@0x20078454) = 0. This is the exact
@@ -227,7 +230,7 @@ static int cfw_draw_right_lens(void) { return FW_SIDE()==1; }
 #define FW_COMPASS_START  ((compass_control_fn)0x0056311bU) /* FUN_0056311a StartIMUCompassFunc */
 #define FW_COMPASS_STOP   ((compass_control_fn)0x005631a3U) /* FUN_005631a2 StopIMUCompassFunc */
 #define FW_COMPASS_CONFIG ((compass_config_fn)0x004bb011U) /* FUN_004bb010: FuncConfig(type,config) */
-#define FW_DISPLAY_FB     (*(uint8_t * volatile *)0x200008b8U) /* stock copier's 640x480 destination */
+#define FW_DISPLAY_FB     (*(uint8_t * volatile *)0x200008b8U) /* the 640x480 framebuffer the panel is sent */
 #define BUZZ_TIMER_ADDR 0x20077834U                   /* RAM: buzzer osTimer handle global */
 
 #define PANEL_W 640u
@@ -275,7 +278,6 @@ __attribute__((noinline)) uint32_t cfw_create_buzzer_timer(customCfwContext *ctx
     return FW_TIMER_NEW((void *)&seq_tick, 0, ctx, 0);
 }
 
-static uint8_t *cfw_composition_buffer(void);
 static int is_composition_message(const uint8_t *src, uint32_t srclen);
 static int cfw_cleanup_session(void);
 static void mic_cleanup_session(void);   /* mic_control.c (same TU): mic hw + lease teardown */
@@ -285,12 +287,11 @@ int als_control(const uint8_t *src, uint32_t srclen); /* als_sensor.c: mode 16 *
 int evenhub_enter_control(const uint8_t *src, uint32_t srclen); /* evenhub_enter.c: mode 31 */
 
 static int decode_image_rle(const uint8_t *src, uint32_t size, uint8_t *base, uint32_t stride, uint32_t rowbytes, uint32_t rows);
-static void present_composition(uint32_t w, uint32_t h, cfw_rectlist *rl);
 static int image_dispatch(const uint8_t *src, uint32_t srclen, cfw_rectlist *rl);
 
 
 /* True for top-level messages that need exclusive ownership of the stock display
- * gate. Mode 28 renders/presents the composition buffer; mode 11 uses the gate as a
+ * gate. Mode 28 hands the display task a frame to send; mode 11 uses the gate as a
  * barrier so no direct-framebuffer job can still reference session-owned state. */
 static int is_composition_message(const uint8_t *src, uint32_t srclen) {
     if (src == 0 || srclen == 0) return 0;
@@ -334,15 +335,14 @@ static void cfw_animation_tick(void *arg) {
     if (!ctx->animation_running || !cfw_fb_lease_active()) {
         ctx->animation_running=0;
     } else if ((int32_t)(now-ctx->animation_due_ms)>=0) {
-        if (ctx->direct_pending || ctx->panel.pending) {
+        if (cfw_display_busy(ctx)) {
             cfw_animation_schedule(ctx);
         } else {
             cfw_rectlist rl;
             rl.n=0;
             rl.direct_submitted=0;
-            rl.direct_failed=0;
             FW_DISPLAY_WAIT();
-            if (!ctx->direct_pending && !ctx->panel.pending) {
+            if (!cfw_display_busy(ctx)) {
                 uint32_t started;
                 cfw_time_start(&started);
                 int result=cfw_animation_present(ctx,&rl,0);
@@ -394,30 +394,27 @@ static int image_worker_locked(const uint8_t *src, uint32_t srclen) {
      * alive while it is present; the reset helper only updates the global counter. */
     FW_KEEPALIVE_RESET();
 
-    /* Time this whole message. The display-task overlay can run before this worker
-     * stores the new value, so its worker duration may lag by one update. */
+    /* Time this whole message. The overlay is drawn during a present, before
+     * this value is stored, so it shows the previous message's duration. */
     cfw_rectlist rl;                               /* per-frame updated-rect list (stack) */
     rl.n = 0;
     rl.direct_submitted = 0;
-    rl.direct_failed = 0;
 
-    /* Shadow updates bypass LVGL, but still use the stock display task to refresh
-     * the panel. Take its gate before touching the shared shadow and leave it held
-     * through the queued refresh; the stock task signals it after display_copy_hook.
-     * This prevents the next pipelined delta from changing the shadow while the hook
-     * is copying it. Non-image control messages never take the gate. */
+    /* A present bypasses LVGL but still goes through the stock display task.
+     * Take its gate first, so no earlier present or panel job is still waiting
+     * there, and leave it held through the queued refresh; the stock task
+     * signals it after display_copy_hook. Other messages never take the gate. */
     customCfwContext *ctx = getCustomCfwContext();
     int gated = is_composition_message(src, srclen);
     if (gated) {
         if (ctx == 0) return -1;
         FW_DISPLAY_WAIT();
-        if (ctx->direct_pending || ctx->panel.pending) return -1;          /* timed out; caller does not own gate */
+        if (cfw_display_busy(ctx)) return -1;        /* caller does not own gate */
     }
 
     uint32_t t;
     cfw_time_start(&t);
     int r = image_dispatch(src, srclen, &rl);
-    if (rl.direct_failed) r = -1;
     uint32_t us = cfw_time_end(&t);
 
     if (gated && !rl.direct_submitted) FW_DISPLAY_SIGNAL();
@@ -619,15 +616,124 @@ static int image_dispatch(const uint8_t *src, uint32_t srclen, cfw_rectlist *rl)
         }
         if(srclen!=1) return -1;
         __atomic_add_fetch(&ctx->brightness.present_epoch,1,__ATOMIC_RELEASE);
-        return cfw_animation_present(ctx,rl,1);
+        /* A frame the display task holds back is still a successful present. */
+        return cfw_animation_present(ctx,rl,1)<0?-1:0;
     }
     return -1;
+}
+
+/* display_copy_hook's answer to a pending present (direct_reply). */
+enum {
+    CFW_DIRECT_WAITING = 1, /* the display task is blocked on direct_mutex: draw now */
+    CFW_DIRECT_HELD = 2,    /* it is keeping the frame it has (see the hook) */
+};
+/* Longest either side waits for the other before giving up on a present. */
+#define CFW_DIRECT_TIMEOUT_MS 1000u
+
+/* The physical framebuffer as a draw target. */
+static cfw_draw_target cfw_framebuffer_target(void) {
+    cfw_draw_target target = {FW_DISPLAY_FB, 640, 480, 320, 0, 0, {0, 0, 0, 0}};
+    return target;
+}
+
+/* The display task is waiting in display_copy_hook, so nothing else reads or
+ * writes the framebuffer until direct_mutex is released. */
+static int cfw_present_draw(customCfwContext *ctx, uint32_t root) {
+    cfw_draw_target target = cfw_framebuffer_target();
+    uint8_t *fb = target.pixels;
+    if (fb == 0) return -1;
+    int result = 0;
+    if (root != CFW_DRAW_SCREEN && cfw_draw_root(ctx, root, target, 1, 0)) {
+        /* The root validated a moment ago, so this is the lease lapsing or a
+         * stock glyph failing part-way. The previous frame is already
+         * overwritten; show the bare screen rather than half a composition. */
+        result = -1;
+        root = CFW_DRAW_SCREEN;
+    }
+    if (root == CFW_DRAW_SCREEN) memcpy(fb, ctx->screen_buffer, CFW_FRAMEBUFFER_BYTES);
+    cfw_draw_flags(fb, PANEL_W, PANEL_H);
+    __atomic_store_n(&ctx->direct_drawn, 1, __ATOMIC_RELEASE);
+    return result;
+}
+
+/* Draw one frame straight into the physical framebuffer and have the display
+ * task send it to the panel.
+ *
+ * Only the display task transfers the framebuffer, and it does so after
+ * display_copy_hook returns, finishing before it takes its next message. So the
+ * framebuffer is certain to be idle exactly while that task is inside the hook,
+ * and that is when the frame is drawn: this publishes direct_pending, queues a
+ * refresh and waits for the hook's answer; the hook blocks on direct_mutex
+ * until the drawing is done, then lets the transfer go ahead. The drawing,
+ * debug overlay included, stays on this thread because the display task has a
+ * 2 KiB stack and a display list can need 12.
+ *
+ * Caller owns image_mutex and the display gate. Returns 0 when the frame is
+ * drawn and its refresh is on the way, 1 when the display task kept the frame
+ * it has, and -1 on failure. Once a refresh is queued the display task is the
+ * one that returns the gate (rl->direct_submitted). */
+static int cfw_present_frame(customCfwContext *ctx, uint32_t root, cfw_rectlist *rl) {
+    uint32_t mutex = ctx->direct_mutex;
+    if (!mutex) {
+        mutex = CFW_IMAGE_MUTEX_NEW(0);
+        __atomic_store_n(&ctx->direct_mutex, mutex, __ATOMIC_RELEASE);
+    }
+    if (!mutex || CFW_IMAGE_MUTEX_TAKE(mutex, CFW_DIRECT_TIMEOUT_MS) != 0) {
+        ctx->direct_failed = 1;
+        return -1;
+    }
+    __atomic_store_n(&ctx->direct_reply, 0, __ATOMIC_RELEASE);
+    ctx->direct_drawn = 0;
+    __atomic_store_n(&ctx->direct_pending, 1, __ATOMIC_RELEASE); /* publish last */
+
+    int result = -1;
+    if (FW_DISPLAY_QUEUE(0, 0, 0, 0, PANEL_W, PANEL_H) != 0) {
+        __atomic_store_n(&ctx->direct_pending, 0, __ATOMIC_RELEASE);
+    } else {
+        rl->direct_submitted = 1;
+        /* The display task may still be sending the previous frame. It has no
+         * way to wake this thread, so look again every tick. */
+        uint32_t reply = 0;
+        for (uint32_t waited = 0; waited <= CFW_DIRECT_TIMEOUT_MS; waited++) {
+            reply = __atomic_load_n(&ctx->direct_reply, __ATOMIC_ACQUIRE);
+            if (reply || waited == CFW_DIRECT_TIMEOUT_MS) break;
+            FW_DELAY_MS(1);
+        }
+        if (reply == CFW_DIRECT_WAITING) result = cfw_present_draw(ctx, root);
+        else if (reply == CFW_DIRECT_HELD) result = 1;
+        /* No answer: the job stays published and the hook will retire it. */
+    }
+    if (result < 0) ctx->direct_failed = 1;
+    CFW_IMAGE_MUTEX_GIVE(mutex);
+    return result;
+}
+
+/* Display-task half of cfw_present_frame: tell the presenter to draw and wait
+ * for it. Returns whether the framebuffer now holds a new, whole frame. */
+static int cfw_present_await(customCfwContext *ctx) {
+    uint32_t mutex = __atomic_load_n(&ctx->direct_mutex, __ATOMIC_ACQUIRE);
+    __atomic_store_n(&ctx->direct_reply, CFW_DIRECT_WAITING, __ATOMIC_RELEASE);
+    int locked = mutex && CFW_IMAGE_MUTEX_TAKE(mutex, CFW_DIRECT_TIMEOUT_MS) == 0;
+    int drawn = locked && ctx->direct_drawn;
+    ctx->direct_drawn = 0;
+    __atomic_store_n(&ctx->direct_pending, 0, __ATOMIC_RELEASE); /* consume before returning gate */
+    if (locked) CFW_IMAGE_MUTEX_GIVE(mutex);
+    return drawn;
+}
+
+/* Display-task refusal: the physical frame stays as it is, so release a
+ * waiting presenter without letting it draw. */
+static void cfw_present_decline(customCfwContext *ctx) {
+    if (!__atomic_load_n(&ctx->direct_pending, __ATOMIC_ACQUIRE)) return;
+    __atomic_store_n(&ctx->direct_pending, 0, __ATOMIC_RELEASE);
+    __atomic_store_n(&ctx->direct_reply, CFW_DIRECT_HELD, __ATOMIC_RELEASE);
 }
 
 /* Caller owns both image_mutex and the display gate. Only an inbound PRESENT
  * resets time; timer callbacks render from the same screen with a later time.
  * A root list composes the whole frame, including copying (or clearing and
- * shifting) the screen; with no root, the screen is presented as-is. */
+ * shifting) the screen; with no root, the screen is presented as-is.
+ * Returns as cfw_present_frame does. */
 static int cfw_animation_present(customCfwContext *ctx, cfw_rectlist *rl, int reset_time) {
     ctx->animation_running=0;
     ctx->animation_pending=0;
@@ -635,39 +741,13 @@ static int cfw_animation_present(customCfwContext *ctx, cfw_rectlist *rl, int re
     if (reset_time) ctx->animation_origin_ms=now;
     ctx->draw_elapsed_ms=now-ctx->animation_origin_ms;
     if (!cfw_fb_lease_active() || !ctx->screen_buffer) return -1;
-    uint8_t *composition=cfw_composition_buffer();
-    if (!composition) return -1;
-    cfw_draw_target target={composition,640,480,320,0};
     uint32_t root=ctx->root_display_list?ctx->root_display_list-1u:CFW_DRAW_SCREEN;
-    if (root==CFW_DRAW_SCREEN) memcpy(composition,ctx->screen_buffer,CFW_FRAMEBUFFER_BYTES);
-    else if (cfw_draw_root(ctx,root,target,0,0) || cfw_draw_root(ctx,root,target,1,0)) return -1;
-    present_composition(640,480,rl);
-    if (rl->direct_failed) return -1;
-    cfw_animation_schedule(ctx);
-    return 0;
-}
-
-/* Publish the CFW-owned packed-4bpp shadow to the stock display task. image_worker
- * already owns the stock display gate, so the shadow cannot change until the task has
- * copied it. The display task consumes this job in display_copy_hook immediately before
- * its normal panel refresh, bypassing LVGL and the stock 576x288 compositor copy. */
-static void present_composition(uint32_t w, uint32_t h, cfw_rectlist *rl) {
-    customCfwContext *ctx = getCustomCfwContext();
-    uint8_t *shadow = cfw_composition_buffer();
-    if (ctx == 0 || shadow == 0 || w != IMAGE_W || h != IMAGE_H) {
-        if (rl) rl->direct_failed = 1;
-        return;
-    }
-
-    ctx->direct_shadow = shadow;
-    ctx->direct_pending = 1;                          /* publish last */
-    if (FW_DISPLAY_QUEUE(0, 0, 0, 0, PANEL_W, PANEL_H) != 0) {
-        ctx->direct_pending = 0;
-        ctx->direct_shadow = 0;
-        if (rl) rl->direct_failed = 1;
-        return;
-    }
-    if (rl) rl->direct_submitted = 1;
+    /* Reject a bad root before the display task is asked to wait for it. */
+    cfw_draw_target target=cfw_framebuffer_target();
+    if (!target.pixels || cfw_draw_root(ctx,root,target,0,0)) return -1;
+    int result=cfw_present_frame(ctx,root,rl);
+    if (result==0) cfw_animation_schedule(ctx);
+    return result;
 }
 
 
@@ -700,8 +780,7 @@ static int cfw_cleanup_session(void) {
      * retrying the mutex. The context and this one timer live for the boot. */
     ctx->direct_lease_deadline = 0;
     ctx->direct_active = 0;
-    ctx->direct_pending = 0;
-    ctx->direct_shadow = 0;
+    __atomic_store_n(&ctx->direct_pending, 0, __ATOMIC_RELEASE);
     ctx->direct_failed = 0;
     cfw_resource_cache_release(ctx);
     cfw_framebuffers_release(ctx);
@@ -746,56 +825,44 @@ static int cfw_cleanup_session(void) {
     return 0;
 }
 
-/* Replaces both display-task calls to the stock 576x288 packed-buffer copier.
- * A pending custom job copies the full 640x480 shadow straight into the
- * physical 640x480 4bpp framebuffer. Once that succeeds, unrelated stock widget
- * repaints are suppressed while Faceclaw's fail-open framebuffer lease is valid:
- * the display task refreshes the already-correct physical buffer instead of
- * overwriting it with stale LVGL content. Lease release/expiry restores the transparent stock pass-through. */
+/* Replaces both display-task calls to the stock 576x288 packed-buffer copier,
+ * which run just before the task sends the framebuffer to the panel.
+ *
+ * When a present is pending, this is where its frame gets drawn: the task waits
+ * here while the presenter composes straight into the physical 640x480 4bpp
+ * framebuffer (cfw_present_frame). Once a frame has been shown that way,
+ * unrelated stock widget repaints are suppressed while Faceclaw's fail-open
+ * framebuffer lease is valid: the display task refreshes the already-correct
+ * physical buffer instead of overwriting it with stale LVGL content. Lease
+ * release/expiry restores the transparent stock pass-through.
+ *
+ * A fading-out or sleeping display and a diagnostic test pattern keep the
+ * frame they have, so a present arriving then is not drawn at all. */
 void display_copy_hook(void) {
     panel_service();
-    if (brightness_service()) {
-        customCfwContext *ctx=peekCustomCfwContext();
-        if (ctx) { ctx->direct_pending=0; ctx->direct_shadow=0; }
-        return;
-    }
+    int frozen = brightness_service();
     customCfwContext *ctx = peekCustomCfwContext();
-    if (ctx && ctx->panel.pattern) {
-        ctx->direct_pending = 0;
-        ctx->direct_shadow = 0;
+    if (frozen || (ctx && ctx->panel.pattern)) {
+        if (ctx) cfw_present_decline(ctx);
         return;
     }
-    if (ctx == 0 || !ctx->direct_pending || ctx->direct_shadow == 0) {
-        if (ctx && ctx->direct_active) {
-            uint32_t deadline = ctx->direct_lease_deadline;
-            if (deadline != 0 && (int32_t)(deadline - FW_MS_TICK) > 0)
-                return;                                  /* preserve the physical direct frame */
-            ctx->direct_active = 0;                       /* fail open to the stock compositor */
+    if (ctx && __atomic_load_n(&ctx->direct_pending, __ATOMIC_ACQUIRE)) {
+        uint32_t t;
+        cfw_time_start(&t);
+        if (cfw_present_await(ctx)) {
+            uint32_t desc[2] = {(uint32_t)(uintptr_t)FW_DISPLAY_FB, PANEL_BYTES};
+            FW_FLUSH(desc);
+            ctx->direct_active = 1;
+            ctx->last_present_us = cfw_time_end(&t);
+            return;
         }
-        FW_DISPLAY_COPY();
-        return;
+        /* Nothing was drawn, so this is a refresh like any other. */
     }
-
-    const uint8_t *shadow = ctx->direct_shadow;
-    uint8_t *fb = FW_DISPLAY_FB;
-    uint32_t t;
-    cfw_time_start(&t);
-    int ok = fb != 0;
-    if (ok) {
-        memcpy(fb, shadow, PANEL_BYTES);
-        cfw_draw_flags(fb, PANEL_W, PANEL_H);
+    if (ctx && ctx->direct_active) {
+        uint32_t deadline = ctx->direct_lease_deadline;
+        if (deadline != 0 && (int32_t)(deadline - FW_MS_TICK) > 0)
+            return;                                  /* preserve the physical direct frame */
+        ctx->direct_active = 0;                       /* fail open to the stock compositor */
     }
-
-    ctx->direct_pending = 0;                         /* consume before returning gate */
-    ctx->direct_shadow = 0;
-    if (ok) {
-        uint32_t desc[2] = {(uint32_t)(uintptr_t)fb, PANEL_BYTES};
-        FW_FLUSH(desc);
-        ctx->direct_active = 1;
-    } else {
-        ctx->direct_active = 0;
-        ctx->direct_failed = 1;
-        FW_DISPLAY_COPY();
-    }
-    ctx->last_present_us = cfw_time_end(&t);
+    FW_DISPLAY_COPY();
 }

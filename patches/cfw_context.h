@@ -5,7 +5,7 @@
 #include "brightness.h"
 
 /* Persistent CFW-owned state, independent of EvenHub image containers. The
- * full-panel shadow is an owned heap allocation. This context is anchored in
+ * screen buffer is an owned heap allocation. This context is anchored in
  * the 1 KiB SRAM region explicitly
  * removed from the stock primary TLSF arena: [0x2029f59c,0x2029f99c). The first
  * word holds the pointer; the second holds a sticky allocation diagnostic. */
@@ -34,7 +34,7 @@ typedef struct {
     uint8_t  fid_resync; /* keyframe rebaselines the next delta's fid (no false skip) */
     uint8_t  diag_hide;  /* 1 = don't draw the flag overlay (default 0 = visible) */
     uint32_t last_worker_us;  /* image_worker() duration of the PREVIOUS message (overlay) */
-    uint32_t last_present_us; /* present_composition() duration of the PREVIOUS present (overlay) */
+    uint32_t last_present_us; /* how long the display task waited for the PREVIOUS present's frame (overlay) */
     uint32_t cyc_per_ms;      /* calibrated DWT cycles per 1 ms OS tick (0 = not yet done) */
     uint8_t  f_reorder;  /* FLAG: ever saw a frame id go backward */
     uint8_t  f_skip;     /* FLAG: ever saw a frame id gap (skipped) */
@@ -61,11 +61,17 @@ typedef struct {
     volatile uint8_t compass_forward;      /* mode 10: forward sensor-hub heading reports to BLE */
     uint8_t  wake_notify_buf[16];          /* stable storage for sid-0x09 notify */
     uint8_t  wear_notify_buf[12];          /* stable storage for sid-0x10 wear notify */
-    /* Direct-framebuffer job. The custom worker holds the stock display gate
-     * before it mutates the shadow and until the display task consumes this
-     * pointer, so no second snapshot or full-size display buffer is required. */
-    const uint8_t *direct_shadow;
+    /* Direct-framebuffer present. Frames are drawn straight into the physical
+     * framebuffer, which only the display task sends to the panel, so a frame
+     * is drawn while that task waits inside display_copy_hook. The presenter
+     * (a command or an animation tick; it holds direct_mutex) sets
+     * direct_pending and queues a refresh. The hook answers in direct_reply
+     * and, when it lets the frame through, blocks on direct_mutex until the
+     * presenter has drawn it. See cfw_present_frame in zlib_glue.c. */
+    uint32_t direct_mutex;
     volatile uint8_t direct_pending;
+    volatile uint8_t direct_reply;             /* CFW_DIRECT_* */
+    volatile uint8_t direct_drawn;             /* the presenter finished a whole frame */
     uint8_t direct_failed;
     uint8_t direct_active;                    /* physical framebuffer currently owns the image */
     uint32_t direct_lease_deadline;            /* fail-open repaint-guard deadline */
@@ -126,7 +132,6 @@ typedef struct {
      * for a deferred double-tap wake when a tap or release follows it. */
     uint8_t  gesture_notify_buf[16];
     uint32_t image_mutex; /* serializes commands from BLE and bridge */
-    uint8_t *composition_buffer; /* owned 640x480 packed 4bpp; released by mode 11 */
     cfw_message_stream message_streams[2]; /* index = BLE ingress lens bit - 1 */
     uint8_t ancs_connection, ancs_stage;
     uint16_t ancs_sequence;
@@ -134,7 +139,7 @@ typedef struct {
     uint8_t  ring_notify_buf[25]; /* atomic timestamped R1 SysEvent */
     uint32_t resource_free_head; /* offset of first free block; zero = none */
     cfw_panel_state panel;
-    uint8_t *screen_buffer;
+    uint8_t *screen_buffer; /* owned 640x480 packed 4bpp app pixels; released by mode 11 */
     uint16_t root_display_list; /* id + 1, zero means no root */
     uint32_t animation_timer;
     uint32_t animation_origin_ms;
@@ -143,7 +148,7 @@ typedef struct {
     uint8_t animation_pending;
     uint8_t animation_running;
     uint32_t timer_paint_us[CFW_TIMER_PAINT_SAMPLES];
-    uint32_t timer_paint_average_us; /* published to the display-task debug overlay */
+    uint32_t timer_paint_average_us; /* shown on the debug overlay */
     uint8_t timer_paint_count;
     uint8_t timer_paint_next;
     cfw_brightness_state brightness;
@@ -157,7 +162,7 @@ typedef struct {
 // Marker used to validate that the CFW context pointer hasn't been clobbered.
 // Layout changes are caught by ctx_size, so this only needs bumping for a layout
 // change that leaves sizeof(customCfwContext) unchanged.
-#define CFW_CTX_MAGIC 0xC0FFEE6CU
+#define CFW_CTX_MAGIC 0xC0FFEE6DU
 #define CFW_CTX_IS_VALID(ctx) \
     ((ctx)->magic == CFW_CTX_MAGIC && (ctx)->ctx_size == (uint32_t)sizeof(customCfwContext))
 
@@ -166,3 +171,12 @@ typedef struct {
 static customCfwContext *peekCustomCfwContext(void);
 static customCfwContext *getCustomCfwContext(void);
 int cfw_fb_lease_active(void);
+
+/* The display task still has a job of ours: a present it has not answered or
+ * a panel request it has not run. A sender that finds this after waiting for
+ * the display gate timed out, or was let through by a signal meant for someone
+ * else; either way it does not own the gate. */
+static inline int cfw_display_busy(customCfwContext *ctx) {
+    return __atomic_load_n(&ctx->direct_pending, __ATOMIC_ACQUIRE) ||
+           __atomic_load_n(&ctx->panel.pending, __ATOMIC_ACQUIRE);
+}
