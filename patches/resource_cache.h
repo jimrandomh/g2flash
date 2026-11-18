@@ -1,9 +1,13 @@
 #pragma once
 #include <stdint.h>
 
-#define CFW_RESOURCE_CACHE_SIZE (192u * 1024u)
+/* The cache is one fixed region: the id table, then 320 KiB shared by the
+ * resources and their 16-byte block headers. Mirrored in Faceclaw
+ * ResourceCacheState.kt, which must not assume more than the firmware has. */
 #define CFW_RESOURCE_COUNT 512u
 #define CFW_RESOURCE_TABLE_BYTES (CFW_RESOURCE_COUNT * 4u)
+#define CFW_RESOURCE_DATA_BYTES (320u * 1024u)
+#define CFW_RESOURCE_CACHE_SIZE (CFW_RESOURCE_TABLE_BYTES + CFW_RESOURCE_DATA_BYTES)
 #define CFW_RESOURCE_MAX_SIZE 65536u
 #define CFW_RESOURCE_FREE 0xffffffffu
 

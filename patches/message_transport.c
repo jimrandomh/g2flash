@@ -22,8 +22,12 @@ static cfw_message_stream *cfw_message_state(uint8_t origin) {
     return ctx ? &ctx->message_streams[origin - 1] : 0;
 }
 #define CFW_STREAM_STATE cfw_message_state
-#define CFW_MESSAGE_MALLOC cfw_heap13_malloc
-#define CFW_MESSAGE_FREE cfw_heap13_free
+/* Record and decoded-message buffers, and each ingress's zlib state (43.4 KiB:
+ * a 32 KiB window, 11.25 KiB of Huffman tables and three small structures),
+ * come from the EvenHub heap. ram_layout.h sizes that heap for one 64 KiB
+ * decoded message and both ingress contexts. */
+#define CFW_MESSAGE_MALLOC cfw_malloc
+#define CFW_MESSAGE_FREE FW_FREE
 #endif
 
 #include "transport_compression.c"

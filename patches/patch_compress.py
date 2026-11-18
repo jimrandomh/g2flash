@@ -15,9 +15,10 @@ Build a CFW image for g2_2.3.0.24 with:
   (8) Faceclaw compass heading + sample diagnostics from the sensor hub while
       image-handler mode 10 is enabled, with magnetic calibration retained
       across IMU reconfiguration under the framebuffer lease, and
-  (9) a lease-scoped 256 KiB resource cache plus cached-image/cached-string drawing
+  (9) a lease-scoped 320 KiB resource cache plus cached-image/cached-string drawing
       through image-handler modes 18, 19, and 20,
-      and built-in-font mode 15, and
+      and built-in-font mode 15; the cache and the screen buffer sit at fixed
+      addresses between the LVGL and EvenHub heaps (RAM LAYOUT below), and
   (10) a phone-controlled microphone configuration + multi-channel audio streaming
       channel (settings fields 103/104 + the 'SM' stream frame) riding the
       already-hooked sid-0x09 settings seams -- no new patch sites; see
@@ -108,6 +109,44 @@ PRIMARY_TLSF_STOCK_LEN = 0x2d000
 PRIMARY_TLSF_CFW_LEN   = 0x2cc00
 CFW_RESERVED_BASE      = PRIMARY_TLSF_ARENA + PRIMARY_TLSF_CFW_LEN
 CFW_RESERVED_END       = PRIMARY_TLSF_ARENA + PRIMARY_TLSF_STOCK_LEN
+
+# RAM LAYOUT. The screen buffer and resource cache used to be EvenHub-heap
+# allocations, which a fragmented heap could refuse. They now have fixed
+# addresses in a gap opened between the LVGL and EvenHub arenas; ram_layout.h
+# has the map and repeats these numbers for the C side. Stock code:
+#   0x48dae6  creates the primary and LVGL heaps (size immediates, base literals)
+#   0x60c3a0  clears and creates the EvenHub heap (base literal 0x60c3fc; the
+#             same size immediate is the memset length and the pool size)
+#   0x59e058  the EvenHub heap's size again, as the total in a usage log line
+#   0x48d8c8  MPU setup: region 6 (table at 0x7aa9e8) makes exactly the LVGL
+#             arena non-cacheable, because the GPU reads and writes it
+# The LVGL arena keeps its base and loses its top; the EvenHub arena keeps its
+# end and loses its bottom. Region 6 must end with the LVGL arena: the buffers
+# in the gap are only touched by the CPU and belong in cached RAM, and no part
+# of the GPU pool may become cached. The HAL masks a region's base and limit to
+# 32 bytes, so the first buffer starts on the next 32-byte boundary.
+# No stock code holds a pointer into the range other than the three arena
+# bases (tests/test_ram_layout.py repeats that scan).
+LVGL_ARENA            = 0x2013519c
+LVGL_STOCK_LEN        = 0xcd000
+LVGL_CFW_LEN          = 0x86000
+SCREEN_BUFFER_ADDR    = 0x201bb1a0
+SCREEN_BUFFER_LEN     = 0x25800
+RESOURCE_CACHE_ADDR   = 0x201e09a0
+RESOURCE_CACHE_LEN    = 0x50800
+EVENHUB_STOCK_ARENA   = 0x2020219c
+EVENHUB_STOCK_LEN     = 0x70800
+EVENHUB_CFW_ARENA     = 0x2023199c
+EVENHUB_CFW_LEN       = 0x41000
+MPU_REGION_ALIGN      = 32
+LVGL_SIZE_SITE        = (0x48daf6, "5ff44d22")   # movs.w r2,#0xcd000
+EVENHUB_BASE_SITE     = (0x60c3fc, "9c212020")   # literal 0x2020219c
+EVENHUB_SIZE_SITES    = (
+    (0x60c3a2, "5ff4e121", "EvenHub arena clear length"),   # movs.w r1,#0x70800
+    (0x60c3b2, "5ff4e121", "EvenHub TLSF pool size"),       # movs.w r1,#0x70800
+    (0x59e058, "5ff4e125", "EvenHub heap total in the stock usage log"),  # movs.w r5
+)
+MPU_LVGL_LIMIT_SITE   = (0x7aa9f4, "9b212020")   # region 6 limit, 0x2020219b
 
 # A bytewise scan for absolute pointers into the reserved tail also interprets every
 # four-byte Thumb instruction as a little-endian integer. In 2.3.0.24 these reviewed
@@ -236,6 +275,52 @@ def enc_bl(pc, target):
     hw1 = 0xF000 | (S << 10) | imm10
     hw2 = 0xD000 | (j1 << 13) | (j2 << 11) | imm11
     return bytes([hw1 & 0xFF, hw1 >> 8, hw2 & 0xFF, hw2 >> 8]).hex()
+
+def enc_movs_imm(stock, value):
+    """Re-encode a stock `movs.w rd,#imm` (Thumb-2 modified immediate) with a
+    new constant, keeping the register. Only an 8-bit value shifted left is
+    representable; anything else is an error rather than a rounded size."""
+    hw1, hw2 = struct.unpack("<HH", bytes.fromhex(stock))
+    if hw1 & 0xfbff != 0xf05f or hw2 & 0x8000:
+        raise ValueError(f"{stock} is not movs.w rd,#imm")
+    shift = value.bit_length() - 8
+    if value <= 0xff or value >> shift << shift != value:
+        raise ValueError(f"{value:#x} is not an 8-bit value shifted left")
+    imm12 = ((32 - shift) << 7) | ((value >> shift) & 0x7f)
+    hw1 = (hw1 & ~0x0400) | ((imm12 >> 11) << 10)
+    hw2 = (hw2 & 0x0f00) | (((imm12 >> 8) & 7) << 12) | (imm12 & 0xff)
+    return struct.pack("<HH", hw1, hw2).hex()
+
+def ram_layout_patches():
+    """In-place edits that open the gap for the fixed CFW buffers. Refuses a
+    layout whose pieces overlap, leave the stock block, or put a CFW buffer
+    inside the MPU's non-cacheable region."""
+    lvgl_end = LVGL_ARENA + LVGL_CFW_LEN
+    uncached_end = align_up(lvgl_end, MPU_REGION_ALIGN)   # what the MPU really covers
+    evenhub_end = EVENHUB_STOCK_ARENA + EVENHUB_STOCK_LEN
+    if not (LVGL_ARENA + LVGL_STOCK_LEN == EVENHUB_STOCK_ARENA
+            and evenhub_end == PRIMARY_TLSF_ARENA
+            and EVENHUB_CFW_ARENA + EVENHUB_CFW_LEN == evenhub_end
+            and EVENHUB_CFW_ARENA % 4 == 0
+            and uncached_end <= SCREEN_BUFFER_ADDR
+            and SCREEN_BUFFER_ADDR % MPU_REGION_ALIGN == 0
+            and SCREEN_BUFFER_ADDR + SCREEN_BUFFER_LEN <= RESOURCE_CACHE_ADDR
+            and RESOURCE_CACHE_ADDR + RESOURCE_CACHE_LEN <= EVENHUB_CFW_ARENA):
+        raise ValueError("inconsistent CFW RAM layout")
+    return [
+        (g2f(LVGL_SIZE_SITE[0]), LVGL_SIZE_SITE[1],
+         enc_movs_imm(LVGL_SIZE_SITE[1], LVGL_CFW_LEN),
+         "LVGL arena size 0xcd000 -> 0x86000 (fixed CFW buffers follow it)"),
+        (g2f(EVENHUB_BASE_SITE[0]), EVENHUB_BASE_SITE[1],
+         struct.pack("<I", EVENHUB_CFW_ARENA).hex(),
+         "EvenHub arena base 0x2020219c -> 0x2023199c"),
+        *[(g2f(site), old, enc_movs_imm(old, EVENHUB_CFW_LEN),
+           f"{what} 0x70800 -> 0x41000")
+          for site, old, what in EVENHUB_SIZE_SITES],
+        (g2f(MPU_LVGL_LIMIT_SITE[0]), MPU_LVGL_LIMIT_SITE[1],
+         struct.pack("<I", lvgl_end - 1).hex(),
+         "MPU region 6 (non-cacheable) ends with the shrunk LVGL arena"),
+    ]
 
 def enc_bw(pc, target):
     """Encode an unconditional Thumb-2 B.W (T4)."""
@@ -483,6 +568,7 @@ def layout(img):
         (g2f(PRIMARY_TLSF_SIZE_SITE[0]), PRIMARY_TLSF_SIZE_SITE[1],
          PRIMARY_TLSF_CFW_SIZE,
          "reserve final 1 KiB of primary TLSF arena for CFW context anchor"),
+        *ram_layout_patches(),
         # redirect the settings responder send -> settings_send_wrapper (caps field 100)
         (g2f(SETTINGS_BL_SITE[0]), SETTINGS_BL_SITE[1], enc_bl(SETTINGS_BL_SITE[0], settings_addr),
          "bl settings_send_wrapper (append caps field 100)"),

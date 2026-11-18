@@ -66,10 +66,7 @@
       "0x2000033c": 1,
       "0x20000358": 1,
       "0x200774e0": 1,
-      "0x20077ed0": 1,
-      "0x2013519c": 1,
-      "0x2020219c": 2,
-      "0x2027299c": 1
+      "0x20077ed0": 1
     },
     "evenhub_enter.c": {
       "0x00465d4d": 1,
@@ -104,10 +101,7 @@
     },
     "malloc.h": {
       "0x0045855f": 1,
-      "0x004585a3": 1,
-      "0x0048d981": 1,
-      "0x0048da9f": 1,
-      "0x20000358": 1
+      "0x004585a3": 1
     },
     "message_transport.c": {
       "0x00465d4d": 1,
@@ -138,6 +132,13 @@
       "0x0072bd7c": 1,
       "0x2007785c": 1,
       "0x20077868": 1
+    },
+    "ram_layout.h": {
+      "0x2013519c": 1,
+      "0x201bb1a0": 1,
+      "0x201e09a0": 1,
+      "0x2023199c": 1,
+      "0x2027299c": 1
     },
     "ring_battery.c": {
       "0x00465d4d": 1,
@@ -593,32 +594,6 @@
         }
       ],
       "stock_guard_size": 46
-    },
-    {
-      "old": "0x0048c1e8",
-      "new": "0x0048d980",
-      "method": "strict-signature",
-      "uses": [
-        {
-          "file": "malloc.h",
-          "address": "0x0048d981",
-          "count": 1
-        }
-      ],
-      "stock_guard_size": 88
-    },
-    {
-      "old": "0x0048c306",
-      "new": "0x0048da9e",
-      "method": "strict-signature",
-      "uses": [
-        {
-          "file": "malloc.h",
-          "address": "0x0048da9f",
-          "count": 1
-        }
-      ],
-      "stock_guard_size": 72
     },
     {
       "old": "0x0049da08",
@@ -1515,11 +1490,6 @@
       "uses": [
         {
           "file": "debug.c",
-          "address": "0x20000358",
-          "count": 1
-        },
-        {
-          "file": "malloc.h",
           "address": "0x20000358",
           "count": 1
         }
@@ -3309,7 +3279,7 @@
       "method": "literal loader witnesses",
       "uses": [
         {
-          "file": "debug.c",
+          "file": "ram_layout.h",
           "address": "0x2013519c",
           "count": 1
         }
@@ -3325,16 +3295,44 @@
       ]
     },
     {
-      "old": "0x202020a8",
-      "new": "0x2020219c",
-      "method": "literal loader witnesses",
+      "old": null,
+      "new": "0x201bb1a0",
+      "method": "manual review",
       "uses": [
         {
-          "file": "debug.c",
-          "address": "0x2020219c",
-          "count": 2
+          "file": "ram_layout.h",
+          "address": "0x201bb1a0",
+          "count": 1
         }
       ],
+      "review": "screen buffer: first 32-byte boundary after LVGL arena base 2013519c + reduced length 86000 (MPU region 6 limit 201bb19b is masked up to 201bb19f); inside the stock zero-init block 2013519c + 245788"
+    },
+    {
+      "old": null,
+      "new": "0x201e09a0",
+      "method": "manual review",
+      "uses": [
+        {
+          "file": "ram_layout.h",
+          "address": "0x201e09a0",
+          "count": 1
+        }
+      ],
+      "review": "resource cache: screen buffer 201bb1a0 + 25800; its 50800 bytes end at 202311a0, below the moved EvenHub arena base 2023199c"
+    },
+    {
+      "old": "0x202020a8",
+      "new": "0x2023199c",
+      "method": "manual review",
+      "uses": [
+        {
+          "file": "ram_layout.h",
+          "address": "0x2023199c",
+          "count": 1
+        }
+      ],
+      "review": "EvenHub arena base, moved up from stock 2020219c by patching its only literal (60c3fc, loaded only at 60c3a8): stock end 2027299c - reduced length 41000",
+      "stock": "0x2020219c",
       "evidence": [
         {
           "old_load": 6312212,
@@ -3351,7 +3349,7 @@
       "method": "literal loader witnesses",
       "uses": [
         {
-          "file": "debug.c",
+          "file": "ram_layout.h",
           "address": "0x2027299c",
           "count": 1
         }
@@ -3719,12 +3717,12 @@
     {
       "address": "0x0048d980",
       "bytes": "70b506000d000024002d01d1002022e05ff0ff313068b4f7f7fc01281ad1290070680ff004fa0400002c0dd020000ff05ff9b1684018b060f068b168884201d2b06800e0f068f0600023002200213068b4f7affa200070bd",
-      "label": "stock dependency 0048c1e8 -> 0048d980"
+      "label": "generic heap malloc: descriptor accounting, no per-request header (read by the debug overlay heap statistics; no longer called)"
     },
     {
       "address": "0x0048da9e",
       "bytes": "70b505000c00002c1dd05ff0ff312868b4f76bfc012816d120000ff0daf80600210068680ff0e7f9a868864203d2a868861bae6001e00020a8600023002200212868b4f727fa70bd",
-      "label": "stock dependency 0048c306 -> 0048da9e"
+      "label": "generic heap free: descriptor accounting (read by the debug overlay heap statistics; no longer called)"
     },
     {
       "address": "0x0049f1a4",
@@ -4365,6 +4363,66 @@
       "address": "0x00442b2a",
       "bytes": "38b50400fff748fe002802d07ff0050505e00025002c02d0200009f020fa280032bd",
       "label": "direct present: osDelay, whole routine (presenter waits a tick at a time for the display task)"
+    },
+    {
+      "address": "0x0048d8c8",
+      "bytes": "18b58fb05bf05dfc68469c4991e81c0080e81c00012168465bf068fc09a898491822acf78bf9012109a85bf0a4fc03a894491822acf782f9012103a85bf09bfc012191485bf097fc012190485bf093fc01218f485bf08ffc01218e485bf08bfc01210020f0f776fc012101205bf02efc10b010bd",
+      "label": "RAM layout: MPU setup; attribute 0, regions 6 and 7 copied from rodata, 8-11 from .data, then enable"
+    },
+    {
+      "address": "0x0048d93c",
+      "bytes": "70b504000d001600310028000ff016fa60606068002803d18248ecf7cafafee70120b4f75cfa20602068002803d17e48ecf7bffafee70020a0600020e0602661656170bd",
+      "label": "RAM layout: generic heap constructor; descriptor +4 TLSF, +0x10 size, +0x14 base"
+    },
+    {
+      "address": "0x0048db44",
+      "bytes": "d8247c00e8a97a0000aa7a00bc080020d40800202c070020300d0020b44b780078177900",
+      "label": "RAM layout: MPU attribute/region table pointers used by the setup"
+    },
+    {
+      "address": "0x004e91b4",
+      "bytes": "70b504000d003c480068c00701d503203ae000262ae0c9b2890011f00c011ce0607800282bd0a078e178890051eac001207951ea400160790843a179e3799b0053eac103217a53ea4103617a194310f00f0fe0d0c9b211f00f0151ea0011c9b21000c0b2fff760ff0b34761cae420ad222781000c0b20828d2db052004e00020a17a8900e3e7002070bd38b5a0b00368194a1268d20701d503202ae0ca18112a01d3052025e000241be045686d096d01027a55eac205427a55ea4205827a15436a4642f83450c5686d096d01026955ea4205027d15436a4602ebc40255601830641c8c42e1d30a0069461800fff76bff002021b030bd0000",
+      "label": "RAM layout: MPU HAL attribute encoding; region base and limit masked to 32 bytes"
+    },
+    {
+      "address": "0x007aa9e8",
+      "bytes": "060000009c511320000101009b21202000000000010000000700000040673720000101003f6b37200000000001000000",
+      "label": "RAM layout: MPU regions 6 (exactly the stock LVGL arena) and 7"
+    },
+    {
+      "address": "0x007c24d8",
+      "bytes": "000100010000000100000000",
+      "label": "RAM layout: MPU attribute 0 = normal memory, outer and inner non-cacheable"
+    },
+    {
+      "address": "0x0055ed74",
+      "bytes": "1ff7a2f901201ff7def9022029f78efd0400002c04d02100dff84c051bf7adf82ef7a7fe43f0a8fa",
+      "label": "RAM layout: boot enables the caches, then creates the heaps and the MPU regions"
+    },
+    {
+      "address": "0x0060c3a0",
+      "bytes": "3eb55ff4e1210022144c250028002ff699fe5ff4e121200090f6defc1049086031f6",
+      "label": "RAM layout: EvenHub arena clear and TLSF creation share one base and one size"
+    },
+    {
+      "address": "0x0060c3fc",
+      "bytes": "9c212020d07e0720",
+      "label": "RAM layout: EvenHub arena base and TLSF pointer literals"
+    },
+    {
+      "address": "0x006f4228",
+      "bytes": "4b000000a1c36000",
+      "label": "RAM layout: EvenHub heap creation is a boot auto-init entry"
+    },
+    {
+      "address": "0x0059e04e",
+      "bytes": "fef6ddfd0298019c24185ff4e12540f674400700fef610fe0600f619",
+      "label": "RAM layout: EvenHub usage report takes the heap total from an immediate"
+    },
+    {
+      "address": "0x007914f0",
+      "bytes": "27a5e8ffe02f07002c550020885724009c51132000000000",
+      "label": "RAM layout: startup zero-init covers 2013519c + 245788, the arenas and the gap"
     }
   ],
   "patch_sites": [
@@ -4469,6 +4527,36 @@
       "write_size": 4
     },
     {
+      "address": "0x0048daf6",
+      "old": "5ff44d22",
+      "write_size": 4
+    },
+    {
+      "address": "0x0060c3fc",
+      "old": "9c212020",
+      "write_size": 4
+    },
+    {
+      "address": "0x0060c3a2",
+      "old": "5ff4e121",
+      "write_size": 4
+    },
+    {
+      "address": "0x0060c3b2",
+      "old": "5ff4e121",
+      "write_size": 4
+    },
+    {
+      "address": "0x0059e058",
+      "old": "5ff4e125",
+      "write_size": 4
+    },
+    {
+      "address": "0x007aa9f4",
+      "old": "9b212020",
+      "write_size": 4
+    },
+    {
       "address": "0x004aa8dc",
       "old": "d4f712fb",
       "write_size": 4
@@ -4566,6 +4654,14 @@
     {
       "old": "0x004448e0",
       "reason": "Faceclaw/38: the idle policy's busy check is no longer read; head-tilt records are forwarded from the UI dispatcher hook, which gates on the head-up switch only."
+    },
+    {
+      "old": "0x0048c1e8",
+      "reason": "Faceclaw/40: no CFW allocation uses the generic heap coordinator; message and zlib buffers moved from the LVGL arena to the EvenHub heap. The stock bytes stay guarded because the debug overlay still interprets descriptors this code maintains."
+    },
+    {
+      "old": "0x0048c306",
+      "reason": "Faceclaw/40: no CFW allocation uses the generic heap coordinator; message and zlib buffers moved from the LVGL arena to the EvenHub heap. The stock bytes stay guarded because the debug overlay still interprets descriptors this code maintains."
     }
   ],
   "assembly_targets": {
@@ -4788,5 +4884,11 @@
     "evidence": "docs/keyboard-abi.md",
     "scope": "Experimental keyboard bridge, dormant before private settings commands; five reviewed 4-byte hooks, no boot or capacity changes",
     "date": "2026-09-24"
+  },
+  "ram_layout_review": {
+    "evidence": "patches/ram_layout.h, patches/patch_compress.py (RAM LAYOUT), tests/test_ram_layout.py",
+    "scope": "Boot-time change: LVGL arena 0xcd000 -> 0x86000, EvenHub arena base 0x2020219c -> 0x2023199c and size 0x70800 -> 0x41000, MPU region 6 limit 0x2020219b -> 0x201bb19b; six 4-byte edits. Fixed CFW screen buffer and resource cache occupy the gap. No stock code loads a pointer into the range other than the three arena bases.",
+    "date": "2026-11-18",
+    "hardware_tested": false
   }
 }

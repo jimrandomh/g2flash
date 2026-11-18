@@ -2,20 +2,15 @@
 
 typedef void *(*malloc_fn)(uint32_t);
 typedef void (*free_fn)(void *);
-typedef void *(*heap_malloc_fn)(uint32_t descriptor, uint32_t size);
-typedef void (*heap_free_fn)(uint32_t descriptor, void *ptr);
 
 /* Stock mutex-protected EvenHub TLSF wrappers. Both load the arena pointer
- * from 0x20077ed0 (arena 0x2020219c, size 0x70800 in firmware 2.3.0.24). */
+ * from 0x20077ed0. Every CFW allocation comes from this heap (see ram_layout.h
+ * for its bounds). Nothing of ours lives in the LVGL arena, which is not cached
+ * and so is slow for buffers that only the CPU touches. */
 #define FW_MALLOC  ((malloc_fn)0x0045855fU)         /* FUN_0045855e malloc(size) */
 #define FW_FREE    ((free_fn)0x004585a3U)           /* FUN_004585a2 free(ptr) */
-#define FW_HEAP_MALLOC ((heap_malloc_fn)0x0048d981U) /* FUN_0048d980 generic heap malloc */
-#define FW_HEAP_FREE   ((heap_free_fn)0x0048da9fU)   /* FUN_0048da9e generic heap free */
-#define FW_HEAP_13_DESCRIPTOR 0x20000358U            /* TLSF arena @ 0x2013519c, 0xcd000 B */
 
 static void *cfw_malloc(uint32_t size);
-static void *cfw_heap13_malloc(uint32_t size);
-static void cfw_heap13_free(void *ptr);
 typedef struct {
     uint32_t free_bytes;
     uint32_t max_alloc;

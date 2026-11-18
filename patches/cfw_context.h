@@ -5,10 +5,11 @@
 #include "brightness.h"
 
 /* Persistent CFW-owned state, independent of EvenHub image containers. The
- * screen buffer is an owned heap allocation. This context is anchored in
- * the 1 KiB SRAM region explicitly
- * removed from the stock primary TLSF arena: [0x2029f59c,0x2029f99c). The first
- * word holds the pointer; the second holds a sticky allocation diagnostic. */
+ * screen buffer and resource cache have fixed addresses (ram_layout.h). This
+ * context is an EvenHub-heap allocation anchored in the 1 KiB SRAM region
+ * explicitly removed from the stock primary TLSF arena:
+ * [0x2029f59c,0x2029f99c). The first word holds the pointer; the second holds
+ * a sticky allocation diagnostic. */
 
 #define CFW_FID_RING  16     /* recent mode-3 frame ids kept for diagnostics */
 #define CFW_TIMER_PAINT_SAMPLES 10
@@ -75,8 +76,9 @@ typedef struct {
     uint8_t direct_failed;
     uint8_t direct_active;                    /* physical framebuffer currently owns the image */
     uint32_t direct_lease_deadline;            /* fail-open repaint-guard deadline */
-    /* Resource arena, including its 512-entry pointer table; allocated lazily
-     * and released with the framebuffer lease. Wire references are resource IDs. */
+    /* Resource arena, including its 512-entry pointer table: the fixed region
+     * in ram_layout.h while a session owns it, null once the framebuffer lease
+     * is released. Wire references are resource IDs. */
     uint8_t *resource_cache;
     /* --- Microphone control + multi-channel routing (SybilSight "glasses ->
      * microphones"). See the contract comment in mic_control.c; the stock-entry
@@ -139,7 +141,7 @@ typedef struct {
     uint8_t  ring_notify_buf[25]; /* atomic timestamped R1 SysEvent */
     uint32_t resource_free_head; /* offset of first free block; zero = none */
     cfw_panel_state panel;
-    uint8_t *screen_buffer; /* owned 640x480 packed 4bpp app pixels; released by mode 11 */
+    uint8_t *screen_buffer; /* fixed 640x480 packed 4bpp app pixels; null until drawn to and after mode 11 */
     uint16_t root_display_list; /* id + 1, zero means no root */
     uint32_t animation_timer;
     uint32_t animation_origin_ms;

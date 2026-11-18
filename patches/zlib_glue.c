@@ -138,7 +138,7 @@ typedef enum {
      * Whole batch validated first. IDs must be distinct. */
     CFW_MSG_UPLOAD_RESOURCE = 21,
     /* [22][count16]{[id16]} Evict distinct resource IDs (absent is a no-op).
-     * IDs are 0..511. The 192 KiB cache starts with a 2 KiB pointer table;
+     * IDs are 0..511. The cache starts with a 2 KiB pointer table, then 320 KiB;
      * freelist allocation and compaction preserve resource IDs. */
     CFW_MSG_EVICT_RESOURCE = 22,
     /* [23][request-id16][lenses8][op8][length8][address32][value16]

@@ -1,4 +1,5 @@
 #include "debug.h"
+#include "ram_layout.h"
 
 /* --- glasses-side timing: Arm DWT cycle counter, clock derived by calibration -----
  * CYCCNT is a free-running core-cycle counter (~4 ns). To use it we (1) UNLOCK the DWT
@@ -177,13 +178,14 @@ __attribute__((noinline)) static void cfw_draw_flags(uint8_t *disp, uint32_t w, 
     mic_append_overlay(line, sizeof(line));
     draw_string(disp, w, h, IMAGE_X + 2, IMAGE_Y + 14, line, 15, 0);
 
-    cfw_heap_stats heap_13 = heap_object_stats(0x20000358u, 0x2013519cu, 0x000cd000u);
+    /* The LVGL, EvenHub and other (primary) heaps, with the bounds this
+     * firmware gives them (ram_layout.h). The first and last have a stock
+     * descriptor; the EvenHub heap only has its TLSF pointer. */
+    cfw_heap_stats heap_13 = heap_object_stats(0x20000358u, CFW_LVGL_ARENA, CFW_LVGL_ARENA_SIZE);
     cfw_heap_stats heap_20 = {TLSF_FREE_INVALID, TLSF_FREE_INVALID};
-    if (CFW_HEAP_READ32(0x20077ed0u) == 0x2020219cu)
-        heap_20 = tlsf_arena_stats(0x2020219cu, 0x00070800u);
-    /* Stock heap 27 is reduced from 0x2d000 to 0x2cc00, reserving the final
-     * 1 KiB for CFW state. These are the LVGL, EvenHub, and other heaps. */
-    cfw_heap_stats heap_27 = heap_object_stats(0x2000033cu, 0x2027299cu, 0x0002cc00u);
+    if (CFW_HEAP_READ32(0x20077ed0u) == CFW_EVENHUB_ARENA)
+        heap_20 = tlsf_arena_stats(CFW_EVENHUB_ARENA, CFW_EVENHUB_ARENA_SIZE);
+    cfw_heap_stats heap_27 = heap_object_stats(0x2000033cu, CFW_PRIMARY_ARENA, CFW_PRIMARY_ARENA_SIZE);
     strlcpy(line, "free/max KiB: LVGL ", sizeof(line));
     append_heap_kib(line, heap_13, sizeof(line));
     strlcat(line, " EvenHub ", sizeof(line));

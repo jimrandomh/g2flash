@@ -27,21 +27,6 @@ __attribute__((noinline)) static void *cfw_malloc(uint32_t size) {
     return p;
 }
 
-/* Allocate from the independent 820 KiB TLSF arena at 0x2013519c. Go through
- * the stock generic heap coordinator rather than calling TLSF directly so the
- * descriptor's mutex, current-byte counter, and peak-byte counter stay valid. */
-__attribute__((noinline)) static void *cfw_heap13_malloc(uint32_t size) {
-    cfw_alloc_diag();
-    void *p = FW_HEAP_MALLOC(FW_HEAP_13_DESCRIPTOR, size);
-    if (p == 0)
-        *(volatile uint32_t *)CFW_ALLOC_DIAG_SLOT = CFW_ALLOC_DIAG_MAGIC | 1u;
-    return p;
-}
-
-__attribute__((noinline)) static void cfw_heap13_free(void *ptr) {
-    FW_HEAP_FREE(FW_HEAP_13_DESCRIPTOR, ptr);
-}
-
 
 #ifndef CFW_HEAP_READ32
 #define CFW_HEAP_READ32(addr) (*(volatile uint32_t *)(uintptr_t)(addr))

@@ -3,6 +3,14 @@
 #include "cfw_context.h"
 #include "resource_cache.h"
 
+/* The cache has a fixed address (ram_layout.h), so claiming it cannot fail.
+ * ctx->resource_cache is null while no session owns it. */
+#ifndef CFW_RESOURCE_CACHE_STORAGE
+#include "ram_layout.h"
+_Static_assert(CFW_RESOURCE_CACHE_SIZE == CFW_RESOURCE_CACHE_BYTES, "resource cache size");
+#define CFW_RESOURCE_CACHE_STORAGE ((uint8_t *)CFW_RESOURCE_CACHE_ADDR)
+#endif
+
 static uint32_t cfw_resource_span(uint32_t length) {
     return sizeof(cfw_resource_block) + ((length + 3u) & ~3u);
 }
@@ -123,11 +131,9 @@ static cfw_resource_block *cfw_resource_allocate(customCfwContext *ctx, uint32_t
 }
 static void cfw_resource_cache_release(customCfwContext *ctx) {
     if (ctx) {
-        uint8_t *cache = ctx->resource_cache;
         ctx->resource_cache = 0;
         ctx->resource_free_head = 0;
         ctx->root_display_list = 0;
-        if (cache) FW_FREE(cache);
     }
 }
 static int cfw_resource_upload(const uint8_t *src, uint32_t len) {
@@ -166,8 +172,7 @@ static int cfw_resource_upload(const uint8_t *src, uint32_t len) {
     if (pos != len || used > CFW_RESOURCE_CACHE_SIZE - CFW_RESOURCE_TABLE_BYTES) return -1;
     if (!count) return 0;
     if (!ctx->resource_cache) {
-        uint8_t *cache = (uint8_t *)cfw_malloc(CFW_RESOURCE_CACHE_SIZE);
-        if (!cache) return -1;
+        uint8_t *cache = CFW_RESOURCE_CACHE_STORAGE;
         bzero(cache, CFW_RESOURCE_TABLE_BYTES);
         ctx->resource_cache = cache;
         cfw_resource_block *free = cfw_resource_block_at(ctx, CFW_RESOURCE_TABLE_BYTES);

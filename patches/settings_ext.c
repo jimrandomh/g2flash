@@ -491,7 +491,10 @@ int settings_send_wrapper(int type, int sid, unsigned char *buf, unsigned len) {
         //     already <= 11.25 ms with latency 0.
         // 39: experimental BLE keyboard bridge (fields 130/131): one explicitly
         //     enabled right-lens HOGP connection alongside the ring.
-        static const char caps[] = "Faceclaw/39";
+        // 40: the screen buffer and resource cache have fixed addresses between
+        //     the LVGL and EvenHub heaps, so claiming them cannot fail; the
+        //     cache holds 320 KiB (was 190 KiB). See ram_layout.h.
+        static const char caps[] = "Faceclaw/40";
         len = pb_append_bytes_field(buf, len, SETTINGS_RESPONSE_CAPACITY,
                                     100u, (const unsigned char *)caps,
                                     (unsigned)sizeof(caps) - 1u);
