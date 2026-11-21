@@ -49,6 +49,9 @@ static uint16_t ancs_mtu(uint8_t id) {
 }
 #define ANCS_MTU ancs_mtu
 #define ANCS_CCC ((uint8_t (*)(uint8_t,uint8_t))0x00548327u)
+/* DmConnClose(client, connection, reason): the stock AppConnClose wrapper passes
+ * client 3 (app) and reason 0x13 (remote user terminated) the same way. */
+#define ANCS_DM_CLOSE ((void (*)(uint8_t,uint8_t,uint8_t))0x004ce3f5u)
 #define ANCS_CONNECTION (*(volatile uint8_t *)0x20065cf0u)
 #define ANCS_HANDLES (*(uint16_t *volatile *)0x20065cf4u)
 #define ANCS_CONTEXT() peekCustomCfwContext()
@@ -128,7 +131,17 @@ uint8_t cfw_ancs_write(uint8_t connection, uint16_t handle, uint8_t operation,
      * must always retain the stock handle-specific behavior. */
     if (handle == 0x847 || !value || length < 2 || value[0] != 'A' || value[1] != 'N')
         return ANCS_STOCK_WRITE(connection,handle,operation,offset,length,value,attribute);
-    if ((operation != 0x12 && operation != 0x52) || offset || length < 8 || value[2] != 1 || value[3] > 2) return 0x0d;
+    if ((operation != 0x12 && operation != 0x52) || offset || length < 8 || value[2] != 1 || value[3] > 3) return 0x0d;
+    if (value[3] == 3) {
+        /* RELEASE: hang up the link this write arrived on. iOS keeps a link it
+         * uses for ANCS up after the app cancels its own connection, so only
+         * the glasses can end it. This needs no ANCS state or token match: it
+         * ends the writer's own connection and nothing else. The stock close
+         * handling that follows clears the relay through cfw_ancs_close. */
+        if (!connection || length != 8) return 0x0d;
+        ANCS_DM_CLOSE(3, connection, 0x13);
+        return 0;
+    }
     /* Never accept app-supplied connection/peer identifiers. This check also
      * excludes the other lens and any other concurrently connected central. */
     if (!connection || connection != ANCS_CONNECTION || !ANCS_HANDLES || !ANCS_CCC(connection,2)) return 0x08;

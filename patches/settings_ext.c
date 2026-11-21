@@ -494,7 +494,9 @@ int settings_send_wrapper(int type, int sid, unsigned char *buf, unsigned len) {
         // 40: the screen buffer and resource cache have fixed addresses between
         //     the LVGL and EvenHub heaps, so claiming them cannot fail; the
         //     cache holds 320 KiB (was 190 KiB). See ram_layout.h.
-        static const char caps[] = "Faceclaw/40";
+        // 41: ANCS relay op 3 (RELEASE) hangs up the phone link it arrives on,
+        //     so an iOS Disconnect can end the link iOS keeps for ANCS.
+        static const char caps[] = "Faceclaw/41";
         len = pb_append_bytes_field(buf, len, SETTINGS_RESPONSE_CAPACITY,
                                     100u, (const unsigned char *)caps,
                                     (unsigned)sizeof(caps) - 1u);
