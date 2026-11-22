@@ -320,7 +320,8 @@ static int cfw_draw_op_bounding_box(const cfw_draw_env *env, cfw_reader r, cfw_d
 }
 
 /* Save edge pixels before the byte move: either edge's source byte may be
- * overwritten by an overlapping body. Destination neighbors stay untouched. */
+ * overwritten by an overlapping body. Destination neighbors stay untouched.
+ * `reverse` is set for an overlapping copy to a later position. */
 static void cfw_draw_copy_row(uint8_t *dst, const uint8_t *src,
                               uint32_t dx, uint32_t sx, uint32_t width, int reverse) {
     uint32_t first = dx & 1u, last = (dx + width) & 1u;
@@ -334,9 +335,9 @@ static void cfw_draw_copy_row(uint8_t *dst, const uint8_t *src,
     if (!((sx ^ dx) & 1u)) {
         memmove(d, s, count);
     } else if (reverse) {
-        for (uint32_t i = count; i > 0; i--) d[i - 1] = (s[i - 1] << 4) | (s[i] >> 4);
+        cfw_pixels_shift_backward(d, s, count);
     } else {
-        for (uint32_t i = 0; i < count; i++) d[i] = (s[i] << 4) | (s[i + 1] >> 4);
+        cfw_pixels_shift_forward(d, s, count);
     }
     if (first) dst[dx >> 1] = (dst[dx >> 1] & 0xf0u) | first_color;
     if (last) dst[(dx + width) >> 1] = (dst[(dx + width) >> 1] & 15u) | (last_color << 4);

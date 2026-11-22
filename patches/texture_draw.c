@@ -117,6 +117,110 @@ static cfw_texture_clip cfw_texture_panel(uint32_t panel_w, uint32_t panel_h) {
     return clip;
 }
 
+/* ---- Packed pixels a word at a time --------------------------------------
+ *
+ * Four bytes of a packed row as one number whose most significant nibble is
+ * the leftmost pixel, so that shifting it left by four moves the row one pixel
+ * to the left. The copies below align their stores, but their loads are at
+ * whatever alignment the source has: unlike memory.c, this relies on the core
+ * loading unaligned words, as the compiler's own code has since the build
+ * dropped -mno-unaligned-access. */
+_Static_assert(__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__, "packed pixel words assume a little-endian target");
+
+static inline uint32_t cfw_pixels_load(const uint8_t *p) {
+    uint32_t word;
+    __builtin_memcpy_inline(&word, p, 4);
+    return __builtin_bswap32(word);
+}
+
+static inline void cfw_pixels_store(uint8_t *p, uint32_t pixels) {
+    pixels = __builtin_bswap32(pixels);
+    __builtin_memcpy_inline(p, &pixels, 4);
+}
+
+/* Copy 2*count pixels to the whole bytes d[0..count) from a source that is one
+ * pixel out of step: they start at the low nibble of s[0] and end at the high
+ * nibble of s[count], so d[i] = (s[i] << 4) | (s[i+1] >> 4). Works front to
+ * back: the ranges may overlap if d <= s. */
+static void cfw_pixels_shift_forward(uint8_t *d, const uint8_t *s, uint32_t count) {
+    #pragma clang loop unroll(disable)
+    while (count && ((uintptr_t)d & 3u)) {
+        *d++ = (uint8_t)((s[0] << 4) | (s[1] >> 4));
+        s++;
+        count--;
+    }
+    if (count >= 4) {
+        uint32_t pixels = cfw_pixels_load(s);
+        /* Each word needs the first pixel of the next one, which is loaded
+         * whole while that many more source bytes are known to exist: four
+         * words at a time, then one. Every load of a step comes before its
+         * stores, which matters when the ranges overlap. */
+        #pragma clang loop unroll(disable)
+        while (count >= 20) {
+            uint32_t second = cfw_pixels_load(s + 4), third = cfw_pixels_load(s + 8);
+            uint32_t fourth = cfw_pixels_load(s + 12), next = cfw_pixels_load(s + 16);
+            cfw_pixels_store(d, (pixels << 4) | (second >> 28));
+            cfw_pixels_store(d + 4, (second << 4) | (third >> 28));
+            cfw_pixels_store(d + 8, (third << 4) | (fourth >> 28));
+            cfw_pixels_store(d + 12, (fourth << 4) | (next >> 28));
+            pixels = next;
+            s += 16;
+            d += 16;
+            count -= 16;
+        }
+        #pragma clang loop unroll(disable)
+        while (count >= 8) {
+            uint32_t next = cfw_pixels_load(s + 4);
+            cfw_pixels_store(d, (pixels << 4) | (next >> 28));
+            pixels = next;
+            s += 4;
+            d += 4;
+            count -= 4;
+        }
+        cfw_pixels_store(d, (pixels << 4) | (uint32_t)(s[4] >> 4));
+        s += 4;
+        d += 4;
+        count -= 4;
+    }
+    #pragma clang loop unroll(disable)
+    while (count) {
+        *d++ = (uint8_t)((s[0] << 4) | (s[1] >> 4));
+        s++;
+        count--;
+    }
+}
+
+/* The same copy back to front: the ranges may overlap if d > s. */
+static void cfw_pixels_shift_backward(uint8_t *d, const uint8_t *s, uint32_t count) {
+    if (!count) return;
+    d += count;
+    s += count;
+    uint32_t carry = (uint32_t)(s[0] >> 4);   /* the pixel that follows the ones still to copy */
+    #pragma clang loop unroll(disable)
+    while (count && ((uintptr_t)d & 3u)) {
+        uint32_t byte = *--s;
+        *--d = (uint8_t)((byte << 4) | carry);
+        carry = byte >> 4;
+        count--;
+    }
+    #pragma clang loop unroll(disable)
+    while (count >= 4) {
+        s -= 4;
+        d -= 4;
+        uint32_t pixels = cfw_pixels_load(s);
+        cfw_pixels_store(d, (pixels << 4) | carry);
+        carry = pixels >> 28;
+        count -= 4;
+    }
+    #pragma clang loop unroll(disable)
+    while (count) {
+        uint32_t byte = *--s;
+        *--d = (uint8_t)((byte << 4) | carry);
+        carry = byte >> 4;
+        count--;
+    }
+}
+
 /* Opaque identity-mapped surfaces need only a clipped packed-row copy. Keep
  * partial destination bytes intact; odd source alignment joins adjacent bytes.
  * The caller excludes self-copies, which retain the overlap-safe pixel path. */
@@ -145,7 +249,7 @@ static void cfw_texture_copy_raw(uint8_t *shadow, uint32_t stride, cfw_texture_c
         if (!(column & 1)) {
             memcpy(dst, src, bytes);
         } else {
-            for (uint32_t i = 0; i < bytes; i++) dst[i] = (src[i] << 4) | (src[i + 1] >> 4);
+            cfw_pixels_shift_forward(dst, src, bytes);
         }
         if (count & 1) {
             uint32_t color = (src[bytes] >> ((column & 1) ? 0 : 4)) & 15u;
@@ -154,22 +258,114 @@ static void cfw_texture_copy_raw(uint8_t *shadow, uint32_t stride, cfw_texture_c
     }
 }
 
-/* Render packed rows: an opaque identity-mapped image that is not the
- * destination itself takes the row copy, everything else the overlap-safe
- * pixel path. Kept out of line so that RLE images, whose calls go deeper
- * (cfw_rle_draw), do not carry this function's frame. */
+/* One pixel of a packed row. */
+static inline uint32_t cfw_texture_pixel(const uint8_t *row, uint32_t x) {
+    return (row[x >> 1] >> ((x & 1u) ? 0 : 4)) & 15u;
+}
+
+/* Draw source color `color` at pixel x of a packed row, through the lut. With
+ * `transparent`, source color 0 draws nothing. */
+static inline void cfw_texture_put_pixel(uint8_t *row, uint32_t x, uint32_t color,
+                                         const uint8_t *lut, int transparent) {
+    if (transparent && !color) return;
+    uint8_t *b = row + (x >> 1);
+    uint32_t mapped = lut[color];
+    *b = (uint8_t)((x & 1u) ? (*b & 0xf0u) | mapped : (*b & 0x0fu) | (mapped << 4));
+}
+
+/* How cfw_texture_map_pairs draws; always a compile-time constant, so that
+ * each use gets a loop with only its own tests in it. */
+enum {
+    CFW_MAP_SHIFTED = 1,      /* the source is one pixel out of step with the destination */
+    CFW_MAP_TRANSPARENT = 2,  /* source color 0 draws nothing */
+    CFW_MAP_IDENTITY = 4,     /* the lut maps every color to itself */
+};
+
+/* Draw `pairs` whole destination bytes at d through the lut. A byte's two
+ * pixels are the source byte s[i], or with CFW_MAP_SHIFTED the low nibble of
+ * s[i] and the high nibble of s[i+1]. */
+static inline __attribute__((always_inline))
+void cfw_texture_map_pairs(uint8_t *d, const uint8_t *s, uint32_t pairs, const uint8_t *lut, int how) {
+    uint32_t carry = (how & CFW_MAP_SHIFTED) && pairs ? s[0] : 0;
+    #pragma clang loop unroll(disable)
+    for (uint32_t i = 0; i < pairs; i++) {
+        uint32_t pair;   /* two source colors as a packed byte holds them */
+        if (how & CFW_MAP_SHIFTED) {
+            uint32_t next = s[i + 1];
+            pair = ((carry << 4) | (next >> 4)) & 0xffu;
+            carry = next;
+        } else {
+            pair = s[i];
+        }
+        if ((how & CFW_MAP_TRANSPARENT) && !pair) continue;
+        uint32_t left = pair >> 4, right = pair & 15u;
+        uint32_t mapped = (how & CFW_MAP_IDENTITY) ? pair : ((uint32_t)lut[left] << 4) | lut[right];
+        if (how & CFW_MAP_TRANSPARENT) {
+            if (!left) mapped = (d[i] & 0xf0u) | (mapped & 0x0fu);
+            else if (!right) mapped = (mapped & 0xf0u) | (d[i] & 0x0fu);
+        }
+        d[i] = (uint8_t)mapped;
+    }
+}
+
+/* Draw packed rows through a lut, with or without transparency, a destination
+ * byte (two pixels) at a time. The image must not be the destination itself:
+ * the rows are read front to back whatever the overlap would need. */
+static void cfw_texture_map_raw(uint8_t *shadow, uint32_t stride, cfw_texture_clip clip,
+                                int32_t x, int32_t y, const cfw_cached_image *image,
+                                const uint8_t *lut, int transparent) {
+    int32_t sx = x < clip.x0 ? clip.x0 - x : 0, sy = y < clip.y0 ? clip.y0 - y : 0;
+    int32_t width = (int32_t)image->width - sx;
+    int32_t height = (int32_t)image->height - sy;
+    x += sx;
+    y += sy;
+    if (width > clip.x1 - x) width = clip.x1 - x;
+    if (height > clip.y1 - y) height = clip.y1 - y;
+    if (width <= 0 || height <= 0) return;
+    int identity = 1;
+    for (uint32_t i = 0; i < 16; i++) if (lut[i] != i) identity = 0;
+    uint32_t source_stride = (image->width + 1u) >> 1;
+    for (int32_t row = 0; row < height; row++) {
+        const uint8_t *src = image->rle + (uint32_t)(sy + row) * source_stride;
+        uint8_t *dst = shadow + (uint32_t)(y + row) * stride;
+        uint32_t column = (uint32_t)sx, at = (uint32_t)x, count = (uint32_t)width;
+        if (at & 1u) {
+            cfw_texture_put_pixel(dst, at, cfw_texture_pixel(src, column), lut, transparent);
+            column++; at++; count--;
+        }
+        const uint8_t *s = src + (column >> 1);
+        uint8_t *d = dst + (at >> 1);
+        uint32_t pairs = count >> 1;
+        if (column & 1u) {
+            if (!transparent) cfw_texture_map_pairs(d, s, pairs, lut, CFW_MAP_SHIFTED);
+            else if (identity) cfw_texture_map_pairs(d, s, pairs, lut, CFW_MAP_SHIFTED | CFW_MAP_TRANSPARENT | CFW_MAP_IDENTITY);
+            else cfw_texture_map_pairs(d, s, pairs, lut, CFW_MAP_SHIFTED | CFW_MAP_TRANSPARENT);
+        } else {
+            if (!transparent) cfw_texture_map_pairs(d, s, pairs, lut, 0);
+            else if (identity) cfw_texture_map_pairs(d, s, pairs, lut, CFW_MAP_TRANSPARENT | CFW_MAP_IDENTITY);
+            else cfw_texture_map_pairs(d, s, pairs, lut, CFW_MAP_TRANSPARENT);
+        }
+        if (count & 1u)
+            cfw_texture_put_pixel(dst, at + 2u * pairs, cfw_texture_pixel(src, column + 2u * pairs), lut, transparent);
+    }
+}
+
+/* Render packed rows. An image that is not the destination itself is copied
+ * row by row if it is opaque and identity-mapped, and otherwise mapped two
+ * pixels at a time. An image drawn onto itself keeps the pixel-by-pixel path,
+ * whose direction makes the overlap safe. Kept out of line so that RLE images,
+ * whose calls go deeper (cfw_rle_draw), do not carry this function's frame. */
 __attribute__((noinline))
 static void cfw_texture_render_raw(uint8_t *shadow, uint32_t stride, cfw_texture_clip clip,
                                    int32_t x0, int32_t y0,
                                    const cfw_cached_image *image,
                                    const uint8_t *lut, int transparent) {
-    if (!transparent && image->rle != shadow) {
-        int identity = 1;
+    if (image->rle != shadow) {
+        int identity = !transparent;
         for (uint32_t i = 0; i < 16; i++) if (lut[i] != i) identity = 0;
-        if (identity) {
-            cfw_texture_copy_raw(shadow, stride, clip, x0, y0, image);
-            return;
-        }
+        if (identity) cfw_texture_copy_raw(shadow, stride, clip, x0, y0, image);
+        else cfw_texture_map_raw(shadow, stride, clip, x0, y0, image, lut, transparent);
+        return;
     }
     int reverse = image->rle == shadow && (y0>0 || (y0==0 && x0>0));
     for(uint32_t i=0;i<image->width*image->height;i++) {
