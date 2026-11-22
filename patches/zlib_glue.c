@@ -172,6 +172,13 @@ typedef enum {
      * display state was (see evenhub_enter.c). Idempotent; replaces the phone's
      * stock CreateStartUpPage, which never ACKs if the page already exists. */
     CFW_MSG_ENTER_EVENHUB = 31,
+    /* 32 is reserved for the per-lens battery report (docs/lens-battery.md) and
+     * 33 for the phone-link release of the ANCS relay work (Faceclaw/43, not
+     * merged here). */
+    /* [34]{len:u8, message}* Start a session in one message: run the embedded
+     * ALS (16) and brightness (30) messages, then on the master lens the stock
+     * Dashboard prelude and mode 31's page, in that order (evenhub_enter.c). */
+    CFW_MSG_SESSION_START = 34,
 } cfw_message_type;
 
 /* The high bit historically selected separate lens coordinates in bbox/copy messages.
@@ -179,8 +186,8 @@ typedef enum {
 #define CFW_MSG_TYPE_MASK 127u
 #define CFW_MSG_FLAG_LENSES_DIFFER 128u
 
-/* RLE pixels are high-nibble first: [count4|color4], [color4][count8], or
- * [color4][0][count16]. A run may cross rows; 65535 is the maximum run length.
+/* The transport has already inflated each message and checked its CRC. The
+ * 4bpp RLE inside draw calls and cached images is described in rle.h.
  * Private messages kick the stock EvenHub keepalive on receipt. Composition and
  * cleanup serialize with the stock display gate. Firmware entry points are
  * absolute donor addresses; internal callbacks remain PC-relative under -fropi. */
@@ -285,8 +292,9 @@ static void als_cleanup_session(void);   /* als_sensor.c (same TU): passive ALS 
 int ring_battery_control(const uint8_t *src, uint32_t srclen); /* mode 17 */
 int als_control(const uint8_t *src, uint32_t srclen); /* als_sensor.c: mode 16 */
 int evenhub_enter_control(const uint8_t *src, uint32_t srclen); /* evenhub_enter.c: mode 31 */
+int evenhub_session_start_check(const uint8_t *src, uint32_t srclen); /* evenhub_enter.c: mode 34 */
+int evenhub_session_start_submit(void);
 
-static int decode_image_rle(const uint8_t *src, uint32_t size, uint8_t *base, uint32_t stride, uint32_t rowbytes, uint32_t rows);
 static int image_dispatch(const uint8_t *src, uint32_t srclen, cfw_rectlist *rl);
 
 
@@ -578,6 +586,13 @@ static int image_dispatch(const uint8_t *src, uint32_t srclen, cfw_rectlist *rl)
     }
 
     if (mode == CFW_MSG_ENTER_EVENHUB) return evenhub_enter_control(src, srclen);
+    if (mode == CFW_MSG_SESSION_START) {
+        /* The embedded ALS and brightness messages run as they would alone. */
+        if (evenhub_session_start_check(src, srclen)) return -1;
+        for (uint32_t pos = 1; pos < srclen; pos += 1u + src[pos])
+            if (image_dispatch(src + pos + 1, src[pos], rl)) return -1;
+        return evenhub_session_start_submit();
+    }
 
     if (mode == CFW_MSG_AMBIENT_LIGHT) {
         /* Ambient light sensor query / passive polling control (no display change).
@@ -750,16 +765,6 @@ static int cfw_animation_present(customCfwContext *ctx, cfw_rectlist *rl, int re
     return result;
 }
 
-
-/* Transport has already inflated and checked the message CRC. RLE remains
- * local to image handlers, including nested display lists. */
-static int decode_image_rle(const uint8_t *src, uint32_t size, uint8_t *base,
-                            uint32_t stride, uint32_t rowbytes, uint32_t rows) {
-    rle_state rs;
-    rle_init(&rs, base, stride, rowbytes, rows);
-    rle_feed(&rs, src, size);
-    return !rs.err && rs.left == 0 && rs.st == 0;
-}
 
 /* Return the singleton to its stock-compatible idle state without freeing it.
  * Idempotent: successfully deleted timer handles are cleared immediately, while a timer whose delete command fails remains in the

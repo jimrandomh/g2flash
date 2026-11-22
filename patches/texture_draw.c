@@ -4,19 +4,20 @@
 #include "debug.h"
 #include "texture_draw.h"
 #include "resource_cache.h"
+#include "rle.h"
 
 /* Cached image format:
  *
  *   [flags:u8][width,height:u8 or u16][raw packed rows or 4bpp RLE]
  * Flags: type image=0 in bits 0..1; bit 2 LARGE, bit 3 RLE.
  *
- * RLE uses the same tokens as the bbox draw call, but covers exactly width*height
- * pixels (there is no packed-row pad nibble). Since an image has no encoded
- * byte length, a valid stream ends at the first token that completes that
- * pixel count. The scanner never reads past the containing resource. */
+ * RLE uses the same tokens as the bbox draw call (rle.h), but covers exactly
+ * width*height pixels (there is no packed-row pad nibble). Since an image has
+ * no encoded byte length, a valid stream ends at the first token that completes
+ * that pixel count. The scanner never reads past the containing resource. */
 typedef struct {
-    const uint8_t *rle;
-    uint32_t rle_len;
+    const uint8_t *rle;   /* pixel data: packed rows, or an RLE stream */
+    uint32_t rle_len;     /* its length; see cfw_texture_image_header for unchecked RLE */
     uint32_t width;
     uint32_t height;
     uint32_t raw;
@@ -56,32 +57,27 @@ typedef void (*cfw_font_release_fn)(void *dsc);
 #define CFW_FONT_BASE_LINE   16u
 #define CFW_TEXT_CONTROL_FLAG 0x80000000u
 
-/* Decode one RLE token without reading beyond `len`. Return its byte length and
- * pixel count, rejecting zero counts and truncated escape forms. */
-static int cfw_texture_rle_token(const uint8_t *p, uint32_t len,
-                                 uint32_t *used, uint32_t *count,
-                                 uint8_t *color) {
-    if (len < 1) return 0;
-    uint8_t op = p[0];
-    *color = (uint8_t)(op & 0x0fu);
-    uint32_t n = op >> 4;
-    if (n) {
-        *used = 1;
-        *count = n;
-        return 1;
-    }
-    if (len < 2) return 0;
-    n = p[1];
-    if (n) {
-        *used = 2;
-        *count = n;
-        return 1;
-    }
-    if (len < 4) return 0;
-    n = (uint32_t)p[2] | ((uint32_t)p[3] << 8);
-    if (n == 0) return 0;
-    *used = 4;
-    *count = n;
+/* Read an image's header and find its pixel data, without reading the data.
+ * Raw rows are known to fit the resource after this. An RLE stream is not
+ * scanned: rle_len is everything from the header to the end of the resource,
+ * which bounds a decoder but is not the stream's own length. */
+static int cfw_texture_image_header(const uint8_t *resource, uint32_t size, uint32_t offset,
+                                    cfw_cached_image *out) {
+    if (!resource || offset >= size) return 0;
+    const uint8_t *image=resource+offset;
+    uint32_t flags=image[0], header=(flags&CFW_RESOURCE_FLAG_LARGE)?5u:3u;
+    if((flags&~CFW_RESOURCE_IMAGE_FLAGS_MASK) || size-offset<header) return 0;
+    uint32_t width=(flags&CFW_RESOURCE_FLAG_LARGE)?rd16(image+1):image[1];
+    uint32_t height=(flags&CFW_RESOURCE_FLAG_LARGE)?rd16(image+3):image[2];
+    if(!width || !height || width>640 || height>480) return 0;
+    uint32_t available=size-offset-header;
+    out->raw=!(flags&CFW_RESOURCE_FLAG_RLE);
+    out->rle=image+header;out->width=width;out->height=height;
+    if(out->raw) {
+        uint32_t bytes=((width+1u)>>1)*height;
+        if(bytes>available) return 0;
+        out->rle_len=bytes;
+    } else out->rle_len=available;
     return 1;
 }
 
@@ -90,39 +86,11 @@ static int cfw_texture_rle_token(const uint8_t *p, uint32_t len,
  * cannot leave a partially modified shadow. */
 static int cfw_texture_image_at(const uint8_t *resource, uint32_t size, uint32_t offset,
                                 cfw_cached_image *out) {
-    if (!resource || offset >= size) return 0;
-    const uint8_t *image=resource+offset;
-    uint32_t flags=image[0], header=(flags&CFW_RESOURCE_FLAG_LARGE)?5u:3u;
-    if((flags&~CFW_RESOURCE_IMAGE_FLAGS_MASK) || size-offset<header) return 0;
-    uint32_t width=(flags&CFW_RESOURCE_FLAG_LARGE)?rd16(image+1):image[1];
-    uint32_t height=(flags&CFW_RESOURCE_FLAG_LARGE)?rd16(image+3):image[2];
-    if(!width || !height || width>640 || height>480) return 0;
-    out->raw=!(flags&CFW_RESOURCE_FLAG_RLE);
-    if(out->raw) {
-        uint32_t bytes=((width+1u)>>1)*height;
-        if(bytes>size-offset-header) return 0;
-        out->rle=image+header;out->rle_len=bytes;out->width=width;out->height=height;
-        return 1;
-    }
-    const uint8_t *p = image + header;
-    uint32_t available = size - offset - header;
-    uint32_t pos = 0;
-    uint32_t left = width * height;
-    while (left) {
-        uint32_t used, count;
-        uint8_t color;
-        if (!cfw_texture_rle_token(p + pos, available - pos,
-                                   &used, &count, &color) || count > left)
-            return 0;
-        (void)color;
-        pos += used;
-        left -= count;
-    }
-
-    out->rle = p;
-    out->rle_len = pos;
-    out->width = width;
-    out->height = height;
+    if (!cfw_texture_image_header(resource, size, offset, out)) return 0;
+    if (out->raw) return 1;
+    const uint8_t *end = cfw_rle_end(out->rle, out->rle + out->rle_len, out->width * out->height);
+    if (!end) return 0;
+    out->rle_len = (uint32_t)(end - out->rle);
     return 1;
 }
 
@@ -186,56 +154,50 @@ static void cfw_texture_copy_raw(uint8_t *shadow, uint32_t stride, cfw_texture_c
     }
 }
 
-/* Render a previously validated image, clipping signed coordinates to the
- * writable region. Transparency tests the original source value, before the
- * LUT, so source color 0 is skipped even for an inverse ramp. */
-static void cfw_texture_render(uint8_t *shadow, uint32_t stride, cfw_texture_clip clip,
-                               int32_t x0, int32_t y0,
-                               const cfw_cached_image *image,
-                               const uint8_t *lut, int transparent) {
-    if(image->raw) {
-        if (!transparent && image->rle != shadow) {
-            int identity = 1;
-            for (uint32_t i = 0; i < 16; i++) if (lut[i] != i) identity = 0;
-            if (identity) {
-                cfw_texture_copy_raw(shadow, stride, clip, x0, y0, image);
-                return;
-            }
-        }
-        int reverse = image->rle == shadow && (y0>0 || (y0==0 && x0>0));
-        for(uint32_t i=0;i<image->width*image->height;i++) {
-            uint32_t j=reverse?image->width*image->height-1-i:i, yy=j/image->width, xx=j%image->width;
-            uint8_t color=(image->rle[yy*((image->width+1u)>>1)+(xx>>1)]>>((xx&1u)?0:4))&15u;
-            int32_t x=x0+(int32_t)xx,y=y0+(int32_t)yy;
-            if((transparent && !color) || x<clip.x0 || y<clip.y0 || x>=clip.x1 || y>=clip.y1) continue;
-            uint8_t *b=shadow+(uint32_t)y*stride+((uint32_t)x>>1),mapped=lut[color];
-            if(x&1) *b=(*b&0xf0u)|mapped;else *b=(*b&15u)|(mapped<<4);
-        }
-        return;
-    }
-    uint32_t pos = 0;
-    uint32_t pixel = 0;
-    while (pos < image->rle_len) {
-        uint32_t used, count;
-        uint8_t color;
-        /* The validation pass guarantees success here. */
-        if (!cfw_texture_rle_token(image->rle + pos,
-                                   image->rle_len - pos,
-                                   &used, &count, &color))
+/* Render packed rows: an opaque identity-mapped image that is not the
+ * destination itself takes the row copy, everything else the overlap-safe
+ * pixel path. Kept out of line so that RLE images, whose calls go deeper
+ * (cfw_rle_draw), do not carry this function's frame. */
+__attribute__((noinline))
+static void cfw_texture_render_raw(uint8_t *shadow, uint32_t stride, cfw_texture_clip clip,
+                                   int32_t x0, int32_t y0,
+                                   const cfw_cached_image *image,
+                                   const uint8_t *lut, int transparent) {
+    if (!transparent && image->rle != shadow) {
+        int identity = 1;
+        for (uint32_t i = 0; i < 16; i++) if (lut[i] != i) identity = 0;
+        if (identity) {
+            cfw_texture_copy_raw(shadow, stride, clip, x0, y0, image);
             return;
-        pos += used;
-        int skip = transparent && color == 0;
-        uint8_t mapped = lut[color];
-        for (uint32_t i = 0; i < count; i++, pixel++) {
-            int32_t x = x0 + (int32_t)(pixel % image->width);
-            int32_t y = y0 + (int32_t)(pixel / image->width);
-            if (!skip && x >= clip.x0 && y >= clip.y0 && x < clip.x1 && y < clip.y1) {
-                uint8_t *b = shadow + (uint32_t)y * stride + ((uint32_t)x >> 1);
-                if (x & 1) *b = (uint8_t)((*b & 0xf0u) | mapped);
-                else       *b = (uint8_t)((*b & 0x0fu) | (uint8_t)(mapped << 4));
-            }
         }
     }
+    int reverse = image->rle == shadow && (y0>0 || (y0==0 && x0>0));
+    for(uint32_t i=0;i<image->width*image->height;i++) {
+        uint32_t j=reverse?image->width*image->height-1-i:i, yy=j/image->width, xx=j%image->width;
+        uint8_t color=(image->rle[yy*((image->width+1u)>>1)+(xx>>1)]>>((xx&1u)?0:4))&15u;
+        int32_t x=x0+(int32_t)xx,y=y0+(int32_t)yy;
+        if((transparent && !color) || x<clip.x0 || y<clip.y0 || x>=clip.x1 || y>=clip.y1) continue;
+        uint8_t *b=shadow+(uint32_t)y*stride+((uint32_t)x>>1),mapped=lut[color];
+        if(x&1) *b=(*b&0xf0u)|mapped;else *b=(*b&15u)|(mapped<<4);
+    }
+}
+
+/* Render an image, clipping signed coordinates to the writable region.
+ * Transparency tests the original source value, before the LUT, so source
+ * color 0 is skipped even for an inverse ramp. Returns 0, or -1 for an RLE
+ * image that is malformed in a part that had to be read: one that
+ * cfw_texture_image_at accepted always draws. */
+static int cfw_texture_render(uint8_t *shadow, uint32_t stride, cfw_texture_clip clip,
+                              int32_t x0, int32_t y0,
+                              const cfw_cached_image *image,
+                              const uint8_t *lut, int transparent) {
+    if (image->raw) {
+        cfw_texture_render_raw(shadow, stride, clip, x0, y0, image, lut, transparent);
+        return 0;
+    }
+    cfw_rle_dest dest = {shadow, stride, clip.x0, clip.y0, clip.x1, clip.y1};
+    return cfw_rle_draw(&dest, x0, y0, image->width, image->height,
+                        image->rle, image->rle + image->rle_len, lut, transparent);
 }
 
 /* Render stock LVGL's raw A4-aligned glyph data (high nibble first, each row
@@ -282,44 +244,41 @@ static void cfw_texture_add_rect(cfw_rectlist *rl, int32_t x, int32_t y,
                (uint32_t)(right - left), (uint32_t)(bottom - top));
 }
 
-/* Draw cached image `id` at destination (x, y), already shifted for depth.
- * Display-list IMAGE calls decode their own coordinates (revision 35: they may
- * be expressions) and come here directly. */
+/* Draw an image the caller has located (cfw_texture_image_header or
+ * cfw_texture_image_at) at destination (x, y), already shifted for depth.
+ * Display-list IMAGE calls validate the image in their first pass and come
+ * here in their second. */
+static int cfw_texture_draw_located(uint8_t *shadow, uint32_t stride, cfw_texture_clip clip,
+                                    const cfw_cached_image *image, int32_t x, int32_t y,
+                                    uint8_t options, cfw_rectlist *rl) {
+    if (shadow == 0 || !cfw_fb_lease_active()) return -1;
+    uint8_t lut[16];
+    cfw_texture_make_lut(options, lut);
+    if (cfw_texture_render(shadow, stride, clip, x, y, image,
+                           lut, (options & CFW_TEXTURE_OPT_TRANSPARENT) != 0)) return -1;
+    cfw_texture_add_rect(rl, x, y, image->width, image->height, clip);
+    return 0;
+}
+
+/* Validate and draw cached image `id` at destination (x, y). */
 static int cfw_texture_draw_image_clipped(uint8_t *shadow, uint32_t stride, cfw_texture_clip clip,
                                           uint32_t id, int32_t x, int32_t y, uint8_t options,
                                           cfw_rectlist *rl) {
-    if (shadow == 0 || !cfw_fb_lease_active()) return -1;
     customCfwContext *ctx = getCustomCfwContext();
     cfw_cached_image image;
     uint32_t size;
     const uint8_t *resource = cfw_resource_get(ctx, id, &size);
     if (!resource || !cfw_texture_image_at(resource, size, 0, &image)) return -1;
-    uint8_t lut[16];
-    cfw_texture_make_lut(options, lut);
-    cfw_texture_render(shadow, stride, clip, x, y, &image,
-                       lut, (options & CFW_TEXTURE_OPT_TRANSPARENT) != 0);
-    cfw_texture_add_rect(rl, x, y, image.width, image.height, clip);
-    return 0;
+    return cfw_texture_draw_located(shadow, stride, clip, &image, x, y, options, rl);
 }
 
-/* Draw `string` with font resource `font_id` from destination (x, y), already
- * shifted for depth. The font starts with 96 little-endian uint16
- * resource-relative image offsets for characters 32..127. Bytes 1..31 adjust x
- * by -10..20; byte 0 and bytes >127 are invalid. */
-static int cfw_texture_draw_string_clipped(uint8_t *shadow, uint32_t stride, cfw_texture_clip clip,
-                                           uint32_t font_id, int32_t x, int32_t y, uint8_t options,
-                                           const uint8_t *string, uint32_t string_len,
-                                           cfw_rectlist *rl) {
-    if (shadow == 0 || (string == 0 && string_len) || !cfw_fb_lease_active()) return -1;
-    customCfwContext *ctx = getCustomCfwContext();
-    uint32_t size;
-    const uint8_t *table = cfw_resource_get(ctx, font_id, &size);
-    if (!table || size < 193u || table[0] != 1) return -1;
-
-    /* Validate every character/table entry/RLE stream before drawing any glyph. */
-    uint8_t lut[16];
-    cfw_texture_make_lut(options, lut);
-    int transparent = (options & CFW_TEXTURE_OPT_TRANSPARENT) != 0;
+/* Check a font resource and every glyph `string` needs, drawing nothing. The
+ * font starts with 96 little-endian uint16 resource-relative image offsets for
+ * characters 32..127. Control bytes 1..31 pass through; every other byte must
+ * be ASCII 32..127 with a complete glyph image in the font. */
+static int cfw_texture_validate_string(const uint8_t *table, uint32_t size,
+                                       const uint8_t *string, uint32_t string_len) {
+    if (size < 193u || table[0] != CFW_RESOURCE_TYPE_FONT) return -1;
     for (uint32_t i = 0; i < string_len; i++) {
         uint32_t ch = string[i];
         if (ch >= 1u && ch <= 31u) continue;
@@ -328,23 +287,54 @@ static int cfw_texture_draw_string_clipped(uint8_t *shadow, uint32_t stride, cfw
         cfw_cached_image image;
         if (image_offset < 193u || !cfw_texture_image_at(table, size, image_offset, &image)) return -1;
     }
+    return 0;
+}
 
+/* Draw `string` with the font at `table` from destination (x, y), already
+ * shifted for depth. Bytes 1..31 adjust x by -10..20. Each glyph is checked
+ * only as it is drawn, so a bad font or string fails part-way: callers that
+ * must draw all or nothing run cfw_texture_validate_string first, as
+ * display-list TEXT calls do in their first pass. Not inlined, to keep its
+ * locals out of the display-list walker's recursive frame. */
+__attribute__((noinline))
+static int cfw_texture_draw_glyphs(uint8_t *shadow, uint32_t stride, cfw_texture_clip clip,
+                                   const uint8_t *table, uint32_t size, int32_t x, int32_t y,
+                                   uint8_t options, const uint8_t *string, uint32_t string_len,
+                                   cfw_rectlist *rl) {
+    if (shadow == 0 || (string == 0 && string_len) || !cfw_fb_lease_active()) return -1;
+    if (!table || size < 193u || table[0] != CFW_RESOURCE_TYPE_FONT) return -1;
+    uint8_t lut[16];
+    cfw_texture_make_lut(options, lut);
+    int transparent = (options & CFW_TEXTURE_OPT_TRANSPARENT) != 0;
     for (uint32_t i = 0; i < string_len; i++) {
         uint32_t ch = string[i];
+        if (ch == 0 || ch > 127u) return -1;
         if (ch <= 31u) {
             x += (int32_t)ch - 11;
             continue;
         }
         uint32_t image_offset = rd16(table + 1u + (ch - 32u) * 2u);
         cfw_cached_image image;
-        /* Already validated above; cache contents cannot change in this handler. */
-        if (image_offset < 193u || !cfw_texture_image_at(table, size, image_offset, &image)) return -1;
-        cfw_texture_render(shadow, stride, clip, x, y, &image,
-                           lut, transparent);
+        if (image_offset < 193u || !cfw_texture_image_header(table, size, image_offset, &image)) return -1;
+        if (cfw_texture_render(shadow, stride, clip, x, y, &image, lut, transparent)) return -1;
         cfw_texture_add_rect(rl, x, y, image.width, image.height, clip);
         x += (int32_t)image.width;
     }
     return 0;
+}
+
+/* Validate and draw `string` with font resource `font_id`. */
+static int cfw_texture_draw_string_clipped(uint8_t *shadow, uint32_t stride, cfw_texture_clip clip,
+                                           uint32_t font_id, int32_t x, int32_t y, uint8_t options,
+                                           const uint8_t *string, uint32_t string_len,
+                                           cfw_rectlist *rl) {
+    if (string == 0 && string_len) return -1;
+    customCfwContext *ctx = getCustomCfwContext();
+    uint32_t size;
+    const uint8_t *table = cfw_resource_get(ctx, font_id, &size);
+    if (!table || cfw_texture_validate_string(table, size, string, string_len)) return -1;
+    return cfw_texture_draw_glyphs(shadow, stride, clip, table, size, x, y, options,
+                                   string, string_len, rl);
 }
 
 /* Decode one strict UTF-8 scalar. Control bytes 1..31 are deliberately handled

@@ -70,8 +70,10 @@
       "0x20077ed0": 1
     },
     "evenhub_enter.c": {
+      "0x0044407d": 1,
       "0x00465d4d": 1,
-      "0x00465f11": 1
+      "0x00465f11": 1,
+      "0x004a8d99": 1
     },
     "gesture_fwd.c": {
       "0x0045decb": 1,
@@ -3577,6 +3579,32 @@
         }
       ],
       "evidence": "SVC_PcmAppRegister 0x599500, SVC_PcmAppUnregister 0x599658 and SVC_PcmAppProcessData 0x599780 all index 12-byte {owner, slot, callback} entries from the pool literal at 0x599d78; read-only diagnostic use"
+    },
+    {
+      "old": "0x0044407c",
+      "new": "0x0044407c",
+      "method": "strict-signature",
+      "uses": [
+        {
+          "file": "evenhub_enter.c",
+          "address": "0x0044407d",
+          "count": 1
+        }
+      ],
+      "stock_guard_size": 130
+    },
+    {
+      "old": "0x004a8d98",
+      "new": "0x004a8d98",
+      "method": "strict-signature",
+      "uses": [
+        {
+          "file": "evenhub_enter.c",
+          "address": "0x004a8d99",
+          "count": 1
+        }
+      ],
+      "stock_guard_size": 502
     }
   ],
   "guards": [
@@ -4424,6 +4452,16 @@
       "address": "0x007914f0",
       "bytes": "27a5e8ffe02f07002c550020885724009c51132000000000",
       "label": "RAM layout: startup zero-init covers 2013519c + 245788, the arenas and the gap"
+    },
+    {
+      "address": "0x0044407c",
+      "bytes": "7fb50400002500e06d1cdff8ac060068854212dadff8a46628013058a042f3d12801304440680028eed09bb218002d0106eb05035b68984722e0f9f74afb80070ed50294dff898060190b2200090dff89836dff88026dff880160220f9f7e0fdf9f737fbc00703d4f9f733fb400707d5dff8701623000a005ff00460f8f77cff7fbd",
+      "label": "stock dependency 0044407c -> 0044407c"
+    },
+    {
+      "address": "0x004a8d98",
+      "bytes": "2de9f04788b007000d0090469946dff89c040078002804d0dff878643068002825d194f7c8fc80070dd5dff88404019045200090dff87c34dff86424dff86414012094f75fff94f7b6fcc00703d494f7b2fc400706d5dff860140a005ff0806094f7fcf85ff0ff3008b0bde8f0873800002823d194f79ffc80070dd5dff83c0401904b200090dff82c34dff81424dff81414012094f736ff94f78dfcc00703d494f789fc400706d5dff814140a005ff0806094f7d3f85ff0ff30d5e7109c142100220df10c0a504693f740f903970495adf81440cdf81880cdf81c9094f76bfc80070ed50295dff8dc03019057200090dff8c033dff8a823dff8a813042094f701ff94f758fcc00703d494f754fc400707d5dff8b4132b000a005ff0825094f79df8dff8a85340f6b834210028689af763f8002837d12300002203a930689af7dff9040028689af78af8002c29d094f732fc80070ed50294dff8740301905f200090dff85033dff83823dff83813012094f7c8fe94f71ffcc00703d494f71bfc400707d5dff84c1323000a005ff0886094f764f872f1b6fd00205ff0ff310860fee7002060e794f706fc80070dd5dff82803019067200090dff8f832dff8e022dff8e012012094f79dfe94f7f4fbc00703d494f7f0fb400706d5dff800130a005ff0806094f73af872f18cfd00205ff0ff310860fee7",
+      "label": "stock dependency 004a8d98 -> 004a8d98"
     }
   ],
   "patch_sites": [

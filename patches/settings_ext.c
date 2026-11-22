@@ -126,14 +126,17 @@ __attribute__((used, noinline)) int cfw_wake_lease_active(void) {
 
 /* Faceclaw acquires this lease for every display session, unlike the optional
  * wake-takeover lease. It is therefore also the session-ownership signal used
- * by compatibility-sensitive EvenHub hooks such as long-press forwarding. */
+ * by compatibility-sensitive EvenHub hooks such as long-press forwarding.
+ * Since Faceclaw/44 a lapse keeps the resource cache, root list and screen
+ * buffer: they are fixed RAM (ram_layout.h) that nothing else uses, and the
+ * phone, whose renewals stop while it sleeps, reuses them on wake. Only an
+ * explicit release, CFW cleanup or a reboot discards them. */
 __attribute__((used, noinline)) int cfw_fb_lease_active(void) {
     customCfwContext *ctx = faceclaw_context_if_valid();
     if (!ctx || ctx->direct_lease_deadline == 0) return 0;
     if ((int32_t)(ctx->direct_lease_deadline - FW_MS_TICK) <= 0) {
         ctx->direct_lease_deadline = 0;
         ctx->direct_active = 0;
-        cfw_resource_cache_release(ctx);
         return 0;
     }
     return 1;
@@ -343,11 +346,11 @@ static void faceclaw_apply_control(const uint8_t *data, uint32_t len) {
         }
     } else if (op == FACECLAW_OP_FB_ACQUIRE) {
         /* A fresh lease must earn preservation with a newly presented direct
-         * frame; a renewal keeps the current one. */
+         * frame; a renewal keeps the current one. Either way the resources
+         * stay (see cfw_fb_lease_active). */
         if (ctx->direct_lease_deadline == 0 ||
             (int32_t)(ctx->direct_lease_deadline - FW_MS_TICK) <= 0) {
             ctx->direct_active = 0;
-            cfw_resource_cache_release(ctx);
         }
         ctx->direct_lease_deadline = FW_MS_TICK + FACECLAW_LEASE_MS;
     } else if (op == FACECLAW_OP_FB_RELEASE) {
@@ -496,7 +499,12 @@ int settings_send_wrapper(int type, int sid, unsigned char *buf, unsigned len) {
         //     cache holds 320 KiB (was 190 KiB). See ram_layout.h.
         // 41: ANCS relay op 3 (RELEASE) hangs up the phone link it arrives on,
         //     so an iOS Disconnect can end the link iOS keeps for ANCS.
-        static const char caps[] = "Faceclaw/41";
+        // 42, 43: ANCS relay work not merged here (42 was flashed as an
+        //     experiment; 43 adds message 33). Skipped so no revision means two things.
+        // 44: a lapsed or freshly re-acquired framebuffer lease keeps the
+        //     resource cache; image mode 34 starts a session in one message
+        //     (prelude, enter EvenHub, ALS and brightness; evenhub_enter.c).
+        static const char caps[] = "Faceclaw/44";
         len = pb_append_bytes_field(buf, len, SETTINGS_RESPONSE_CAPACITY,
                                     100u, (const unsigned char *)caps,
                                     (unsigned)sizeof(caps) - 1u);

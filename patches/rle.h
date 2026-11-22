@@ -1,34 +1,45 @@
 #pragma once
 #include <stdint.h>
 
-/* ---- RLE over 4bpp pixels (the inner layer of modes 3 and 6) ----------------
+/* ---- RLE over 4bpp pixels ----------------------------------------------------
  *
- * See the RLE paragraph at the top of the file for the token format. The decoder is a
- * byte-at-a-time state machine that consumes the image handler's RLE payload,
- * writing pixels into a
- * rectangular 4bpp destination: `rows` rows of `rowbytes` bytes, row r at
- * base + r*stride. For mode 6 that's the whole shadow; for mode 3 it's the box within
- * it (rowbytes < stride). Runs cross rows freely — the nibble stream is the wire
- * order, not per-row.
+ * A stream is a sequence of runs, each one color (0..15) and a length:
  *
- * `left` counts the nibbles still expected; the decode is complete only when it hits
- * exactly 0 with no token half-parsed. Overrunning it (or running past the last row)
- * sets `err` and the caller drops the frame. */
-typedef struct {
-    uint8_t *base;
-    uint32_t stride;      /* bytes between rows in the destination */
-    uint32_t rowbytes;    /* bytes per row actually written */
-    uint32_t rows;
-    uint32_t r;           /* current row */
-    uint32_t bpos;        /* byte offset within the current row */
-    uint32_t hi;          /* 1 = next nibble is the high (left) one */
-    uint32_t left;        /* nibbles still expected */
-    uint32_t st;          /* token parser: 0 = opcode, 1 = cnt8, 2 = cntLo, 3 = cntHi */
-    uint32_t cnt;
-    uint8_t  color;
-    uint8_t  err;
-} rle_state;
+ *   [count4|color4]             1..15 pixels, the count in the high nibble
+ *   [0|color4][count8]          1..255 pixels
+ *   [0|color4][0][count16 LE]   1..65535 pixels; a zero count16 is malformed
+ *
+ * A stream covers a width x height rectangle in reading order with no row
+ * padding, so a run may continue onto later rows. Bounding-box draw calls,
+ * cached images and font glyphs all carry this format.
+ *
+ * Streams are checked with cfw_rle_end before anything is drawn, so that a bad
+ * one cannot leave a half-drawn frame. cfw_rle_draw checks again as it goes
+ * (it never reads past `end` or writes outside the destination), which keeps
+ * it safe to call on a stream nobody has checked. */
 
-static void rle_init(rle_state *s, uint8_t *base, uint32_t stride, uint32_t rowbytes, uint32_t rows);
-static void rle_emit(rle_state *s, uint8_t v, uint32_t n);
-static void rle_feed(rle_state *s, const uint8_t *p, uint32_t n);
+/* A packed 4bpp buffer (the high nibble is the left pixel of a byte) and the
+ * part of it a draw may write: [x0,x1) x [y0,y1), which lies inside the buffer. */
+typedef struct {
+    uint8_t *pixels;
+    uint32_t stride;      /* bytes between rows */
+    int32_t x0, y0, x1, y1;
+} cfw_rle_dest;
+
+/* The end of the stream at `p` that covers exactly `pixels` pixels, or null if
+ * it is cut short by `end`, has a zero-length run, or its last run overshoots. */
+static const uint8_t *cfw_rle_end(const uint8_t *p, const uint8_t *end, uint32_t pixels);
+
+/* Draw the width x height stream at `p` with its top-left pixel at (x, y),
+ * which may be anywhere, writing only inside the destination's region. Each
+ * run's color goes through `lut` (16 entries, 0..15); with `transparent`,
+ * runs of source color 0 are skipped. Stops after the last visible row.
+ * Returns 0, or -1 if the stream is cut short by `end` or has a zero-length
+ * run before that row is complete. */
+static int cfw_rle_draw(const cfw_rle_dest *dest, int32_t x, int32_t y,
+                        uint32_t width, uint32_t height,
+                        const uint8_t *p, const uint8_t *end,
+                        const uint8_t *lut, int transparent);
+
+/* A lut that draws the stream's colors as they are. */
+static const uint8_t cfw_rle_identity[16] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};

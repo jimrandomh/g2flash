@@ -1,7 +1,7 @@
 #include "resource_cache.h"
+#include "rle.h"
 
 static int cfw_draw_right_lens(void);
-static int decode_image_rle(const uint8_t *, uint32_t, uint8_t *, uint32_t, uint32_t, uint32_t);
 
 #define CFW_DRAW_MAX_OPS 4096u
 #define CFW_DRAW_MAX_DEPTH 8u
@@ -253,29 +253,6 @@ static int cfw_draw_validate_utf8(const uint8_t *text, uint32_t length) {
     return 0;
 }
 
-/* Control bytes 1..31 pass through; every other byte must be ASCII 32..127
- * with a complete glyph image in the font. */
-static int cfw_draw_validate_font_text(const uint8_t *font, uint32_t font_size, const uint8_t *text, uint32_t length) {
-    if (font_size < 193 || font[0] != CFW_RESOURCE_TYPE_FONT) {
-        return -1;
-    }
-    for (uint32_t i = 0; i < length; i++) {
-        uint32_t ch = text[i];
-        if (ch >= 1 && ch <= 31) {
-            continue;
-        }
-        if (ch < 32 || ch > 127) {
-            return -1;
-        }
-        uint32_t offset = rd16(font + 1 + (ch - 32) * 2);
-        cfw_cached_image image;
-        if (offset < 193 || !cfw_texture_image_at(font, font_size, offset, &image)) {
-            return -1;
-        }
-    }
-    return 0;
-}
-
 /* ---- Draw-call handlers --------------------------------------------------
  *
  * Each handler receives its own copy of the reader positioned just after the
@@ -327,47 +304,19 @@ static int cfw_draw_op_bounding_box(const cfw_draw_env *env, cfw_reader r, cfw_d
     if (!READ_IN_BOUNDS(r)) {
         return -1;
     }
-    const uint8_t *rle = r.p;
-    uint32_t rle_length = READ_REMAINING(r);
     if (!cfw_draw_rect_in_target(&target, x, y, w, h)) {
         return -1;
     }
-
-    /* Compact unclipped boxes that stay on even columns and inside the target
-     * after the depth shift can be decoded straight into the buffer. */
-    int fast = !wide && !target.clipped && !(target.shift_x & 1)
-            && (int32_t)x + target.shift_x >= 0
-            && (int32_t)(x + w) + target.shift_x <= (int32_t)target.width;
-
-    uint32_t pixel = 0;
-    uint32_t total = w * h;
-    while (!READ_DONE(r) && pixel < total) {
-        uint32_t used, count;
-        uint8_t color;
-        if (!cfw_texture_rle_token(r.p, READ_REMAINING(r), &used, &count, &color)) {
-            return -1;
-        }
-        if (count > total - pixel) {
-            return -1;
-        }
-        if (env->apply && !fast) {
-            for (uint32_t i = 0; i < count; i++) {
-                cfw_draw_put(&target, x + (pixel + i) % w, y + (pixel + i) / w, color);
-            }
-        }
-        pixel += count;
-        READ_SKIP(r, used);
+    if (!env->apply) {
+        /* The stream has to fill the box exactly and end where the call does. */
+        return cfw_rle_end(r.p, r.end, w * h) == r.end ? 0 : -1;
     }
-    if (!READ_DONE(r) || pixel != total) {
-        return -1;
-    }
-    if (env->apply && fast) {
-        uint8_t *dest = target.pixels + y * target.stride + ((x + target.shift_x) >> 1);
-        if (!decode_image_rle(rle, rle_length, dest, target.stride, w >> 1, h)) {
-            return -1;
-        }
-    }
-    return 0;
+    /* The box is inside the target, but its depth shift or a clip rect can
+     * still put part of it outside the writable region. */
+    cfw_texture_clip b = cfw_draw_bounds(&target);
+    cfw_rle_dest dest = {target.pixels, target.stride, b.x0, b.y0, b.x1, b.y1};
+    return cfw_rle_draw(&dest, (int32_t)x + target.shift_x, (int32_t)y, w, h,
+                        r.p, r.end, cfw_rle_identity, 0);
 }
 
 /* Save edge pixels before the byte move: either edge's source byte may be
@@ -496,18 +445,19 @@ static int cfw_draw_op_image(const cfw_draw_env *env, cfw_reader r, cfw_draw_tar
     }
     cfw_draw_ref(env->walk, id);
     cfw_cached_image image;
-    if (!cfw_texture_image_at(data, size, 0, &image)) {
-        return -1;
-    }
     if (!env->apply) {
-        return 0;
+        return cfw_texture_image_at(data, size, 0, &image) ? 0 : -1;
+    }
+    /* The first pass checked the pixel data, so this one only locates it. */
+    if (!cfw_texture_image_header(data, size, 0, &image)) {
+        return -1;
     }
     /* Far-off images return before the depth shift can overflow. */
     if (x < -65536 || x > 65536 || y < -65536 || y > 65536) return 0;
     cfw_rectlist rl;
     rl.n = 0;
-    return cfw_texture_draw_image_clipped(target.pixels, target.stride, cfw_draw_bounds(&target),
-                                          id, x + target.shift_x, y, (uint8_t)options, &rl);
+    return cfw_texture_draw_located(target.pixels, target.stride, cfw_draw_bounds(&target),
+                                    &image, x + target.shift_x, y, (uint8_t)options, &rl);
 }
 
 /* [font-id16][x extended][y extended][options8][length8][text] drawn with a
@@ -531,20 +481,18 @@ static int cfw_draw_op_text(const cfw_draw_env *env, cfw_reader r, cfw_draw_targ
         return -1;
     }
     cfw_draw_ref(env->walk, id);
-    if (cfw_draw_validate_font_text(font, size, text, length)) {
-        return -1;
-    }
     if (!env->apply) {
-        return 0;
+        return cfw_texture_validate_string(font, size, text, length);
     }
     /* Far-off text returns before the depth shift can overflow; control bytes
      * move the pen at most 255*20 pixels further. */
     if (x < -65536 || x > 65536 || y < -65536 || y > 65536) return 0;
     cfw_rectlist rl;
     rl.n = 0;
-    return cfw_texture_draw_string_clipped(target.pixels, target.stride, cfw_draw_bounds(&target),
-                                           id, x + target.shift_x, y, (uint8_t)options,
-                                           text, length, &rl);
+    /* The first pass checked every glyph; this one checks them as it draws. */
+    return cfw_texture_draw_glyphs(target.pixels, target.stride, cfw_draw_bounds(&target),
+                                   font, size, x + target.shift_x, y, (uint8_t)options,
+                                   text, length, &rl);
 }
 
 /* Pixels whose target x+y is even use the first LUT, odd ones the second. Rows
