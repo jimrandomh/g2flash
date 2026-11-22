@@ -134,7 +134,7 @@ CFLAGS = [
     "--target=thumbv7em-none-eabi", "-mthumb",
     "-mfpu=fpv4-sp-d16", "-mfloat-abi=softfp", "-ffp-contract=off",
     "-O2", "-ffreestanding", "-fno-jump-tables", "-fomit-frame-pointer",
-    "-fno-builtin", "-mno-unaligned-access",
+    "-fno-builtin",
     "-fno-unwind-tables", "-fno-asynchronous-unwind-tables",
     "-fropi",   # PC-relative rodata refs so string literals resolve in-blob (see module docstring)
     "-Wall", "-Wextra",
