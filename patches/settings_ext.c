@@ -504,7 +504,10 @@ int settings_send_wrapper(int type, int sid, unsigned char *buf, unsigned len) {
         // 44: a lapsed or freshly re-acquired framebuffer lease keeps the
         //     resource cache; image mode 34 starts a session in one message
         //     (prelude, enter EvenHub, ALS and brightness; evenhub_enter.c).
-        static const char caps[] = "Faceclaw/44";
+        // 45: draw op 10 draws a line; draw-call flag 8 is a clip whose fields
+        //     are extended values; expression op 51 reads the screen fade; a
+        //     fading-out display keeps replaying the frame it holds.
+        static const char caps[] = "Faceclaw/45";
         len = pb_append_bytes_field(buf, len, SETTINGS_RESPONSE_CAPACITY,
                                     100u, (const unsigned char *)caps,
                                     (unsigned)sizeof(caps) - 1u);

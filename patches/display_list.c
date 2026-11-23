@@ -19,6 +19,7 @@ typedef enum {
     DRAW_OP_DISPLAY_LIST = 7,
     DRAW_OP_ROUNDED_RECT = 8,
     DRAW_OP_CLEAR = 9,
+    DRAW_OP_LINE = 10,
 } cfw_draw_op;
 
 /* Keep flag names and values in sync with Faceclaw DrawFlags.kt. */
@@ -26,7 +27,9 @@ typedef enum {
     DRAW_FLAG_RESOURCE_TARGET = 1,
     DRAW_FLAG_DEPTH = 2,
     DRAW_FLAG_CLIP = 4,
-    DRAW_FLAGS_MASK = DRAW_FLAG_RESOURCE_TARGET | DRAW_FLAG_DEPTH | DRAW_FLAG_CLIP,
+    /* Revision 45: the clip's four fields are extended values, so it can move. */
+    DRAW_FLAG_CLIP_ANIMATED = 8,
+    DRAW_FLAGS_MASK = DRAW_FLAG_RESOURCE_TARGET | DRAW_FLAG_DEPTH | DRAW_FLAG_CLIP | DRAW_FLAG_CLIP_ANIMATED,
 } cfw_draw_call_flags;
 
 typedef enum {
@@ -36,6 +39,10 @@ typedef enum {
 #define DRAW_ROUNDED_RECT_NO_BORDER 16u
 /* Revision 36: no trailing outside-color byte, so the corners stay as they are. */
 #define DRAW_ROUNDED_RECT_NO_OUTSIDE 16u
+/* A line with an endpoint coordinate further out than this draws nothing, which
+ * bounds the stepping of one that is not axis-aligned. Keep in sync with
+ * Faceclaw DrawFlags.kt. */
+#define DRAW_LINE_COORDINATE_LIMIT 4096
 
 /* `clip` (revision 35) narrows every write to a rectangle in shifted target
  * pixels. It is only meaningful while `clipped` is set, so zero-initialized
@@ -55,6 +62,8 @@ typedef struct {
     uint8_t *references;
     uint32_t elapsed_ms;
     int animation_pending;
+    /* The screen fade this frame is drawn at, and whether any call read it. */
+    cfw_expression_fade screen;
 } cfw_draw_walk;
 
 /* Everything a draw-call handler needs besides its own bytes and target. */
@@ -111,6 +120,12 @@ static const uint8_t *cfw_read_bytes(cfw_reader *r, uint32_t n) {
 #define READ_REMAINING(r) ((uint32_t)((r).end-(r).p))
 
 #include "draw_expression.c"
+
+/* The inputs an expression in this walk's calls can read. */
+static cfw_expression_frame cfw_draw_frame(cfw_draw_walk *walk) {
+    cfw_expression_frame frame={walk->elapsed_ms,0,&walk->screen};
+    return frame;
+}
 
 /* ---- Targets and pixels -------------------------------------------------- */
 
@@ -347,7 +362,7 @@ static void cfw_draw_copy_row(uint8_t *dst, const uint8_t *src,
  * Source CFW_DRAW_SCREEN is the screen buffer; CFW_DRAW_CURRENT is the target itself.
  * Animated source coordinates must stay inside the source at every time. */
 static int cfw_draw_op_rect_copy(const cfw_draw_env *env, cfw_reader r, cfw_draw_target target) {
-    cfw_expression_frame frame={env->walk->elapsed_ms,0};
+    cfw_expression_frame frame=cfw_draw_frame(env->walk);
     uint32_t id = READ_U16(r);
     int32_t sx = cfw_read_extended(&r,&frame);
     int32_t sy = cfw_read_extended(&r,&frame);
@@ -429,7 +444,7 @@ static int cfw_draw_op_stock_font_string(const cfw_draw_env *env, cfw_reader r, 
 /* [image-id16][x extended][y extended][options8]
  * Revision 35: x/y were s16; they may now be expressions. */
 static int cfw_draw_op_image(const cfw_draw_env *env, cfw_reader r, cfw_draw_target target) {
-    cfw_expression_frame frame={env->walk->elapsed_ms,0};
+    cfw_expression_frame frame=cfw_draw_frame(env->walk);
     uint32_t id = READ_U16(r);
     int32_t x = cfw_read_extended(&r,&frame);
     int32_t y = cfw_read_extended(&r,&frame);
@@ -464,7 +479,7 @@ static int cfw_draw_op_image(const cfw_draw_env *env, cfw_reader r, cfw_draw_tar
 /* [font-id16][x extended][y extended][options8][length8][text] drawn with a
  * font resource. Revision 35: x/y were s16; they may now be expressions. */
 static int cfw_draw_op_text(const cfw_draw_env *env, cfw_reader r, cfw_draw_target target) {
-    cfw_expression_frame frame={env->walk->elapsed_ms,0};
+    cfw_expression_frame frame=cfw_draw_frame(env->walk);
     uint32_t id = READ_U16(r);
     int32_t x = cfw_read_extended(&r,&frame);
     int32_t y = cfw_read_extended(&r,&frame);
@@ -566,7 +581,7 @@ static int cfw_draw_op_remap_colors(const cfw_draw_env *env, cfw_reader r, cfw_d
  * outside color (revision 36) overwrites the bounding box's pixels outside the
  * rounded shape, e.g. to cut square content underneath to the corners. */
 static int cfw_draw_op_rounded_rect(const cfw_draw_env *env, cfw_reader r, cfw_draw_target target) {
-    cfw_expression_frame frame={env->walk->elapsed_ms,0};
+    cfw_expression_frame frame=cfw_draw_frame(env->walk);
     int32_t x=cfw_read_extended(&r,&frame);
     int32_t y=cfw_read_extended(&r,&frame);
     uint32_t w = READ_U16(r);
@@ -648,6 +663,58 @@ static int cfw_draw_op_clear(const cfw_draw_env *env, cfw_reader r, cfw_draw_tar
     return 0;
 }
 
+/* Step from (x0, y0) to (x1, y1), both included, writing each pixel inside the
+ * bounds. The stepping is Faceclaw's GrayImage.drawLine, so a line drawn here
+ * covers the pixels one painted on the phone does. Every line goes this way,
+ * axis-aligned ones included: a screen-wide one is 640 steps, and spans for
+ * those were not worth their bytes (the injected image has a size budget; see
+ * the MRAM check in tests/test_stock_audit.py). Kept out of the recursive
+ * walker's stack frame. */
+__attribute__((noinline)) static void cfw_draw_line_steps(uint8_t *pixels, uint32_t stride, cfw_texture_clip b,
+                                                         int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint32_t color) {
+    int32_t dx = x1 > x0 ? x1 - x0 : x0 - x1, sx = x0 < x1 ? 1 : -1;
+    int32_t dy = y1 > y0 ? y0 - y1 : y1 - y0, sy = y0 < y1 ? 1 : -1;
+    int32_t err = dx + dy;
+    for (;;) {
+        if (x0 >= b.x0 && x0 < b.x1 && y0 >= b.y0 && y0 < b.y1) {
+            uint8_t *p = pixels + (uint32_t)y0 * stride + ((uint32_t)x0 >> 1);
+            *p = (x0 & 1) ? (uint8_t)((*p & 0xf0u) | color) : (uint8_t)((*p & 15u) | (color << 4));
+        }
+        if (x0 == x1 && y0 == y1) return;
+        int32_t e2 = 2 * err;
+        if (e2 >= dy) { err += dy; x0 += sx; }
+        if (e2 <= dx) { err += dx; y0 += sy; }
+    }
+}
+
+/* [x0 extended][y0 extended][x1 extended][y1 extended][color8] (revision 45)
+ * A one-pixel line in a 4-bit color, both endpoints included; equal endpoints
+ * draw one pixel. It overwrites what is there, under the call's depth shift
+ * and clip. */
+static int cfw_draw_op_line(const cfw_draw_env *env, cfw_reader r, cfw_draw_target target) {
+    cfw_expression_frame frame=cfw_draw_frame(env->walk);
+    int32_t x0 = cfw_read_extended(&r,&frame);
+    int32_t y0 = cfw_read_extended(&r,&frame);
+    int32_t x1 = cfw_read_extended(&r,&frame);
+    int32_t y1 = cfw_read_extended(&r,&frame);
+    uint32_t color = READ_U8(r);
+    if (!READ_DONE(r) || color > 15) {
+        return -1;
+    }
+    env->walk->animation_pending |= frame.animation_pending;
+    if (!env->apply) {
+        return 0;
+    }
+    /* Far-off lines return before the depth shift can overflow, or the
+     * stepping can run long. */
+    const int32_t limit = DRAW_LINE_COORDINATE_LIMIT;
+    if (x0 < -limit || x0 > limit || y0 < -limit || y0 > limit ||
+        x1 < -limit || x1 > limit || y1 < -limit || y1 > limit) return 0;
+    cfw_draw_line_steps(target.pixels, target.stride, cfw_draw_bounds(&target),
+                        x0 + target.shift_x, y0, x1 + target.shift_x, y1, color);
+    return 0;
+}
+
 /* [display-list-id16] */
 static int cfw_draw_op_display_list(const cfw_draw_env *env, cfw_reader r, cfw_draw_target target) {
     uint32_t id = READ_U16(r);
@@ -659,8 +726,10 @@ static int cfw_draw_op_display_list(const cfw_draw_env *env, cfw_reader r, cfw_d
 
 /* ---- Call and sequence decoding ------------------------------------------ */
 
+
 /* [op8][flags8] [resource-target-id16 if DRAW_FLAG_RESOURCE_TARGET] [depth s8 if DRAW_FLAG_DEPTH]
- * [clip x s16, y s16, w u16, h u16 if DRAW_FLAG_CLIP] [op payload] */
+ * [clip x s16, y s16, w u16, h u16 if DRAW_FLAG_CLIP]
+ * [clip x, y, w, h extended if DRAW_FLAG_CLIP_ANIMATED] [op payload] */
 static int cfw_draw_call(customCfwContext *ctx, const uint8_t *p, uint32_t n,
                          cfw_draw_target target, int apply, cfw_draw_walk *walk) {
     if (!walk->remaining--) {
@@ -697,14 +766,34 @@ static int cfw_draw_call(customCfwContext *ctx, const uint8_t *p, uint32_t n,
         target.shift_x += cfw_draw_right_lens() ? -half : half;
     }
 
-    if (flags & DRAW_FLAG_CLIP) {
+    if (flags & (DRAW_FLAG_CLIP | DRAW_FLAG_CLIP_ANIMATED)) {
         /* Revision 35. The rect is in call coordinates, so it moves with the
          * call's depth shift, and it narrows any clip inherited from an
-         * enclosing play-list call. */
-        int32_t x = READ_S16(r) + target.shift_x;
-        int32_t y = READ_S16(r);
-        int32_t w = (int32_t)READ_U16(r);
-        int32_t h = (int32_t)READ_U16(r);
+         * enclosing play-list call. Revision 45: with DRAW_FLAG_CLIP_ANIMATED
+         * its fields are extended values instead, so a clip can open or close
+         * over time. A value outside its fixed field's range (a negative
+         * size, say) makes the clip empty. */
+        int32_t x, y, w, h;
+        if (flags & DRAW_FLAG_CLIP_ANIMATED) {
+            if (flags & DRAW_FLAG_CLIP) {
+                return -1;
+            }
+            cfw_expression_frame frame=cfw_draw_frame(walk);
+            x = cfw_read_extended(&r,&frame);
+            y = cfw_read_extended(&r,&frame);
+            w = cfw_read_extended(&r,&frame);
+            h = cfw_read_extended(&r,&frame);
+            walk->animation_pending |= frame.animation_pending;
+            if (((uint32_t)(x + 32768) | (uint32_t)(y + 32768) | (uint32_t)w | (uint32_t)h) > 65535u) {
+                x = y = w = h = 0;
+            }
+        } else {
+            x = READ_S16(r);
+            y = READ_S16(r);
+            w = (int32_t)READ_U16(r);
+            h = (int32_t)READ_U16(r);
+        }
+        x += target.shift_x;
         cfw_texture_clip clip = {x, y, x + w, y + h};
         if (target.clipped) {
             if (clip.x0 < target.clip.x0) clip.x0 = target.clip.x0;
@@ -743,6 +832,8 @@ static int cfw_draw_call(customCfwContext *ctx, const uint8_t *p, uint32_t n,
         return cfw_draw_op_rounded_rect(&env, r, target);
     case DRAW_OP_CLEAR:
         return cfw_draw_op_clear(&env, r, target);
+    case DRAW_OP_LINE:
+        return cfw_draw_op_line(&env, r, target);
     default:
         return -1;
     }
@@ -775,13 +866,23 @@ static void cfw_draw_walk_init(cfw_draw_walk *walk, uint8_t *references) {
     walk->references = references;
     walk->elapsed_ms=0;
     walk->animation_pending=0;
+    walk->screen.fade=0;
+    walk->screen.moving=0;
+    walk->screen.read=0;
+}
+
+/* One snapshot of time and screen fade, shared by validation and drawing. */
+static void cfw_draw_walk_inputs(cfw_draw_walk *walk, const customCfwContext *ctx) {
+    walk->elapsed_ms=ctx->draw_elapsed_ms;
+    walk->screen.fade=ctx->draw_fade;
+    walk->screen.moving=ctx->draw_fade_moving;
 }
 
 static int cfw_draw_run(customCfwContext *ctx, const uint8_t *p, uint32_t n,
                         cfw_draw_target target, int apply, uint8_t *references) {
     cfw_draw_walk walk;
     cfw_draw_walk_init(&walk, references);
-    walk.elapsed_ms=ctx->draw_elapsed_ms;
+    cfw_draw_walk_inputs(&walk, ctx);
     return cfw_draw_sequence(ctx, p, n, target, apply, &walk);
 }
 
@@ -791,8 +892,11 @@ static int cfw_draw_root(customCfwContext *ctx, uint32_t id, cfw_draw_target tar
     }
     cfw_draw_walk walk;
     cfw_draw_walk_init(&walk, references);
-    walk.elapsed_ms=ctx->draw_elapsed_ms;
+    cfw_draw_walk_inputs(&walk, ctx);
     int result=cfw_draw_list(ctx,id,target,apply,&walk);
-    if (!result && apply) ctx->animation_pending |= walk.animation_pending;
+    if (!result && apply) {
+        ctx->animation_pending |= walk.animation_pending;
+        ctx->frame_reads_fade = walk.screen.read;
+    }
     return result;
 }

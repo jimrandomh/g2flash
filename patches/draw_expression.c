@@ -4,9 +4,12 @@
 #define CFW_EXPR_MAX_BYTES 1024u
 #define CFW_EXPR_MAX_STACK 32u
 
+/* `screen` is the screen fade a program can read (cfw_expression_fade in
+ * brightness.h). It may be null: the fade then reads as dark and still. */
 typedef struct {
     uint32_t elapsed_ms;
     int animation_pending;
+    cfw_expression_fade *screen;
 } cfw_expression_frame;
 
 typedef enum {
@@ -15,7 +18,7 @@ typedef enum {
     EX_INEG=21, EX_IMIN=22, EX_IMAX=23,
     EX_FADD=32, EX_FSUB=33, EX_FMUL=34, EX_FDIV=35,
     EX_FNEG=36, EX_FMIN=37, EX_FMAX=38,
-    EX_I2F=48, EX_F2I=49, EX_TIME=50,
+    EX_I2F=48, EX_F2I=49, EX_TIME=50, EX_FADE=51,
     EX_LERP=64, EX_SMOOTHSTEP=65, EX_EASE_IN_QUAD=66, EX_EASE_OUT_QUAD=67,
     EX_EASE_IN_OUT_QUAD=68, EX_EASE_IN_CUBIC=69, EX_EASE_OUT_CUBIC=70,
     EX_EASE_IN_OUT_CUBIC=71,
@@ -127,6 +130,17 @@ __attribute__((noinline)) static int32_t cfw_expression_eval(cfw_reader r, cfw_e
                 if (a.i<0) return 0;
                 result.u=frame->elapsed_ms<a.u?frame->elapsed_ms:a.u;
                 if (result.u!=a.u) pending=1;
+            }
+        } else if (op==EX_FADE) {
+            /* Revision 45: the screen fade as an f32, 0 while dark and 1 once
+             * shown, so a drawing can follow a wake or a sleep. The frame is
+             * unfinished for as long as the fade is. */
+            cfw_expression_fade *screen=frame->screen;
+            result.f=0.0f; type=1;
+            if (screen) {
+                result.f=(float)screen->fade*(1.0f/(float)CFW_EXPR_FADE_ONE);
+                screen->read=1;
+                if (screen->moving) pending=1;
             }
         } else if (op==EX_LERP) {
             if (size<3 || !types[size-1] || !types[size-2] || !types[size-3]) return 0;

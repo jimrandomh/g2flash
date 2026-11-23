@@ -46,18 +46,43 @@ __attribute__((noinline)) static int brightness_control(const uint8_t *src, uint
     if (!ctx) return -1;
     cfw_brightness_state *b=&ctx->brightness;
     if (!b->timer) b->timer=FW_TIMER_NEW((void *)&brightness_tick,1,0,0);
-    if (!b->timer || FW_TIMER_START(b->timer,40)!=0) return -1;
+    if (!b->timer || FW_TIMER_START(b->timer,BRIGHTNESS_TICK_MS)!=0) return -1;
     uint32_t request=src[2]|(uint32_t)src[3]<<8|duration<<9|
         (__atomic_load_n(&b->present_epoch,__ATOMIC_ACQUIRE)&1023u)<<21;
     __atomic_store_n(&b->request,request,__ATOMIC_RELEASE);
     return 0;
 }
 
-/* Return true when the physical frame must remain frozen (fading out), or
- * black (asleep). Updates still stage in screen_buffer for the next wake. */
+/* How far the screen is into being visible at `now`, 0..CFW_EXPR_FADE_ONE. A
+ * wake holds where it started until its frame arrives. */
+__attribute__((noinline)) static uint32_t brightness_fade_at(const cfw_brightness_state *b, uint32_t now) {
+    int32_t from=b->fade_from, to=b->visible?(int32_t)CFW_EXPR_FADE_ONE:0;
+    if (b->waiting) return (uint32_t)from;
+    uint32_t elapsed=now-b->fade_started;
+    if (!b->fade_duration || elapsed>=b->fade_duration) return (uint32_t)to;
+    return (uint32_t)(from+(to-from)*(int32_t)elapsed/(int32_t)b->fade_duration);
+}
+
+static void brightness_fade_sample(void) {
+    customCfwContext *ctx=peekCustomCfwContext();
+    if (!ctx) return;
+    const cfw_brightness_state *b=&ctx->brightness;
+    /* Nothing fades a screen whose brightness the stock firmware owns. */
+    uint32_t fade=CFW_EXPR_FADE_ONE, moving=0;
+    if (b->active) {
+        fade=brightness_fade_at(b,FW_MS_TICK);
+        moving=b->waiting || fade!=(b->visible?CFW_EXPR_FADE_ONE:0u);
+    }
+    ctx->draw_fade=(uint16_t)fade;
+    ctx->draw_fade_moving=(uint8_t)moving;
+}
+
+/* Tell display_copy_hook what the physical frame may do (BRIGHTNESS_*): it
+ * stays frozen while fading out, apart from replays of the frame it holds, and
+ * black once asleep. Updates still stage in screen_buffer for the next wake. */
 static int brightness_service(void) {
     customCfwContext *ctx=peekCustomCfwContext();
-    if (!ctx) return 0;
+    if (!ctx) return BRIGHTNESS_SHOWN;
     cfw_brightness_state *b=&ctx->brightness;
     uint32_t request=__atomic_exchange_n(&b->request,0,__ATOMIC_ACQ_REL);
     uint32_t now=FW_MS_TICK;
@@ -65,13 +90,19 @@ static int brightness_service(void) {
         if (b->active && BRIGHTNESS_DISPLAY_ON) brightness_apply(BRIGHTNESS_STOCK_LEVEL);
         b->active=b->waiting=0;
         if (b->timer) FW_TIMER_STOP(b->timer);
-        return 0;
+        return BRIGHTNESS_SHOWN;
     }
     if (request) {
         uint8_t visible=(request>>8)&1, desired=request&255;
         uint16_t duration=(request>>9)&4095;
         if (!b->active) {
             b->active=1; b->from=2; b->level=2; b->visible=0; b->target=2; b->applied_level=0;
+            b->fade_from=0; b->fade_duration=0; b->fade_started=now;
+        }
+        if (visible!=b->visible) {
+            /* Turn around from wherever the fade has got to. */
+            b->fade_from=(uint16_t)brightness_fade_at(b,now);
+            b->fade_duration=duration; b->fade_started=now;
         }
         if (visible!=b->visible || (visible && desired!=b->desired)) {
             int wake=visible && !b->visible;
@@ -83,10 +114,10 @@ static int brightness_service(void) {
         if (!visible) b->waiting=0;
         b->visible=visible; b->desired=desired;
     }
-    if (!b->active) return 0;
+    if (!b->active) return BRIGHTNESS_SHOWN;
     if (b->waiting && __atomic_load_n(&ctx->direct_pending,__ATOMIC_ACQUIRE) &&
         (__atomic_load_n(&b->present_epoch,__ATOMIC_ACQUIRE)&1023u)!=b->wait_epoch) {
-        b->waiting=0; b->started=now;
+        b->waiting=0; b->started=now; b->fade_started=now;
     }
     uint8_t level=b->waiting?b->level:brightness_interpolate(b->from,b->target,now-b->started,b->duration);
     /* The stock provider briefly blanks the panel even for an identical level.
@@ -99,17 +130,18 @@ static int brightness_service(void) {
     }
     b->level=level;
     /* Keep idle ownership cheap: only active transitions need 25 Hz. */
-    FW_TIMER_START(b->timer,(!b->waiting && level!=b->target)?40:1000);
-    if (b->waiting) return 1;
+    FW_TIMER_START(b->timer,(!b->waiting && level!=b->target)?BRIGHTNESS_TICK_MS:BRIGHTNESS_IDLE_TICK_MS);
+    if (b->waiting) return BRIGHTNESS_HELD;
     if (!b->visible) {
-        if (level==2 && FW_DISPLAY_FB) {
+        if (level!=2) return BRIGHTNESS_FADING_OUT;
+        if (FW_DISPLAY_FB) {
             bzero(FW_DISPLAY_FB,PANEL_BYTES);
             uint32_t desc[2]={(uint32_t)(uintptr_t)FW_DISPLAY_FB,PANEL_BYTES};
             FW_FLUSH(desc);
         }
-        return 1;
+        return BRIGHTNESS_HELD;
     }
-    return 0;
+    return BRIGHTNESS_SHOWN;
 }
 
 static void brightness_cleanup(void) {

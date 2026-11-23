@@ -320,12 +320,23 @@ static void cfw_record_timer_paint(customCfwContext *ctx, uint32_t us);
 static int cfw_animation_present(customCfwContext *ctx, cfw_rectlist *rl, int reset_time);
 static void cfw_animation_tick(void *arg);
 
-static void cfw_animation_schedule(customCfwContext *ctx) {
+__attribute__((noinline)) static void cfw_animation_schedule(customCfwContext *ctx) {
     ctx->animation_running=ctx->animation_pending;
     if (!ctx->animation_running) return;
     if (!ctx->animation_timer) ctx->animation_timer=FW_TIMER_NEW((void *)&cfw_animation_tick,0,ctx,0);
     ctx->animation_due_ms=FW_MS_TICK+45u;
     if (!ctx->animation_timer || FW_TIMER_START(ctx->animation_timer,45)!=0) ctx->animation_running=0;
+}
+
+/* A brightness command has started (or turned around) a fade. A frame that was
+ * drawn from the fade has to be redrawn as it moves, so start its replays; they
+ * then run for as long as the fade does. A wake's are turned away until its
+ * frame arrives, which is then the one that follows the fade. Caller owns
+ * image_mutex. */
+static void cfw_animation_follow_fade(customCfwContext *ctx) {
+    if (!ctx->frame_reads_fade || ctx->frame_stale || !cfw_fb_lease_active()) return;
+    ctx->animation_pending=1;
+    cfw_animation_schedule(ctx);
 }
 
 /* Runs on the timer thread. Never wait on a command's mutex: cleanup may be
@@ -436,14 +447,19 @@ static int image_dispatch(const uint8_t *src, uint32_t srclen, cfw_rectlist *rl)
 
     cfw_message_type mode = (cfw_message_type)(src[0] & CFW_MSG_TYPE_MASK);
 
-    if (mode == CFW_MSG_BRIGHTNESS) return brightness_control(src, srclen);
+    if (mode == CFW_MSG_BRIGHTNESS) {
+        int result = brightness_control(src, srclen);
+        customCfwContext *ctx=peekCustomCfwContext();
+        if (!result && ctx) cfw_animation_follow_fade(ctx);
+        return result;
+    }
 
     /* A new staged frame must not leak through an animation redraw before
      * its PRESENT. All of these paths execute under image_mutex. */
     if (mode==CFW_MSG_DRAW_CALLS || mode==CFW_MSG_SET_ROOT_DISPLAY_LIST ||
         mode==CFW_MSG_UPLOAD_RESOURCE || mode==CFW_MSG_EVICT_RESOURCE || mode==CFW_MSG_CREATE_SURFACE) {
         customCfwContext *ctx=peekCustomCfwContext();
-        if (ctx) ctx->animation_running=0;
+        if (ctx) { ctx->animation_running=0; ctx->frame_stale=1; }
     }
 
     if (mode == CFW_MSG_BUZZER) {
@@ -658,6 +674,10 @@ static int cfw_present_draw(customCfwContext *ctx, uint32_t root) {
     uint8_t *fb = target.pixels;
     if (fb == 0) return -1;
     int result = 0;
+    /* The display task has just serviced the brightness and is parked, so the
+     * fade read here is the one this frame is shown at. */
+    brightness_fade_sample();
+    ctx->frame_reads_fade = 0;
     if (root != CFW_DRAW_SCREEN && cfw_draw_root(ctx, root, target, 1, 0)) {
         /* The root validated a moment ago, so this is the lease lapsing or a
          * stock glyph failing part-way. The previous frame is already
@@ -753,13 +773,14 @@ static int cfw_animation_present(customCfwContext *ctx, cfw_rectlist *rl, int re
     ctx->animation_running=0;
     ctx->animation_pending=0;
     uint32_t now=FW_MS_TICK;
-    if (reset_time) ctx->animation_origin_ms=now;
+    if (reset_time) { ctx->animation_origin_ms=now; ctx->frame_stale=0; }
     ctx->draw_elapsed_ms=now-ctx->animation_origin_ms;
     if (!cfw_fb_lease_active() || !ctx->screen_buffer) return -1;
     uint32_t root=ctx->root_display_list?ctx->root_display_list-1u:CFW_DRAW_SCREEN;
     /* Reject a bad root before the display task is asked to wait for it. */
     cfw_draw_target target=cfw_framebuffer_target();
     if (!target.pixels || cfw_draw_root(ctx,root,target,0,0)) return -1;
+    __atomic_store_n(&ctx->direct_replay,(uint8_t)!reset_time,__ATOMIC_RELEASE);
     int result=cfw_present_frame(ctx,root,rl);
     if (result==0) cfw_animation_schedule(ctx);
     return result;
@@ -778,6 +799,7 @@ static int cfw_cleanup_session(void) {
      * making it safe to discard any direct job/pointer left by this session. */
     ctx->animation_running=0;
     ctx->animation_pending=0;
+    ctx->frame_reads_fade=ctx->frame_stale=0;
     if (ctx->animation_timer) FW_TIMER_STOP(ctx->animation_timer);
     ctx->timer_paint_count=ctx->timer_paint_next=0;
     ctx->timer_paint_average_us=0;
@@ -842,12 +864,19 @@ static int cfw_cleanup_session(void) {
  * release/expiry restores the transparent stock pass-through.
  *
  * A fading-out or sleeping display and a diagnostic test pattern keep the
- * frame they have, so a present arriving then is not drawn at all. */
+ * frame they have, so a present arriving then is not drawn at all. The one
+ * exception (revision 45) is an animation tick during a fade-out: it redraws
+ * the frame already on screen, so that frame's animations run on while it
+ * fades, and with them anything drawn from the fade itself (EX_FADE). */
 void display_copy_hook(void) {
     panel_service();
     int frozen = brightness_service();
     customCfwContext *ctx = peekCustomCfwContext();
-    if (frozen || (ctx && ctx->panel.pattern)) {
+    int pattern = ctx && ctx->panel.pattern;
+    int replay = frozen == BRIGHTNESS_FADING_OUT && ctx && !pattern &&
+        __atomic_load_n(&ctx->direct_pending, __ATOMIC_ACQUIRE) &&
+        __atomic_load_n(&ctx->direct_replay, __ATOMIC_ACQUIRE);
+    if ((frozen && !replay) || pattern) {
         if (ctx) cfw_present_decline(ctx);
         return;
     }

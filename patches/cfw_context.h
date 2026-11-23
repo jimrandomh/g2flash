@@ -149,12 +149,23 @@ typedef struct {
     uint32_t draw_elapsed_ms; /* one snapshot shared by validation and drawing */
     uint8_t animation_pending;
     uint8_t animation_running;
+    /* The screen fade drawn with (brightness_fade_sample), like draw_elapsed_ms. */
+    uint8_t draw_fade_moving;
+    /* The pending present replays the frame on screen (an animation tick)
+     * rather than showing a new one; a fading-out display still takes those. */
+    volatile uint8_t direct_replay;
     uint32_t timer_paint_us[CFW_TIMER_PAINT_SAMPLES];
     uint32_t timer_paint_average_us; /* shown on the debug overlay */
     uint8_t timer_paint_count;
     uint8_t timer_paint_next;
     cfw_brightness_state brightness;
     void *keyboard;                        /* lazy, reboot-volatile BLE keyboard bridge */
+    uint16_t draw_fade;                    /* 0..CFW_EXPR_FADE_ONE, see draw_fade_moving */
+    /* The frame on screen was drawn from the screen fade, so it is replayed
+     * when a fade starts (cfw_animation_follow_fade), unless draws for the
+     * next frame have been staged over what it was composed from. */
+    uint8_t frame_reads_fade;
+    uint8_t frame_stale;
 } customCfwContext;
 
 #define CFW_CTX_SLOT  0x2029f59cU    /* first word of the CFW-reserved TLSF tail */
